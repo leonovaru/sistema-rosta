@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 let authMode = "login";
 let directions = [];
+let userSettings = { monthly_target: 300000, timezone: "Europe/Moscow" };
 
 const money = n => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(n || 0)) + " ₽";
 async function api(path, options = {}) {
@@ -37,13 +38,32 @@ $("income-form").addEventListener("submit", async e => {
   e.preventDefault();
   try {
     await api("/api/income", { method: "POST", body: JSON.stringify({ amount: $("income-amount").value, direction_id: $("income-direction").value || null, received_on: $("income-date").value, note: $("income-note").value }) });
-    $("income-amount").value = ""; $("income-note").value = ""; await loadIncome();
+    $("income-amount").value = ""; $("income-note").value = ""; await loadDashboardData();
   } catch (err) { alert(err.message); }
 });
 async function loadDirections() {
   const data = await api("/api/directions"); directions = data.directions;
-  $("directions").innerHTML = directions.map(d => `<article class="direction"><strong>${escapeHtml(d.title)}</strong><small>${d.target_month ? "Цель: " + money(d.target_month) : "Цель пока не задана"}</small></article>`).join("");
+  $("directions").innerHTML = directions.map(d => {
+    const target = Number(d.target_month || 0), actual = Number(d.actual_month || 0);
+    const percent = target > 0 ? Math.min(100, actual / target * 100) : 0;
+    const gap = Math.max(0, target - actual);
+    return `<article class="direction">
+      <strong>${escapeHtml(d.title)}</strong>
+      <div class="direction-numbers"><span>Факт: <b>${money(actual)}</b></span><span>Прогноз: <b>${money(d.forecast_month)}</b></span></div>
+      <div class="progress"><span style="width:${percent}%"></span></div>
+      <div class="direction-target"><label for="target-${d.id}">Цель на месяц, ₽</label><input id="target-${d.id}" data-direction-target="${d.id}" type="number" min="0" max="100000000" step="1000" value="${target}"><button class="button ghost" data-save-direction="${d.id}">Сохранить</button></div>
+      <small>${target ? "Осталось: " + money(gap) + " · " + Math.round(actual/target*100) + "% цели" : "Установите месячную цель"}</small>
+    </article>`;
+  }).join("");
   $("income-direction").innerHTML = '<option value="">Без привязки</option>' + directions.map(d => `<option value="${d.id}">${escapeHtml(d.title)}</option>`).join("");
+  document.querySelectorAll("[data-save-direction]").forEach(button => button.addEventListener("click", async () => {
+    const d = directions.find(item => item.id === button.dataset.saveDirection);
+    const input = document.querySelector(`[data-direction-target="${button.dataset.saveDirection}"]`);
+    try {
+      await api("/api/directions", { method: "PUT", body: JSON.stringify({ id: d.id, title: d.title, monthly_target: input.value }) });
+      await loadDashboardData();
+    } catch (err) { alert(err.message); }
+  }));
 }
 async function loadTasks() {
   const data = await api("/api/tasks");
@@ -57,24 +77,31 @@ async function loadIncome() {
   const data = await api("/api/income");
   $("actual").textContent = money(data.month_total);
   $("income-recent").textContent = data.entries.length ? "Последнее: " + money(data.entries[0].amount) + " · " + data.entries[0].received_on : "Поступлений пока нет";
-  await loadSettings(data.month_total);
+  $("income-date").value = data.today;
+  return data;
 }
 async function loadSettings(actual) {
   const { settings } = await api("/api/settings");
-  const target = Number(settings?.monthly_target || 300000);
+  userSettings = settings || userSettings;
+  const target = Number(userSettings.monthly_target || 0);
   $("target").textContent = money(target);
   $("gap").textContent = money(Math.max(0, target - actual));
-  const now = new Date(); const day = now.getDate(); const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const dateParts = new Intl.DateTimeFormat("en-CA", { timeZone: userSettings.timezone || "Europe/Moscow", year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(new Date());
+  const values = Object.fromEntries(dateParts.map(part => [part.type,part.value]));
+  const day = Number(values.day), days = new Date(Number(values.year),Number(values.month),0).getDate();
   $("forecast").textContent = money(day ? actual / day * days : 0);
-  $("today").textContent = new Intl.DateTimeFormat("ru-RU", { dateStyle: "full" }).format(now);
+  $("today").textContent = new Intl.DateTimeFormat("ru-RU", { dateStyle: "full", timeZone: userSettings.timezone || "Europe/Moscow" }).format(new Date());
+}
+async function loadDashboardData() {
+  const income = await loadIncome();
+  await Promise.all([loadDirections(),loadSettings(income.month_total)]);
 }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
 async function boot() {
   try {
     const { user } = await api("/api/auth/me");
     if (!user) return showAuth();
-    showApp(user.email); $("income-date").value = new Date().toISOString().slice(0,10);
-    await loadDirections(); await loadTasks(); await loadIncome();
+    showApp(user.email); await loadTasks(); await loadDashboardData();
   } catch { showAuth(); }
 }
 boot();
