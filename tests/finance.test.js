@@ -6,8 +6,10 @@ test("weekly obligations advance by seven calendar days",()=>{
   assert.equal(addPeriod("2026-11-15","weekly"),"2026-11-22");
 });
 test("monthly obligations clamp dates at the end of shorter months",()=>{
-  assert.equal(addPeriod("2026-01-31","monthly"),"2026-02-28");
-  assert.equal(addPeriod("2024-01-31","monthly"),"2024-02-29");
+  assert.equal(addPeriod("2026-01-31","monthly",31),"2026-02-28");
+  assert.equal(addPeriod("2026-02-28","monthly",31),"2026-03-31");
+  assert.equal(addPeriod("2024-01-31","monthly",31),"2024-02-29");
+  assert.equal(addPeriod("2024-02-29","monthly",31),"2024-03-31");
 });
 test("monthly obligations advance across year boundaries",()=>{
   assert.equal(addPeriod("2026-12-31","monthly"),"2027-01-31");
