@@ -1,0 +1,14 @@
+{
+  "name": "sistema-rosta",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler pages dev public",
+    "db:migrate:local": "wrangler d1 execute sistema-rosta-db --local --file=./schema.sql",
+    "db:migrate:remote": "wrangler d1 execute sistema-rosta-db --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
