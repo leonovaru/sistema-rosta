@@ -2,7 +2,7 @@ import { addDays, addPeriod } from "./finance.js";
 const positive=value=>{const n=Number(value);return Number.isFinite(n)&&n>0?n:0;};
 function dateValid(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const d=new Date(value+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}
 function monthDays(month){return new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0,12)).getUTCDate();}
-export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,planned=[],obligations=[],debts=[],variableExpensesByMonth=[],reserves=[]}){
+export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,planned=[],obligations=[],debts=[],variableExpensesByMonth=[],reserves=[],irregularExpenses=[]}){
  if(!dateValid(today))throw new Error("Invalid forecast date");
  const end=addDays(today,horizonDays),events=[];
  for(const row of planned){
@@ -14,6 +14,15 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
   while(due&&due<=end&&guard++<120){
    if(due>=today)events.push({date:due,type:"expense",title:row.title,amount:positive(row.amount),source:"obligation"});
    due=addPeriod(due,row.frequency,row.recurrence_day);
+  }
+ }
+ for(const row of irregularExpenses){
+  let due=row.next_date,guard=0;
+  while(due&&due<=end&&guard++<40){
+   if(due>=today)events.push({id:row.id,date:due,type:"expense",title:row.title,amount:positive(row.amount),source:"irregular_expense",category:row.category||"Нерегулярные расходы",frequency:row.frequency});
+   if(row.frequency==="once")break;
+   const [y,m,d]=due.split("-").map(Number),step=row.frequency==="yearly"?12:3,next=new Date(Date.UTC(y,m-1+step,1,12)),last=new Date(Date.UTC(next.getUTCFullYear(),next.getUTCMonth()+1,0,12)).getUTCDate();
+   due=next.getUTCFullYear()+"-"+String(next.getUTCMonth()+1).padStart(2,"0")+"-"+String(Math.min(d,last)).padStart(2,"0");
   }
  }
  for(const debt of debts){
