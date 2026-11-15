@@ -37,7 +37,8 @@ export function buildDailyBlockPlans(days=[],{focusMinutes=50,breakMinutes=10,st
   }
   const focusTotal=blocks.filter(x=>x.type==="focus").reduce((sum,x)=>sum+x.minutes,0),breakTotal=blocks.filter(x=>x.type==="break").reduce((sum,x)=>sum+x.minutes,0);
   const conflicts=blocks.filter(block=>events.some(event=>block.start_time<clock(event.end)&&block.end_time>clock(event.start))).length;
-  return {date:day.date,available_minutes:budget,planned_minutes:Math.max(0,Number(day.planned_task_minutes)||0),focus_minutes:focusTotal,break_minutes:breakTotal,blocks,unallocated,overloaded:Boolean(day.overloaded)||unallocated.length>0,calendar_conflicts:conflicts};
+  const freeWindows=gaps.map(gap=>({start_time:clock(gap.start),end_time:clock(gap.end),minutes:gap.end-gap.start,suggested_use:gap.end-gap.start>=90?"Длинная задача без переключений":gap.end-gap.start>=30?"Задача средней длительности":"Короткие задачи"})).filter(window=>window.minutes>=10);
+  return {date:day.date,available_minutes:budget,planned_minutes:Math.max(0,Number(day.planned_task_minutes)||0),focus_minutes:focusTotal,break_minutes:breakTotal,blocks,free_windows:freeWindows,unallocated,overloaded:Boolean(day.overloaded)||unallocated.length>0,calendar_conflicts:conflicts};
  });
 }
 
