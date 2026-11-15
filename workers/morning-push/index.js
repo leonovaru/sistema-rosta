@@ -75,7 +75,7 @@ export function isMorningDeliveryWindow(date,timezone){
 export default {
   async scheduled(controller,env,ctx){
     if(!env.DB||!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_KEY||!env.VAPID_SUBJECT)return;
-    const {results}=await env.DB.prepare(`SELECT s.id,s.user_id,s.endpoint,s.p256dh,s.auth,COALESCE(st.timezone,'Europe/Moscow') timezone
+    const {results}=await env.DB.prepare(`SELECT s.id,s.user_id,s.endpoint,s.p256dh,s.auth,COALESCE(NULLIF(st.timezone,''),'Europe/Moscow') timezone
       FROM push_subscriptions s LEFT JOIN settings st ON st.user_id=s.user_id`).all();
     const now=new Date();
     for(const row of results||[]){
