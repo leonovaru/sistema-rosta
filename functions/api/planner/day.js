@@ -58,7 +58,7 @@ export async function onRequestPost({ request, env }) {
   const tomorrowKey = tomorrow.toISOString().slice(0,10);
   const calendarQuery = await env.DB.prepare("SELECT id,title,event_type,start_at,end_at,actual_start_at,actual_end_at,status,mode,location,repeat_rule,repeat_until FROM calendar_events WHERE user_id=? AND status!='cancelled' AND ((start_at < ? AND end_at > ?) OR (repeat_rule!='none' AND start_at < ? AND repeat_until >= ?)) ORDER BY start_at").bind(user.id,tomorrowKey+"T00:00",today+"T00:00",tomorrowKey+"T00:00",today).all();
   const calendarEvents = expandRecurringEvents(calendarQuery.results,today+"T00:00",tomorrowKey+"T00:00");
-  const busyIntervals = calendarEvents.map(event => {
+  const busyIntervals = calendarEvents.filter(event => event.event_type !== "work").map(event => {
     const startValue = event.status === "completed" && event.actual_start_at ? event.actual_start_at : event.start_at;
     const endValue = event.status === "completed" && event.actual_end_at ? event.actual_end_at : event.end_at;
     const startDate = startValue.slice(0,10), endDate = endValue.slice(0,10);
@@ -69,14 +69,16 @@ export async function onRequestPost({ request, env }) {
   const sortedBusy = [...busyIntervals].sort((a,b)=>a.start-b.start);
   let busyFutureMinutes = 0, cursor = nowMinute;
   for (const interval of sortedBusy) { const start=Math.max(cursor,interval.start); if(interval.end>start){busyFutureMinutes+=interval.end-start;cursor=interval.end;} }
-  const workDoneMinutes = calendarEvents.filter(event=>event.event_type==="work").reduce((sum,event)=>{
+  const workIntervals = calendarEvents.filter(event=>event.event_type==="work").map(event=>{
     const endValue=event.status==="completed"&&event.actual_end_at?event.actual_end_at:event.end_at;
-    if(endValue.slice(0,10)>today)return sum;
-    const end=endValue.slice(0,10)<today?0:Number(endValue.slice(11,13))*60+Number(endValue.slice(14,16));
     const startValue=event.status==="completed"&&event.actual_start_at?event.actual_start_at:event.start_at;
-    const start=startValue.slice(0,10)<today?0:Number(startValue.slice(11,13))*60+Number(startValue.slice(14,16));
-    return sum+Math.max(0,Math.min(nowMinute,end)-Math.min(nowMinute,start));
-  },0);
+    const startDate=startValue.slice(0,10), endDate=endValue.slice(0,10);
+    const start=startDate<today?0:startDate>today?1440:Number(startValue.slice(11,13))*60+Number(startValue.slice(14,16));
+    const end=endDate>today?1440:endDate<today?0:Number(endValue.slice(11,13))*60+Number(endValue.slice(14,16));
+    return {start:Math.max(0,start),end:Math.min(nowMinute,end)};
+  }).filter(interval=>interval.end>interval.start).sort((a,b)=>a.start-b.start);
+  let workDoneMinutes=0, workCursor=0;
+  for(const interval of workIntervals){const start=Math.max(workCursor,interval.start);if(interval.end>start){workDoneMinutes+=interval.end-start;workCursor=interval.end;}}
   const remainingWorkCapacity=Math.max(0,dailyCapacity-workDoneMinutes);
   const freeAfterCalendar=Math.max(0,1440-nowMinute-busyFutureMinutes);
   const capacity=Math.min(remainingWorkCapacity,freeAfterCalendar);
