@@ -12,6 +12,7 @@ import { buildWeeklyAttentionScenarios } from "../../_lib/weekly-attention-scena
 import { buildDailyRhythmInsights } from "../../_lib/daily-rhythm-insights.js";
 import { buildRecoveryInsights } from "../../_lib/recovery-insights.js";
 import { buildDailyBlockPlans, buildDailyBlockScenarios } from "../../_lib/daily-block-plans.js";
+import { buildDailyReallocationProposals } from "../../_lib/daily-block-reallocation.js";
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day;}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 export async function onRequestGet({request,env}){
@@ -50,5 +51,6 @@ export async function onRequestGet({request,env}){
  const dailyBlockOptions={focusMinutes,breakMinutes,startTime:url.searchParams.get("start_time")||"09:00",prepBeforeMinutes,bufferAfterMinutes,calendarEvents:events};
  week.daily_block_plans=buildDailyBlockPlans(week.days,dailyBlockOptions);
  week.daily_block_scenarios=buildDailyBlockScenarios(week.days,dailyBlockOptions);
+ week.daily_reallocation_proposals=buildDailyReallocationProposals(week.days,dailyBlockOptions);
  return json({week});
 }
