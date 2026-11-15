@@ -69,6 +69,7 @@ export async function onRequestPost({request,env}){
   if(!prepared.length&&!workspaceItems.length)return json({error:"Не найдено изменений для сохранения"},400);
   const statements=[];
   let created=0,updated=0,createdClients=0,createdProjects=0,updatedProjects=0;
+  const createdTaskIds=[];
   const newClientIds=[],newProjectIds=[],newProjectMeta=new Map();
   for(const item of workspaceItems.filter(x=>x.type==="client"&&x.include!==false)){
    const name=String(item.name||"").trim().slice(0,160);
@@ -142,13 +143,13 @@ export async function onRequestPost({request,env}){
    if(parent&&(t.project_id!==parent.project_id||t.life_area_id!==parent.life_area_id||t.client_id!==parent.client_id||t.direction_id!==parent.direction_id))return json({error:"Подзадача должна относиться к той же области, что и родительская задача"},400);
    statements.push(env.DB.prepare("INSERT INTO tasks (id,user_id,direction_id,client_id,project_id,life_area_id,parent_task_id,title,description,due_date,priority,estimated_minutes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
     .bind(t.id,user.id,t.direction_id,t.client_id,t.project_id,t.life_area_id,parent?.id||null,t.title,t.description,t.due_date,t.priority,t.estimated_minutes));
-   created++;
+   createdTaskIds.push(t.id);created++;
   }
   if(statements.length)await env.DB.batch(statements);
   const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
   const today=localDate(settings?.timezone||"Europe/Moscow");
   await env.DB.prepare("DELETE FROM daily_plans WHERE user_id=? AND plan_date=?").bind(user.id,today).run();
-  return json({ok:true,created,updated,created_clients:createdClients,created_projects:createdProjects,updated_projects:updatedProjects});
+  return json({ok:true,created,created_task_ids:createdTaskIds,updated,created_clients:createdClients,created_projects:createdProjects,updated_projects:updatedProjects});
  }
  const transcript=String(body.transcript||"").trim();
  if(!transcript||transcript.length>6000)return json({error:"Надиктуй или вставь текст задачи (до 6000 символов)"},400);
