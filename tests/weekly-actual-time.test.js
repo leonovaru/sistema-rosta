@@ -27,3 +27,11 @@ test("does not fabricate actual time for categories with no timer entries",()=>{
  assert.equal(result.area_balance.find(x=>x.key==="life:home").actual_minutes,0);
  assert.equal(result.actual_time.sessions,0);
 });
+
+test("uses the area snapshot captured when a timer session started",()=>{
+ const result=attachWeeklyActualTime(week(),[
+  {started_at:"2026-11-16T08:00:00.000Z",duration_minutes:60,direction_id:"old-direction",direction_title:"Старое направление",project_id:null,life_area_id:null}
+ ],"Europe/Moscow");
+ assert.equal(result.area_balance.find(x=>x.key==="direction:old-direction").actual_minutes,60);
+ assert.equal(result.area_balance.some(x=>x.key==="direction:new-direction"),false);
+});
