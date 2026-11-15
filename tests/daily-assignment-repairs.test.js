@@ -99,3 +99,11 @@ test("recalculates reopened todo tasks from estimate minus recorded actual time"
  assert.equal(result.proposals[0].new_minutes,75);
  assert.equal(result.schedules[0].allocations.reduce((sum,row)=>sum+row.minutes,0),75);
 });
+
+test("does not repair unfinished tasks belonging to completed projects",()=>{
+ const week=baseWeek();
+ week.daily_assignment_issues=[{task_id:"done-project-task",type:"stale"}];
+ const result=buildDailyAssignmentRepairs(week,[{task_id:"done-project-task",allocation_date:"2026-11-16",minutes:60}],
+ [{id:"done-project-task",title:"Задача завершённого проекта",status:"todo",estimated_minutes:60,actual_minutes:0,project_status:"done"}]);
+ assert.deepEqual(result,{schedules:[],proposals:[],unresolved:[]});
+});
