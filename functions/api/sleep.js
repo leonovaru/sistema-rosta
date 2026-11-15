@@ -49,6 +49,9 @@ export async function onRequestPost({request,env}){
     const value=body?.at?String(body.at):parts.year+"-"+parts.month+"-"+parts.day+"T"+parts.hour+":"+parts.minute;
     if(!validateTime(value)||value.slice(0,10)!==today)return json({error:"Укажите корректное время сегодняшнего дня"},400);
     const row=await ensureSession(env,user.id,today,timezone);
+    if(action==="bed"&&row.fell_asleep_at&&value>=row.fell_asleep_at)return json({error:"Отход ко сну должен быть раньше времени засыпания"},400);
+    if(action==="asleep"&&row.went_to_bed_at&&value<=row.went_to_bed_at)return json({error:"Время засыпания должно быть позже отхода ко сну"},400);
+    if(action==="asleep"&&row.woke_at&&value>=row.woke_at)return json({error:"Время засыпания должно быть раньше пробуждения"},400);
     const field=action==="bed"?"went_to_bed_at":"fell_asleep_at";
     const source=action==="bed"?"bed_source":"asleep_source";
     const confidence=action==="bed"?"bed_confidence":"asleep_confidence";
