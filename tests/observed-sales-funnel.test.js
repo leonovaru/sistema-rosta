@@ -31,3 +31,22 @@ test("does not count stage changes outside the contacted-client cohort",()=>{
  assert.equal(result.won_clients,0);
  assert.equal(result.observed_contact_to_lead_percent,0);
 });
+
+test("ignores deal stage transitions that happened before the first recorded contact",()=>{
+ const interactions=[
+  {direction_id:"d",client_id:"old",first_contact_on:"2026-11-10"},
+  {direction_id:"d",client_id:"new",first_contact_on:"2026-11-10"},
+  {direction_id:"d",client_id:"later",first_contact_on:"2026-11-12"}
+ ];
+ const events=[
+  {direction_id:"d",client_id:"old",created_at:"2026-11-09 12:00:00",changes_json:'[{"field":"stage","to":"won"}]'},
+  {direction_id:"d",client_id:"new",created_at:"2026-11-10 12:00:00",changes_json:'[{"field":"stage","to":"proposal"}]'},
+  {direction_id:"d",client_id:"later",created_at:"2026-11-13 12:00:00",changes_json:'[{"field":"stage","to":"won"}]'}
+ ];
+ const result=buildObservedSalesFunnel({interactionRows:interactions,dealEventRows:events})[0];
+ assert.equal(result.observed_contacted_clients,3);
+ assert.equal(result.qualified_clients,2);
+ assert.equal(result.won_clients,1);
+ assert.equal(result.observed_contact_to_lead_percent,66.7);
+ assert.equal(result.observed_lead_to_sale_percent,50);
+});
