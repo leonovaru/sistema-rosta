@@ -114,14 +114,23 @@ $("refresh-profitability").addEventListener("click",async()=>{const b=$("refresh
 let financeData = null;
 
 let cashflowData=null;
+let cashReservesData=null;
+async function loadCashReserves(){
+ cashReservesData=await api("/api/finance/reserves");
+ const summary=cashReservesData.summary;
+ $("reserve-summary").innerHTML=[["Цели резервов",money(summary.target)],["Уже отложено",money(summary.saved)],["План откладывать в месяц",money(summary.monthly)]].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
+ $("cash-reserves").innerHTML=cashReservesData.reserves.length?cashReservesData.reserves.map(r=>{const pct=Math.min(100,Math.round(Number(r.current_amount)/Number(r.target_amount)*100));return '<article class="finance-row"><div><b>'+escapeHtml(r.title)+'</b><small>'+money(r.current_amount)+' из '+money(r.target_amount)+' · '+pct+'% · '+money(r.monthly_contribution)+'/мес.'+(r.target_date?' · до '+r.target_date:'')+'</small><small>'+escapeHtml(r.purpose||"")+'</small></div><button class="button ghost" data-reserve-delete="'+escapeHtml(r.id)+'">Удалить</button></article>';}).join(""):'<p class="muted">Пока нет созданных резервов.</p>';
+}
+$("reserve-form").addEventListener("submit",async e=>{e.preventDefault();try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({title:$("reserve-title").value,target_amount:$("reserve-target").value,current_amount:$("reserve-current").value,monthly_contribution:$("reserve-monthly").value,target_date:$("reserve-date").value||null,purpose:$("reserve-purpose").value})});$("reserve-form").reset();$("reserve-current").value="0";$("reserve-monthly").value="0";await loadCashReserves();await loadCashflowForecast();}catch(err){alert(err.message);}});
+$("cash-reserves").addEventListener("click",async e=>{const b=e.target.closest("[data-reserve-delete]");if(!b)return;if(!confirm("Удалить этот резерв?"))return;try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({action:"delete",id:b.dataset.reserveDelete})});await loadCashReserves();await loadCashflowForecast();}catch(err){alert(err.message);}});
 async function loadCashflowForecast(){
- cashflowData=await api("/api/finance/forecast?days="+$("cashflow-days").value);
+ cashflowData=await api("/api/finance/forecast?days="+$("cashflow-days").value);\n await loadCashReserves();
  $("cashflow-opening-balance").value=String(cashflowData.starting_balance||0);
  $("cashflow-date").min=cashflowData.period.from;
  $("cashflow-date").value=cashflowData.period.from;
  const s=cashflowData.summary;
  $("cashflow-summary").innerHTML=[
- ["Начальный остаток",money(s.starting_balance)],["Ожидаемые поступления",money(s.planned_income)],["Плановые платежи",money(s.planned_expenses)],["Обычные расходы (оценка)",money(s.variable_expenses)],["Изменение за период",(s.net>0?"+":"")+money(s.net)],["Остаток в конце",money(s.ending_balance)],["Минимальный остаток",money(s.lowest_balance)]
+ ["Начальный остаток",money(s.starting_balance)],["Ожидаемые поступления",money(s.planned_income)],["Плановые платежи",money(s.planned_expenses)],["Обычные расходы (оценка)",money(s.variable_expenses)],["Изменение за период",(s.net>0?"+":"")+money(s.net)],["Остаток в конце",money(s.ending_balance)],["Отложено в резервы",money(s.total_reserved)],["Доступно после резервов",money(s.available_ending_balance)],["Минимум доступных денег",money(s.lowest_available_balance)]
  ].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
  const vf=cashflowData.variable_expense_forecast;
  $("variable-expense-forecast").innerHTML='<h4>Оценка обычных расходов</h4><p class="fine">Средние суммы за завершённые месяцы: '+vf.based_on_months.join(", ")+'. В расчёте остатка сумма распределяется по дням месяца только математически; фиктивные даты покупок не создаются.</p><div class="analytics-metrics"><article><span>Оценка на '+vf.target_month+'</span><b>'+money(vf.total)+'</b></article><article><span>Обычные расходы за выбранный период</span><b>'+money(s.variable_expenses)+'</b></article></div>'+cashflowData.variable_expenses_by_month.map(m=>'<article class="finance-row"><div><b>'+m.month+'</b><small>'+m.categories.map(c=>escapeHtml(c.category)+': '+money(c.monthly_amount)+(c.source==="monthly_budget"?" · бюджет":" · история")).join(" · ")+'</small></div><strong>'+money(m.total)+'</strong></article>').join("")+(vf.categories.length?'':'<p class="muted">Пока недостаточно истории расходов для прогноза. Добавь бюджеты по категориям, чтобы включить их в расчёт.</p>');
