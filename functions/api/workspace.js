@@ -1,5 +1,6 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { calculateProjectEconomics } from "../_lib/project-economics.js";
+import { calculateProjectWorkload } from "../_lib/project-workload.js";
 
 const DEFAULT_AREAS = [
   ["Дом","Уборка, порядок, бытовые задачи"],
@@ -58,7 +59,7 @@ export async function onRequestGet({request,env}) {
         UNION ALL SELECT MAX(COALESCE(t.completed_at,t.created_at)) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id
         UNION ALL SELECT MAX(m.meeting_date) FROM meeting_notes m WHERE m.project_id=p.id AND m.user_id=p.user_id
         UNION ALL SELECT MAX(ci.occurred_on) FROM client_interactions ci WHERE ci.project_id=p.id AND ci.user_id=p.user_id
-      )) AS last_activity_at,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status!='done') AS open_tasks,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id) AS total_tasks,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status='done') AS done_tasks,(SELECT COALESCE(SUM(i.amount),0) FROM income_entries i WHERE i.user_id=p.user_id AND i.project_id=p.id) AS received_total,(SELECT COALESCE(SUM(e.amount),0) FROM expenses e WHERE e.user_id=p.user_id AND e.project_id=p.id) AS direct_expenses,(SELECT COALESCE(SUM(COALESCE(te.duration_minutes,CAST((julianday(te.ended_at)-julianday(te.started_at))*1440 AS INTEGER))),0) FROM task_time_entries te JOIN tasks tt ON tt.id=te.task_id AND tt.user_id=te.user_id WHERE te.user_id=p.user_id AND tt.project_id=p.id AND te.ended_at IS NOT NULL) AS tracked_minutes FROM projects p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN directions d ON d.id=p.direction_id WHERE p.user_id=? ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END,p.deadline`).bind(user.id).all(),
+      )) AS last_activity_at,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status!='done') AS open_tasks,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id) AS total_tasks,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status='done') AS done_tasks,(SELECT COALESCE(SUM(CASE WHEN t.status!='done' THEN MAX(0,COALESCE(t.estimated_minutes,0)) ELSE 0 END),0) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id) AS open_estimated_minutes,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status!='done' AND (t.estimated_minutes IS NULL OR t.estimated_minutes<=0)) AS unestimated_open_tasks,(SELECT COALESCE(SUM(i.amount),0) FROM income_entries i WHERE i.user_id=p.user_id AND i.project_id=p.id) AS received_total,(SELECT COALESCE(SUM(e.amount),0) FROM expenses e WHERE e.user_id=p.user_id AND e.project_id=p.id) AS direct_expenses,(SELECT COALESCE(SUM(COALESCE(te.duration_minutes,CAST((julianday(te.ended_at)-julianday(te.started_at))*1440 AS INTEGER))),0) FROM task_time_entries te JOIN tasks tt ON tt.id=te.task_id AND tt.user_id=te.user_id WHERE te.user_id=p.user_id AND tt.project_id=p.id AND te.ended_at IS NOT NULL) AS tracked_minutes FROM projects p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN directions d ON d.id=p.direction_id WHERE p.user_id=? ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END,p.deadline`).bind(user.id).all(),
     env.DB.prepare("SELECT * FROM life_areas WHERE user_id=? AND active=1 ORDER BY sort_order,title").bind(user.id).all(),
     env.DB.prepare("SELECT id,title FROM directions WHERE user_id=? AND active=1 ORDER BY sort_order").bind(user.id).all(),
     env.DB.prepare(`SELECT activity_type,activity_date FROM (
@@ -75,7 +76,8 @@ export async function onRequestGet({request,env}) {
   }
   activitySummary.week.total=activitySummary.week.interactions+activitySummary.week.meetings+activitySummary.week.tasks_completed;
   activitySummary.month.total=activitySummary.month.interactions+activitySummary.month.meetings+activitySummary.month.tasks_completed;
-  return json({today,client_activity_summary:activitySummary,clients:clients.results,projects:projects.results.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
+  const workload=calculateProjectWorkload(projects.results,today);
+  return json({today,client_activity_summary:activitySummary,client_portfolio:clients.results,clients:clients.results,project_workload_summary:workload.horizons,projects:workload.projects.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
 }
 
 export async function onRequestPost({request,env}) {
