@@ -1,7 +1,7 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
 import { expandRecurringEvents } from "../../_lib/calendar.js";
 import { mergeMinuteIntervals, intersectMinuteIntervals, allocateTaskSlots } from "../../_lib/planner-scheduling.js";
-import { orderPlannerTasks, normalizePlannerItems } from "../../_lib/planner-priorities.js";
+import { orderPlannerTasks, normalizePlannerItems, calibrateTaskEstimates } from "../../_lib/planner-priorities.js";
 
 function localDate(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(new Date());
@@ -28,7 +28,7 @@ function fallbackPlan(tasks, capacity) {
   let used = 0;
   const selected = [];
   for (const task of sorted) {
-    const minutes = Number(task.estimated_minutes) || 30;
+    const minutes = Number(task.planning_minutes) || Number(task.estimated_minutes) || 30;
     if (used + minutes <= capacity) {
       selected.push({ task_id: task.id, title: task.title, minutes, reason: task.due_date && task.due_date < task.today ? "Просроченный срок" : task.priority === "high" ? "Высокий приоритет" : "Подходит по доступному времени" });
       used += minutes;
@@ -103,14 +103,16 @@ export async function onRequestPost({ request, env }) {
   const freeAfterCalendar=schedulingIntervals.reduce((sum,interval)=>sum+interval.end-interval.start,0);
   const capacity=Math.min(remainingWorkCapacity,freeAfterCalendar);
   const tasksResult = await env.DB.prepare(`
-    SELECT t.id,t.title,t.description,t.status,t.priority,t.due_date,t.estimated_minutes,d.title AS direction_title,d.target_month AS direction_target
+    SELECT t.id,t.title,t.description,t.status,t.priority,t.due_date,t.estimated_minutes,t.actual_minutes,t.direction_id,d.title AS direction_title,d.target_month AS direction_target
     FROM tasks t LEFT JOIN directions d ON d.id=t.direction_id
     WHERE t.user_id=? AND t.status IN ('todo','doing','waiting') AND (t.due_date IS NULL OR t.due_date<=?)
     ORDER BY CASE t.status WHEN 'doing' THEN 0 ELSE 1 END,t.due_date IS NULL,t.due_date,
       CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END
     LIMIT 60
   `).bind(user.id,today).all();
-  const tasks = orderPlannerTasks(tasksResult.results.map(task => ({ ...task, today })), today);
+  const historyResult = await env.DB.prepare("SELECT direction_id,estimated_minutes,actual_minutes FROM tasks WHERE user_id=? AND status='done' AND estimated_minutes>=5 AND actual_minutes>0 ORDER BY completed_at DESC LIMIT 100").bind(user.id).all();
+  const calibratedTasks = calibrateTaskEstimates(tasksResult.results, historyResult.results);
+  const tasks = orderPlannerTasks(calibratedTasks.map(task => ({ ...task, today })), today);
   const monthStart = today.slice(0,7) + "-01";
   const actualRow = await env.DB.prepare("SELECT COALESCE(SUM(amount),0) AS actual FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=?").bind(user.id,monthStart,today).first();
   const day = Number(today.slice(8,10));
