@@ -1,5 +1,6 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { allocateIncome } from "../_lib/income-buckets.js";
+import { buildFinancialAttributionSnapshot } from "../_lib/financial-attribution.js";
 
 function dateInZone(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -39,13 +40,14 @@ export async function onRequestPost({ request, env }) {
   const effectiveDirectionId=directionId||project?.direction_id||client?.direction_id||null;
   const direction=effectiveDirectionId?await env.DB.prepare("SELECT id,title FROM directions WHERE id=? AND user_id=?").bind(effectiveDirectionId,user.id).first():null;
   if(effectiveDirectionId&&!direction)return json({error:"Направление не найдено"},404);
+  const snapshot=buildFinancialAttributionSnapshot({direction,client,project});
   const buckets = await env.DB.prepare("SELECT id,percentage,active FROM income_buckets WHERE user_id=? AND active=1 ORDER BY sort_order").bind(user.id).all();
   let allocations;
   try { allocations = allocateIncome(amount, buckets.results); }
   catch { return json({ error: "Сначала настрой корзины так, чтобы распределение составляло 100%" }, 409); }
   const id = newId();
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO income_entries (id,user_id,direction_id,amount,received_on,note,client_id,project_id,direction_id_snapshot,direction_title_snapshot,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,effectiveDirectionId,amount,date,String(body?.note || "").slice(0,500),clientId,projectId,effectiveDirectionId,direction?.title||null,clientId,client?.name||null,projectId,project?.title||null),
+    env.DB.prepare("INSERT INTO income_entries (id,user_id,direction_id,amount,received_on,note,client_id,project_id,direction_id_snapshot,direction_title_snapshot,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,effectiveDirectionId,amount,date,String(body?.note || "").slice(0,500),clientId,projectId,snapshot.direction_id_snapshot,snapshot.direction_title_snapshot,snapshot.client_id_snapshot,snapshot.client_name_snapshot,snapshot.project_id_snapshot,snapshot.project_title_snapshot),
     ...allocations.map(row => env.DB.prepare("INSERT INTO income_bucket_allocations (id,user_id,income_id,bucket_id,percentage,amount) VALUES (?,?,?,?,?,?)").bind(newId(),user.id,id,row.bucket_id,row.percentage,row.amount))
   ]);
   return json({ ok: true, id, allocations }, 201);
