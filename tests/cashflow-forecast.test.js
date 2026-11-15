@@ -75,3 +75,12 @@ test("quarterly recurrence preserves the original day after short months",()=>{
  const x=buildCashflowForecast({today:"2027-01-01",horizonDays:220,irregularExpenses:[{title:"Квартальный платёж",amount:500,next_date:"2027-01-31",frequency:"quarterly"}]});
  assert.deepEqual(x.events.map(e=>e.date),["2027-01-31","2027-04-30","2027-07-31"]);
 });
+
+test("variable recurring bills are dated events, separate from daily variable spending",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:30,startingBalance:5000,variableExpensesByMonth:[{month:"2026-11",total:3000}],variableRecurringEvents:[{date:"2026-11-20",type:"expense",title:"Электричество (оценка)",amount:1500}]});
+ assert.equal(x.events.length,1);
+ assert.equal(x.events[0].source,"variable_recurring");
+ assert.equal(x.summary.planned_expenses,1500);
+ assert.equal(x.summary.variable_expenses,1600);
+ assert.equal(x.summary.ending_balance,-3100);
+});
