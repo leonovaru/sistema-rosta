@@ -39,3 +39,13 @@ test("does not move high-priority tasks and does not mutate input",()=>{
  assert.equal(buildDailyReallocationProposals(days,options).proposals.length,0);
  assert.equal(JSON.stringify(days),before);
 });
+test("returns complete schedules for tasks whose daily allocations were moved",()=>{
+ const days=[
+  {date:"2026-11-16",working_day:true,gross_capacity_minutes:30,available_minutes:30,tasks:[{id:"a",title:"Task",minutes:60,priority:"low",due_date:"2026-11-18"}]},
+  {date:"2026-11-17",working_day:true,gross_capacity_minutes:120,available_minutes:120,tasks:[]},
+  {date:"2026-11-18",working_day:true,gross_capacity_minutes:120,available_minutes:120,tasks:[]}
+ ];
+ const result=buildDailyReallocationProposals(days,options);
+ assert.equal(result.schedules.length,1);
+ assert.deepEqual(result.schedules[0].allocations,[{date:"2026-11-17",minutes:60}]);
+});
