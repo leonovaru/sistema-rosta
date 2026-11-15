@@ -1,6 +1,7 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
 import { expandRecurringEvents, createSleepCalendarEvents } from "../../_lib/calendar.js";
 import { mergeMinuteIntervals, intersectMinuteIntervals, allocateTaskSlots } from "../../_lib/planner-scheduling.js";
+import { taskTimeIntervalsForLocalDay, calculateUnionWorkMinutes } from "../../_lib/work-time-overlap.js";
 import { orderPlannerTasks, normalizePlannerItems, calibrateTaskEstimates } from "../../_lib/planner-priorities.js";
 
 function localDate(timeZone) {
@@ -101,8 +102,11 @@ export async function onRequestPost({ request, env }) {
     const end=endDate>today?1440:endDate<today?0:Number(endValue.slice(11,13))*60+Number(endValue.slice(14,16));
     return {start:Math.max(0,start),end:Math.min(nowMinute,end)};
   }).filter(interval=>interval.end>interval.start).sort((a,b)=>a.start-b.start);
-  let workDoneMinutes=0, workCursor=0;
-  for(const interval of workIntervals){const start=Math.max(workCursor,interval.start);if(interval.end>start){workDoneMinutes+=interval.end-start;workCursor=interval.end;}}
+  const utcQueryEnd=new Date(today+"T00:00:00Z");utcQueryEnd.setUTCDate(utcQueryEnd.getUTCDate()+2);
+  const utcQueryStart=new Date(today+"T00:00:00Z");utcQueryStart.setUTCDate(utcQueryStart.getUTCDate()-1);
+  const trackedRows=await env.DB.prepare("SELECT started_at,ended_at FROM task_time_entries WHERE user_id=? AND started_at<? AND (ended_at IS NULL OR ended_at>?)").bind(user.id,utcQueryEnd.toISOString(),utcQueryStart.toISOString()).all();
+  const trackedIntervals=taskTimeIntervalsForLocalDay(trackedRows.results,today,timezone);
+  const workDoneMinutes=calculateUnionWorkMinutes(workIntervals,trackedIntervals);
   const remainingWorkCapacity=Math.max(0,dailyCapacity-workDoneMinutes);
   const freeAfterCalendar=schedulingIntervals.reduce((sum,interval)=>sum+interval.end-interval.start,0);
   const capacity=Math.min(remainingWorkCapacity,freeAfterCalendar);
