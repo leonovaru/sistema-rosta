@@ -194,6 +194,16 @@ $("save-revenue-plan").addEventListener("click",async()=>{
   await loadRevenuePlan();
  }catch(err){alert(err.message);}finally{b.disabled=false;}
 });
+async function loadDebtForecast(){
+ const extra=Math.max(0,Number($("debt-extra-payment").value)||0),horizon=Number($("debt-forecast-months").value)||60;
+ const data=await api("/api/finance/debt-forecast?extra="+encodeURIComponent(extra)+"&months="+horizon),s=data.summary;
+ $("debt-forecast-summary").innerHTML=[["Текущий остаток",money(s.current_balance)],["Проценты по модели",money(s.projected_interest)],["Минимум в месяц",money(s.monthly_minimum)],["Срок до закрытия",s.months_to_payoff===null?"Более "+horizon+" мес. / нет платежа":s.months_to_payoff+" мес."]].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
+ $("debt-forecast-list").innerHTML=data.debts.length?data.debts.map(d=>'<article class="analytics-row"><div><b>'+escapeHtml(d.title)+'</b><small>'+money(d.current_balance)+' · '+d.annual_rate+'% годовых · платёж '+money(d.minimum_payment)+' · '+(d.months_to_payoff===null?'не закрывается в выбранном горизонте':d.months_to_payoff+' мес.')+'</small></div><div><strong>'+money(d.total_interest)+'</strong><small>проценты по модели</small></div></article>').join(""):'<p class="muted">Добавь открытые долги, чтобы увидеть прогноз.</p>';
+ $("debt-forecast-months-list").innerHTML=data.months.length?data.months.slice(0,24).map(m=>'<article class="finance-row"><div><b>Месяц '+m.month+'</b><small>Платежи '+money(m.payment)+' · проценты '+money(m.interest)+'</small></div><strong>'+money(m.balance)+'</strong></article>').join(""):'<p class="muted">Нет данных для графика.</p>';
+}
+$("refresh-debt-forecast").addEventListener("click",()=>loadDebtForecast().catch(err=>alert(err.message)));
+$("debt-extra-payment").addEventListener("change",()=>loadDebtForecast().catch(err=>alert(err.message)));
+$("debt-forecast-months").addEventListener("change",()=>loadDebtForecast().catch(err=>alert(err.message)));
 async function loadFinance() {
   financeData = await api("/api/finance");
   const s=financeData.summary;
@@ -218,6 +228,7 @@ async function loadFinance() {
   $("finance-obligations").innerHTML=financeData.obligations.length?financeData.obligations.map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.due_date+' · '+(item.frequency==="monthly"?"ежемесячно":item.frequency==="weekly"?"еженедельно":"один раз")+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-obligation-paid="'+escapeHtml(item.id)+'">Оплачено</button></article>').join(""):'<p class="muted">Предстоящих платежей пока нет.</p>';
   $("finance-expense-list").innerHTML=financeData.expenses.length?financeData.expenses.slice(0,12).map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.spent_on+' · '+escapeHtml(item.category)+(item.direction_title?' · '+escapeHtml(item.direction_title):' · не распределён')+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-expense-delete="'+escapeHtml(item.id)+'">×</button></article>').join(""):'<p class="muted">Расходов пока нет.</p>';
   await loadCashflowForecast();
+  await loadDebtForecast();
   await loadRevenuePlan();
 }
 $("expense-form").addEventListener("submit",async e=>{
