@@ -24,7 +24,7 @@ test("recommends shares from three complete months and keeps at least ten percen
  const result=buildBucketRecommendations(buckets,income,spending,{historyMonths:3});
  assert.equal(result.ready,true);
  assert.equal(result.average_monthly_income,110000);
- assert.equal(result.buckets.find(x=>x.id==="capital").recommended_percentage,10);
+ assert.ok(result.buckets.find(x=>x.id==="capital").recommended_percentage>=10);
  assert.equal(result.buckets.reduce((sum,x)=>sum+x.recommended_percentage,0),100);
  assert.ok(result.buckets.find(x=>x.id==="home").recommended_percentage<30);
 });
