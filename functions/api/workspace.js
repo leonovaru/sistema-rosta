@@ -18,6 +18,8 @@ async function owned(env, table, id, userId) {
 export async function onRequestGet({request,env}) {
   const user=await requireUser(request,env);
   if(!user)return json({error:"Необходим вход"},401);
+  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+  const today=new Intl.DateTimeFormat("en-CA",{timeZone:settings?.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
   const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM life_areas WHERE user_id=?").bind(user.id).first();
   if(!Number(count?.n||0)) {
     await env.DB.batch(DEFAULT_AREAS.map(([title,description],i)=>env.DB.prepare(
@@ -25,12 +27,24 @@ export async function onRequestGet({request,env}) {
     ).bind(newId(),user.id,title,description,i)));
   }
   const [clients,projects,areas,directions]=await Promise.all([
-    env.DB.prepare("SELECT c.*,d.title AS direction_title,(SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id) AS project_count FROM clients c LEFT JOIN directions d ON d.id=c.direction_id WHERE c.user_id=? ORDER BY c.updated_at DESC").bind(user.id).all(),
+    env.DB.prepare(`SELECT c.*,d.title AS direction_title,
+      (SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id) AS project_count,
+      (SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id AND p.status IN ('active','waiting')) AS active_projects,
+      (SELECT COUNT(*) FROM tasks t WHERE t.user_id=c.user_id AND t.status!='done' AND (t.client_id=c.id OR t.project_id IN (SELECT p.id FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id))) AS open_tasks,
+      (SELECT COUNT(*) FROM tasks t WHERE t.user_id=c.user_id AND t.status!='done' AND t.due_date IS NOT NULL AND t.due_date<? AND (t.client_id=c.id OR t.project_id IN (SELECT p.id FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id))) AS overdue_tasks,
+      (SELECT COALESCE(SUM(MAX(0,COALESCE(p.budget,0)-(SELECT COALESCE(SUM(i.amount),0) FROM income_entries i WHERE i.user_id=p.user_id AND i.project_id=p.id))),0) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id AND p.status NOT IN ('done','archived')) AS outstanding_payment,
+      (SELECT MIN(p.deadline) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id AND p.status IN ('active','waiting') AND p.deadline>=?) AS next_deadline,
+      (SELECT MAX(activity_date) FROM (
+        SELECT ci.occurred_on AS activity_date FROM client_interactions ci WHERE ci.user_id=c.user_id AND ci.client_id=c.id
+        UNION ALL SELECT mn.meeting_date FROM meeting_notes mn WHERE mn.user_id=c.user_id AND mn.client_id=c.id
+        UNION ALL SELECT substr(t.completed_at,1,10) FROM tasks t WHERE t.user_id=c.user_id AND t.status='done' AND (t.client_id=c.id OR t.project_id IN (SELECT p.id FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id))
+      )) AS last_activity
+      FROM clients c LEFT JOIN directions d ON d.id=c.direction_id WHERE c.user_id=? ORDER BY c.updated_at DESC`).bind(today,today,user.id).all(),
     env.DB.prepare("SELECT p.*,c.name AS client_name,d.title AS direction_title,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status!='done') AS open_tasks,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id) AS total_tasks,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status='done') AS done_tasks,(SELECT COALESCE(SUM(i.amount),0) FROM income_entries i WHERE i.user_id=p.user_id AND i.project_id=p.id) AS received_total,(SELECT COALESCE(SUM(e.amount),0) FROM expenses e WHERE e.user_id=p.user_id AND e.project_id=p.id) AS direct_expenses,(SELECT COALESCE(SUM(COALESCE(te.duration_minutes,CAST((julianday(te.ended_at)-julianday(te.started_at))*1440 AS INTEGER))),0) FROM task_time_entries te JOIN tasks tt ON tt.id=te.task_id AND tt.user_id=te.user_id WHERE te.user_id=p.user_id AND tt.project_id=p.id AND te.ended_at IS NOT NULL) AS tracked_minutes FROM projects p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN directions d ON d.id=p.direction_id WHERE p.user_id=? ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END,p.deadline").bind(user.id).all(),
     env.DB.prepare("SELECT * FROM life_areas WHERE user_id=? AND active=1 ORDER BY sort_order,title").bind(user.id).all(),
     env.DB.prepare("SELECT id,title FROM directions WHERE user_id=? AND active=1 ORDER BY sort_order").bind(user.id).all()
   ]);
-  return json({clients:clients.results,projects:projects.results.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
+  return json({today,clients:clients.results,projects:projects.results.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
 }
 
 export async function onRequestPost({request,env}) {
