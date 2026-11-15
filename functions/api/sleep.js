@@ -34,7 +34,7 @@ function validateTime(value){
 
 export async function onRequestGet({request,env}){
   const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
-  const url=new URL(request.url),limit=Math.min(90,Math.max(1,Number(url.searchParams.get("limit")||30)));
+  const url=new URL(request.url),rawLimit=Number(url.searchParams.get("limit")||30),limit=Number.isFinite(rawLimit)?Math.min(90,Math.max(1,Math.trunc(rawLimit))):30;
   const {results}=await env.DB.prepare("SELECT * FROM sleep_sessions WHERE user_id=? ORDER BY sleep_date DESC LIMIT ?").bind(user.id,limit).all();
   const settings=await env.DB.prepare("SELECT sleep_target_minutes FROM settings WHERE user_id=?").bind(user.id).first();
   return json({sessions:results,sleep_target_minutes:settings?.sleep_target_minutes==null?null:Number(settings.sleep_target_minutes)});
