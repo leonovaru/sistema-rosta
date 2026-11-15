@@ -84,3 +84,13 @@ test("variable recurring bills are dated events, separate from daily variable sp
  assert.equal(x.summary.variable_expenses,1600);
  assert.equal(x.summary.ending_balance,1900);
 });
+test("calendar events show project attribution and the closing spendable balance for their date",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:5,startingBalance:10000,reserves:[{title:"Reserve",target_amount:2000,current_amount:1000,monthly_contribution:0,active:1}],planned:[
+  {id:"project-payment",expected_date:"2026-11-16",flow_type:"income",title:"Оплата этапа",amount:5000,client_name:"Клиент А",project_title:"Сайт"}
+ ],obligations:[{due_date:"2026-11-16",frequency:"once",title:"Аренда",amount:3000}]});
+ const event=x.events.find(e=>e.id==="project-payment");
+ assert.equal(event.client_name,"Клиент А");
+ assert.equal(event.project_title,"Сайт");
+ assert.equal(event.day_closing_balance,12000);
+ assert.equal(event.day_available_balance,11000);
+});
