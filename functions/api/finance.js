@@ -17,6 +17,19 @@ function validAmount(value) {
   const amount=Number(value);
   return Number.isFinite(amount)&&amount>0&&amount<=100000000?amount:null;
 }
+async function resolveBucket(env,userId,preferredTitle){
+  return await env.DB.prepare("SELECT id,title FROM income_buckets WHERE user_id=? AND active=1 AND title=?").bind(userId,preferredTitle).first()
+    || await env.DB.prepare("SELECT id,title FROM income_buckets WHERE user_id=? AND active=1 AND title='Долги и обязательства'").bind(userId).first();
+}
+async function bucketAvailable(env,userId,bucketId){
+  const [allocated,expenses,debt,obligations]=await Promise.all([
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_bucket_allocations WHERE user_id=? AND bucket_id=?").bind(userId,bucketId).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id=? AND bucket_id=?").bind(userId,bucketId).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM debt_payments WHERE user_id=? AND bucket_id=?").bind(userId,bucketId).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM obligation_payments WHERE user_id=? AND bucket_id=?").bind(userId,bucketId).first()
+  ]);
+  return Number(allocated.total||0)-Number(expenses.total||0)-Number(debt.total||0)-Number(obligations.total||0);
+}
 export async function onRequestGet({request,env}) {
   const user=await requireUser(request,env);
   if(!user)return json({error:"Необходим вход"},401);
@@ -53,11 +66,7 @@ export async function onRequestPost({request,env}) {
     if(bucketId){
       const bucket=await env.DB.prepare("SELECT id,title FROM income_buckets WHERE id=? AND user_id=? AND active=1").bind(bucketId,user.id).first();
       if(!bucket)return json({error:"Корзина не найдена"},404);
-      const [allocated,spent]=await Promise.all([
-        env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_bucket_allocations WHERE user_id=? AND bucket_id=?").bind(user.id,bucketId).first(),
-        env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id=? AND bucket_id=?").bind(user.id,bucketId).first()
-      ]);
-      const available=Number(allocated.total||0)-Number(spent.total||0);
+      const available=await bucketAvailable(env,user.id,bucketId);
       if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     }
     await env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id) VALUES (?,?,?,?,?,?,?,?,?)").bind(id,user.id,directionId,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500),bucketId).run();
@@ -76,9 +85,13 @@ export async function onRequestPost({request,env}) {
     const debt=await env.DB.prepare("SELECT id,balance FROM debts WHERE id=? AND user_id=? AND status='open'").bind(debtId,user.id).first();
     if(!debt)return json({error:"Открытый долг не найден"},404);
     if(amount>Number(debt.balance))return json({error:"Платёж не может превышать остаток долга"},400);
+    const bucket=await resolveBucket(env,user.id,"Долги и обязательства");
+    if(!bucket)return json({error:"Не найдена корзина для долгов и обязательств"},409);
+    const available=await bucketAvailable(env,user.id,bucket.id);
+    if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     const next=Math.max(0,Number(debt.balance)-amount);
     await env.DB.batch([
-      env.DB.prepare("INSERT INTO debt_payments (id,user_id,debt_id,amount,paid_on,note) VALUES (?,?,?,?,?,?)").bind(id,user.id,debtId,amount,date,String(body.note||"").slice(0,500)),
+      env.DB.prepare("INSERT INTO debt_payments (id,user_id,debt_id,amount,paid_on,note,bucket_id) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,debtId,amount,date,String(body.note||"").slice(0,500),bucket.id),
       env.DB.prepare("UPDATE debts SET balance=?,status=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(next,next===0?"closed":"open",debtId,user.id)
     ]);
     return json({ok:true,id,balance:next},201);
@@ -88,8 +101,12 @@ export async function onRequestPost({request,env}) {
     if(!obligationId||!validDate(date))return json({error:"Проверь обязательство и дату оплаты"},400);
     const obligation=await env.DB.prepare("SELECT * FROM payment_obligations WHERE id=? AND user_id=? AND active=1").bind(obligationId,user.id).first();
     if(!obligation)return json({error:"Активный платёж не найден"},404);
+    const bucket=await resolveBucket(env,user.id,String(obligation.category||"Долги и обязательства"));
+    if(!bucket)return json({error:"Не найдена корзина для платежа"},409);
+    const available=await bucketAvailable(env,user.id,bucket.id);
+    if(Number(obligation.amount)>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     const nextDue=addPeriod(obligation.due_date,obligation.frequency,obligation.recurrence_day);
-    const statements=[env.DB.prepare("INSERT INTO obligation_payments (id,user_id,obligation_id,amount,paid_on) VALUES (?,?,?,?,?)").bind(id,user.id,obligationId,obligation.amount,date)];
+    const statements=[env.DB.prepare("INSERT INTO obligation_payments (id,user_id,obligation_id,amount,paid_on,bucket_id) VALUES (?,?,?,?,?,?)").bind(id,user.id,obligationId,obligation.amount,date,bucket.id)];
     if(nextDue)statements.push(env.DB.prepare("UPDATE payment_obligations SET due_date=? WHERE id=? AND user_id=?").bind(nextDue,obligationId,user.id));
     else statements.push(env.DB.prepare("UPDATE payment_obligations SET active=0 WHERE id=? AND user_id=?").bind(obligationId,user.id));
     await env.DB.batch(statements);
