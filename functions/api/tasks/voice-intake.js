@@ -54,10 +54,12 @@ export async function onRequestPost({request,env}){
   for(let i=0;i<prepared.length;i++){
    const t=prepared[i];
    if(t.operation==="update"&&t.target_task_id){
-    const current=await env.DB.prepare("SELECT id FROM tasks WHERE id=? AND user_id=? AND status!='done'").bind(t.target_task_id,user.id).first();
+    const current=await env.DB.prepare("SELECT id,title,description FROM tasks WHERE id=? AND user_id=? AND status!='done'").bind(t.target_task_id,user.id).first();
     if(!current)return json({error:"Задача для обновления больше не найдена. Повтори разбор."},409);
-    await env.DB.prepare("UPDATE tasks SET title=?,description=?,due_date=COALESCE(?,due_date),priority=? WHERE id=? AND user_id=? AND status!='done'")
-     .bind(t.title,t.description,t.due_date,t.priority,t.target_task_id,user.id).run();
+    const addition=t.description.trim();
+    const mergedDescription=[current.description||"",addition].filter(Boolean).filter((value,index,all)=>all.findIndex(x=>x.toLocaleLowerCase("ru-RU")===value.toLocaleLowerCase("ru-RU"))===index).join("\\n\\n").slice(0,2000);
+    await env.DB.prepare("UPDATE tasks SET description=?,due_date=COALESCE(?,due_date) WHERE id=? AND user_id=? AND status!='done'")
+     .bind(mergedDescription,t.due_date,t.target_task_id,user.id).run();
     updated++;
     continue;
    }
