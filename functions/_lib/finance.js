@@ -33,7 +33,6 @@ export function forecastDebt(debt, extraMonthlyPayment=0, maxMonths=60) {
     balance=Math.max(0,Math.round((balance-payment)*100)/100);
     totalPaid+=payment;
     schedule.push({month,opening_balance:opening,interest,payment,closing_balance:balance});
-    if(payment===0)break;
   }
   return {months_to_payoff:balance<=0.005?schedule.length:null,total_interest:Math.round(totalInterest*100)/100,total_paid:Math.round(totalPaid*100)/100,projected_balance:balance,schedule,limited:balance>0.005&&schedule.length>=maxMonths};
 }
