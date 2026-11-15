@@ -15,6 +15,25 @@ let calendarSelected = "";
 let calendarView = "month";
 let workspaceData = {clients:[],projects:[],life_areas:[],directions:[]};
 let pendingProjectPlan = null;
+let dailyBlockPreferences = { start: "09:00", focus: 50, rest: 10 };
+try { dailyBlockPreferences = { ...dailyBlockPreferences, ...JSON.parse(localStorage.getItem("dailyBlockPreferences") || "{}") }; } catch {}
+function blockClockLabel(offset) {
+ const [h,m]=String(dailyBlockPreferences.start||"09:00").split(":").map(Number);
+ const total=((h*60+m+offset)%1440+1440)%1440;
+ return String(Math.floor(total/60)).padStart(2,"0")+":"+String(total%60).padStart(2,"0");
+}
+function renderDailyBlockCards(plans) {
+ return (plans||[]).map(day=>{
+  let cursor=0;
+  const blocks=(day.blocks||[]).map(block=>{
+   const start=blockClockLabel(cursor);cursor+=Number(block.minutes)||0;
+   const end=blockClockLabel(cursor);
+   return '<div class="balance-row"><div><b>'+(block.type==="break"?'Перерыв':escapeHtml(block.title))+'</b><small>'+start+'–'+end+' · '+(block.type==="break"?'Восстановление между блоками':(block.cognitive_load==="high"?'Высокая концентрация':block.cognitive_load==="low"?'Рутинная задача':'Средняя концентрация'))+'</small></div><strong>'+duration(block.minutes)+'</strong></div>';
+  }).join("");
+  return '<article class="weekly-focus-card"><div><b>'+escapeHtml(day.date)+(day.overloaded?' · часть задач не помещается':'')+'</b><small>Фокус: '+duration(day.focus_minutes)+' · перерывы: '+duration(day.break_minutes)+' · доступно: '+duration(day.available_minutes)+'</small></div>'+blocks+(day.unallocated?.length?'<p class="weekly-warning">Не помещается в доступное время: '+day.unallocated.map(row=>escapeHtml(row.title)+' — '+duration(row.minutes)).join('; ')+'</p>':'')+'</article>';
+ }).join("");
+}
+
 
 const money = n => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(n || 0)) + " ₽";
 const duration = n => { const v = Number(n || 0); return v >= 60 ? (Math.floor(v/60) + " ч" + (v%60 ? " " + v%60 + " мин" : "")) : v + " мин"; };
@@ -124,6 +143,22 @@ $("estimate-task").addEventListener("click", async () => {
   finally { button.disabled = false; button.textContent = "Оценить время и делегирование с ИИ"; }
 });
 ["task-title","task-description"].forEach(id => $(id).addEventListener("input", () => { taskEstimate = null; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; }));
+document.addEventListener("change",event=>{
+ if(!event.target.closest("#weekly-workload"))return;
+ if(!["daily-block-start","daily-block-focus","daily-block-rest"].includes(event.target.id))return;
+ const start=$("daily-block-start")?.value||"09:00";
+ const focus=Math.max(15,Math.min(120,Number($("daily-block-focus")?.value)||50));
+ const rest=Math.max(3,Math.min(30,Number($("daily-block-rest")?.value)||10));
+ dailyBlockPreferences={start,focus,rest};
+ try{localStorage.setItem("dailyBlockPreferences",JSON.stringify(dailyBlockPreferences));}catch{}
+ const panel=$("weekly-workload")?.querySelector(".weekly-focus-scenarios");
+ if(panel){
+  const plan=panel.querySelectorAll(".weekly-focus-card");
+  // Re-render by refreshing server data with the selected focus/rest settings.
+  loadWeeklyWorkload();
+ }
+});
+
 $("task-form").addEventListener("submit", async e => {
   e.preventDefault();
   try { await api("/api/tasks", { method: "POST", body: JSON.stringify({ title: $("task-title").value, description: $("task-description").value, due_date: $("task-date").value || null, direction_id: $("task-direction").value || null, client_id: $("task-client").value || null, project_id: $("task-project").value || null, life_area_id: $("task-life-area").value || null, parent_task_id: $("task-parent").value || null, priority: $("task-priority").value, estimated_minutes: taskEstimate?.minutes ?? null, ai_plan: taskEstimate ? JSON.stringify(taskEstimate) : "" }) }); $("task-title").value = ""; $("task-description").value = ""; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; taskEstimate = null; await loadTasks(); }
@@ -1085,8 +1120,8 @@ async function loadWeeklyWorkload(){
  const recovery=week.recovery_insights||{},breakRule=recovery.break_rule||{};
  const recoveryPanel='<section class="weekly-balance"><h4>Перерывы и восстановление</h4><p class="fine">Анализ длительности завершённых таймер-сессий. Таймер может оставаться включённым во время отдыха, поэтому это ориентир, а не точное измерение непрерывной концентрации.</p><div class="balance-row"><div><b>Наблюдений</b><small>'+recovery.sample_sessions+' завершённых сессий · '+(recovery.confidence==="higher"?"более устойчивая выборка":recovery.confidence==="preliminary"?"предварительная выборка":"недостаточно данных")+'</small></div><strong>'+Number(recovery.long_session_share_percent||0)+'%</strong></div><div class="balance-row"><span>Медианная длительность</span><strong>'+duration(recovery.median_session_minutes||0)+'</strong></div><div class="balance-row"><span>Самая длинная сессия</span><strong>'+duration(recovery.longest_session_minutes||0)+'</strong></div><div class="balance-row"><span>Сессий от 90 минут</span><strong>'+Number(recovery.sessions_over_90_minutes||0)+'</strong></div><div class="balance-row"><span>Сессий от 2 часов</span><strong>'+Number(recovery.sessions_over_120_minutes||0)+'</strong></div><p>'+escapeHtml(recovery.guidance||"Пока нет данных для рекомендации.")+'</p><h5>Мягкая стартовая настройка перерывов</h5><p>После '+(breakRule.focus_minutes||50)+' минут фокус-блока — около '+(breakRule.break_minutes||10)+' минут отдыха. Можно начать с короткой паузы '+(breakRule.optional_short_break_minutes||5)+' минут.</p><p class="fine">Это необязательная подсказка. Система не создаёт события и не переставляет календарь. '+escapeHtml(recovery.timezone||"")+'</p></section>';
  const dailyBlockPlans=week.daily_block_plans||[];
- const blockPlanCards=dailyBlockPlans.map(day=>'<article class="weekly-focus-card"><div><b>'+escapeHtml(day.date)+(day.overloaded?' · часть задач не помещается':'')+'</b><small>Фокус: '+duration(day.focus_minutes)+' · перерывы: '+duration(day.break_minutes)+' · свободная ёмкость: '+duration(day.available_minutes)+'</small></div>'+(day.blocks||[]).map((block,index)=>'<div class="balance-row"><div><b>'+(block.type==="break"?'Перерыв':escapeHtml(block.title))+'</b><small>'+(block.type==="break"?'Восстановление между блоками':(block.cognitive_load==="high"?'Высокая концентрация':block.cognitive_load==="low"?'Рутинная задача':'Средняя концентрация'))+'</small></div><strong>'+duration(block.minutes)+'</strong></div>').join('')+(day.unallocated?.length?'<p class="weekly-warning">Не помещается в доступное время: '+day.unallocated.map(row=>escapeHtml(row.title)+' — '+duration(row.minutes)).join('; ')+'</p>':'')+'</article>').join('');
- const blockPlanPanel='<section class="weekly-focus-scenarios"><h4>Черновик рабочих блоков и перерывов</h4><p class="fine">План показывает относительную последовательность, а не точные часы: время начала рабочего дня пока не задано. Доступная ёмкость уже уменьшена на календарные обязательства. Стартовый ориентир — до 50 минут фокуса и около 10 минут отдыха; блоки можно менять вручную. Ничего не добавляется в календарь автоматически.</p>'+(blockPlanCards||'<p class="muted">Нет задач с оценкой времени для черновика блоков.</p>')+'</section>';
+ const blockPlanCards=renderDailyBlockCards(dailyBlockPlans);
+ const blockPlanPanel='<section class="weekly-focus-scenarios"><h4>Рабочие блоки и перерывы по времени</h4><div class="voice-task-fields"><label>Начало рабочего дня<input type="time" id="daily-block-start" value="'+escapeHtml(dailyBlockPreferences.start)+'"></label><label>Фокус, минут<input type="number" id="daily-block-focus" min="15" max="120" step="5" value="'+dailyBlockPreferences.focus+'"></label><label>Перерыв, минут<input type="number" id="daily-block-rest" min="3" max="30" step="1" value="'+dailyBlockPreferences.rest+'"></label></div><p class="fine">Время начала и длительность блоков сохраняются в этом браузере. Часы рассчитаны последовательно от выбранного начала; календарные обязательства уже вычтены из доступной ёмкости, но точные свободные окна между встречами пока не моделируются. Система ничего не добавляет в календарь.</p>'+(blockPlanCards||'<p class="muted">Нет задач с оценкой времени для черновика блоков.</p>')+'</section>';
  const accuracy=week.estimate_accuracy||{},overall=accuracy.overall||{},accuracyRows=(accuracy.by_area||[]).map(row=>'<div class="balance-row"><div><b>'+escapeHtml(row.title)+'</b><small>'+row.sample_count+' завершённых задач · медианная ошибка '+(row.median_error_percent===null?'нет данных':row.median_error_percent+'%')+'</small></div><strong>'+(row.recommended_estimate_multiplier===null?'Пока мало данных':'×'+row.recommended_estimate_multiplier)+'</strong></div>').join("");
  const accuracyPanel='<section class="weekly-balance"><h4>Точность оценок задач</h4><p class="fine">История завершённых задач за последние 90 дней. Множитель — подсказка для будущих оценок, существующие оценки не меняются.</p><div class="weekly-metrics"><article><span>Завершённых задач в выборке</span><b>'+overall.sample_count+'</b></article><article><span>Медианная ошибка оценки</span><b>'+(overall.median_error_percent===null?'—':overall.median_error_percent+'%')+'</b></article><article><span>Поправка к будущим оценкам</span><b>'+(overall.recommended_estimate_multiplier===null?'Недостаточно данных':'×'+overall.recommended_estimate_multiplier)+'</b></article></div>'+(accuracyRows||'<p class="muted">Пока недостаточно завершённых задач с оценкой и фактическим временем. Нужно не менее трёх наблюдений для рекомендации.</p>')+'</section>';
  const calibrated=week.calibrated_load||{},calibratedSummary=calibrated.summary||{},calibratedDays=(calibrated.days||[]).map(day=>'<div class="balance-calendar-row"><span>'+day.date+(day.calibrated_overloaded?' · перегрузка':'')+'</span><b>'+duration(day.calibrated_task_minutes||0)+' / '+duration(day.available_minutes||0)+'</b></div>').join("");
