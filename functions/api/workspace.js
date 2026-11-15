@@ -4,6 +4,7 @@ import { calculateProjectWorkload } from "../_lib/project-workload.js";
 import { calculateCalendarBusyMinutes, calculateCalendarBusyByDay } from "../_lib/calendar-capacity.js";
 import { calculateProjectDailyLoad } from "../_lib/project-daily-load.js";
 import { expandRecurringEvents } from "../_lib/calendar.js";
+import { isClientSelectable, isDirectionSelectable } from "../_lib/workspace-entity-availability.js";
 
 const DEFAULT_AREAS = [
   ["Дом","Уборка, порядок, бытовые задачи"],
@@ -103,7 +104,7 @@ export async function onRequestPost({request,env}) {
     const name=String(b.name||"").trim();
     const directionId=b.direction_id?String(b.direction_id):null;
     if(!name||name.length>160)return json({error:"Укажи название клиента (до 160 символов)"},400);
-    if(!(await owned(env,"directions",directionId,user.id)))return json({error:"Направление не найдено"},404);
+    if(directionId){const direction=await env.DB.prepare("SELECT id,active FROM directions WHERE id=? AND user_id=?").bind(directionId,user.id).first();if(!isDirectionSelectable(direction))return json({error:"Направление не найдено или отключено"},404);}
     await env.DB.prepare("INSERT INTO clients (id,user_id,direction_id,name,contact,status,notes) VALUES (?,?,?,?,?,?,?)")
       .bind(id,user.id,directionId,name,String(b.contact||"").slice(0,240),["lead","active","paused","closed"].includes(b.status)?b.status:"active",String(b.notes||"").slice(0,3000)).run();
     return json({ok:true,id},201);
@@ -112,7 +113,9 @@ export async function onRequestPost({request,env}) {
     const title=String(b.title||"").trim(),clientId=b.client_id?String(b.client_id):null,directionId=b.direction_id?String(b.direction_id):null;
     if(!title||title.length>180)return json({error:"Укажи название проекта (до 180 символов)"},400);
     if(!(await owned(env,"clients",clientId,user.id))||!(await owned(env,"directions",directionId,user.id)))return json({error:"Клиент или направление не найдены"},404);
-    const client=clientId?await env.DB.prepare("SELECT direction_id FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first():null;
+    const client=clientId?await env.DB.prepare("SELECT direction_id,status FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first():null;
+    if(clientId&&!isClientSelectable(client))return json({error:"Нельзя создать проект для закрытого клиента"},409);
+    if(directionId){const direction=await env.DB.prepare("SELECT id,active FROM directions WHERE id=? AND user_id=?").bind(directionId,user.id).first();if(!isDirectionSelectable(direction))return json({error:"Направление не найдено или отключено"},404);}
     if(client?.direction_id&&directionId&&client.direction_id!==directionId)return json({error:"Проект должен относиться к направлению выбранного клиента"},400);
     const finalDirectionId=directionId||client?.direction_id||null;
     const deadline=b.deadline?String(b.deadline):null;
