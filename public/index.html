@@ -253,6 +253,17 @@
             <button class="button primary" type="submit">Сохранить событие</button>
           </form>
         </section>
+        <section class="panel sleep-panel">
+          <div class="section-head"><div><p class="eyebrow">ВОССТАНОВЛЕНИЕ</p><h2>Сон и пробуждение</h2></div><span class="muted">Фиксируем факты, не догадки</span></div>
+          <p class="fine">Отметь, когда ложишься. Время засыпания можно добавить отдельно, если помнишь его. Утреннее подтверждение пробуждения сохранит фактическое время нажатия.</p>
+          <div class="sleep-actions">
+            <button type="button" class="button secondary" id="sleep-bed">Ложусь спать</button>
+            <button type="button" class="button ghost" id="sleep-asleep">Уже уснула</button>
+            <button type="button" class="button primary" id="sleep-wake">Я проснулась</button>
+          </div>
+          <p id="sleep-status" class="fine" aria-live="polite">Загрузка записей сна…</p>
+          <div id="sleep-history" class="sleep-history"></div>
+        </section>
         <section class="panel planner-panel"><div class="section-head"><div><p class="eyebrow">УПРАВЛЕНИЕ ДНЁМ</p><h2>План на сегодня</h2></div><span class="muted" id="planner-date"></span></div><section class="work-capacity-settings"><div><h3>Рабочая доступность на неделю</h3><p class="fine">Укажи дни и среднее количество часов, которые реально можешь выделять на работу. Это настройка общей ёмкости, а не обязательство работать каждый день.</p></div><div class="capacity-weekdays"><label><input type="checkbox" data-workday="1" checked> Пн</label><label><input type="checkbox" data-workday="2" checked> Вт</label><label><input type="checkbox" data-workday="3" checked> Ср</label><label><input type="checkbox" data-workday="4" checked> Чт</label><label><input type="checkbox" data-workday="5" checked> Пт</label><label><input type="checkbox" data-workday="6" > Сб</label><label><input type="checkbox" data-workday="7" > Вс</label></div><label>Доступно в выбранный день<select id="weekly-capacity"><option value="120">2 часа</option><option value="180">3 часа</option><option value="240">4 часа</option><option value="300">5 часов</option><option value="360" selected>6 часов</option><option value="420">7 часов</option><option value="480">8 часов</option><option value="600">10 часов</option></select></label><button type="button" class="button ghost" id="save-work-capacity">Сохранить рабочий график</button><span id="work-capacity-status" class="fine" aria-live="polite">График ещё не настроен — оценка перегрузки отключена.</span></section><div class="planner-controls"><label>Сколько времени доступно сегодня?<select id="planner-capacity"><option value="120">2 часа</option><option value="180">3 часа</option><option value="240">4 часа</option><option value="300">5 часов</option><option value="360" selected>6 часов</option><option value="420">7 часов</option><option value="480">8 часов</option><option value="600">10 часов</option></select></label><button type="button" class="button primary" id="make-day-plan">Сформировать план дня с ИИ</button></div><div id="day-plan" class="day-plan"><p class="muted">План учитывает сроки, приоритеты, оценку времени и движение к финансовой цели.</p></div></section>
         <div class="main-grid">
           <section class="panel"><div class="section-head"><div><p class="eyebrow">ФОКУС</p><h2>Задачи</h2></div><span class="count" id="task-count">0</span></div><section class="voice-intake" aria-labelledby="voice-title">
