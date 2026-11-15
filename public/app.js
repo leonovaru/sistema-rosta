@@ -113,6 +113,23 @@ $("refresh-profitability").addEventListener("click",async()=>{const b=$("refresh
 
 let financeData = null;
 let incomeBucketsData = null;
+function suggestBucketForExpense(category){
+ const value=String(category||"").toLowerCase();
+ const aliases=[
+  [/жиль|аренд|коммунал|ипотек|квартир|жкх/,"Жильё"],
+  [/продукт|питан|еда|магазин|доставк|кафе|ресторан/,"Питание"],
+  [/кот|корм|наполнител|ветеринар/,"Коты"],
+  [/транспорт|такси|бензин|проезд|метро|автобус/,"Транспорт"],
+  [/здоров|врач|аптек|лекарств|медицин|космет|уход/,"Здоровье и уход"],
+  [/долг|кредит|займ|погашен/,"Долги и обязательства"],
+  [/капитал|инвестиц|накоплен/,"Капитал"]
+ ];
+ const match=aliases.find(([pattern])=>pattern.test(value));
+ if(!match)return;
+ const bucket=incomeBucketsData?.buckets?.find(x=>x.title===match[1]);
+ if(bucket)$("expense-bucket").value=bucket.id;
+}
+$("expense-category").addEventListener("change",()=>suggestBucketForExpense($("expense-category").value));
 async function loadIncomeBuckets(){
  incomeBucketsData=await api("/api/finance/buckets");
  const rows=incomeBucketsData.buckets||[];
