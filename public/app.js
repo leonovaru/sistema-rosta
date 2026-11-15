@@ -41,7 +41,24 @@ $("auth-form").addEventListener("submit", async e => {
     await boot();
   } catch (err) { $("auth-error").textContent = err.message; }
 });
-$("logout").addEventListener("click", async () => { await api("/api/auth/logout", { method: "POST" }).catch(() => {}); showAuth(); });
+$("logout").addEventListener("click", async () => {
+  const button=$("logout");
+  button.disabled=true;
+  try{
+    if("serviceWorker" in navigator && "PushManager" in window){
+      try{
+        const registration=await navigator.serviceWorker.getRegistration();
+        const subscription=await registration?.pushManager.getSubscription();
+        if(subscription){
+          try{await api("/api/push-subscriptions",{method:"DELETE",body:JSON.stringify({endpoint:subscription.endpoint})});}
+          finally{await subscription.unsubscribe().catch(()=>false);}
+        }
+      }catch(error){console.warn("Не удалось полностью отключить push-подписку на этом устройстве",error);}
+    }
+    await api("/api/auth/logout",{method:"POST"});
+  }catch(error){console.warn("Не удалось завершить сеанс на сервере",error);}
+  finally{button.disabled=false;showAuth();}
+});
 $("estimate-task").addEventListener("click", async () => {
   const title = $("task-title").value.trim();
   if (!title) { alert("Сначала введи название задачи."); $("task-title").focus(); return; }
@@ -1085,14 +1102,17 @@ $("wake-notifications-toggle").addEventListener("click",async()=>{
    await current.unsubscribe();
    status.textContent="Уведомления отключены.";
   }else{
+   let permission=Notification.permission;
+   if(permission==="default")permission=await Notification.requestPermission();
+   if(permission!=="granted")throw new Error("Разрешите уведомления в настройках браузера.");
+   if(!config.public_key)throw new Error("На сервере пока не настроена отправка уведомлений.");
    let subscription=current;
-   if(!subscription){
-    let permission=Notification.permission;
-    if(permission==="default")permission=await Notification.requestPermission();
-    if(permission!=="granted")throw new Error("Разрешите уведомления в настройках браузера.");
-    if(!config.public_key)throw new Error("На сервере пока не настроена отправка уведомлений.");
-    subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decodePushKey(config.public_key)});
+   if(subscription){
+    // A browser subscription may belong to a previous account; replace it instead of transferring ownership.
+    await subscription.unsubscribe();
+    subscription=null;
    }
+   subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decodePushKey(config.public_key)});
    await api("/api/push-subscriptions",{method:"POST",body:JSON.stringify({subscription:subscription.toJSON()})});
    status.textContent="Уведомления включены: ежедневно в 06:00 по часовому поясу настроек.";
   }
