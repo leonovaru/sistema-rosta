@@ -379,6 +379,7 @@ $("refresh-revenue-scenarios").addEventListener("click",async()=>{const b=$("ref
 
 let salesPlanData=null;
 const DEAL_STAGES={contact:"Первичный контакт",negotiation:"Переговоры",proposal:"Предложение отправлено",awaiting_payment:"Ожидает оплаты",won:"Выиграна",lost:"Проиграна"};
+const DEAL_LOSS_LABELS={price:"Цена / бюджет",timing:"Сроки",no_need:"Нет потребности",competitor:"Выбрали конкурента",no_response:"Нет ответа",trust:"Недостаток доверия",scope:"Не подошёл объём / формат",other:"Другая причина"};
 let dealsData=[],editingDealId=null;
 async function loadDeals(){
  const [data,workspace]=await Promise.all([api("/api/deals"),api("/api/workspace")]);dealsData=data.deals||[];
