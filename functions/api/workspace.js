@@ -25,7 +25,7 @@ export async function onRequestGet({request,env}) {
   }
   const [clients,projects,areas,directions]=await Promise.all([
     env.DB.prepare("SELECT c.*,d.title AS direction_title,(SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id) AS project_count FROM clients c LEFT JOIN directions d ON d.id=c.direction_id WHERE c.user_id=? ORDER BY c.updated_at DESC").bind(user.id).all(),
-    env.DB.prepare("SELECT p.*,c.name AS client_name,d.title AS direction_title,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status!='done') AS open_tasks FROM projects p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN directions d ON d.id=p.direction_id WHERE p.user_id=? ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END,p.deadline").bind(user.id).all(),
+    env.DB.prepare("SELECT p.*,c.name AS client_name,d.title AS direction_title,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status!='done') AS open_tasks,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id) AS total_tasks,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status='done') AS done_tasks FROM projects p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN directions d ON d.id=p.direction_id WHERE p.user_id=? ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END,p.deadline").bind(user.id).all(),
     env.DB.prepare("SELECT * FROM life_areas WHERE user_id=? AND active=1 ORDER BY sort_order,title").bind(user.id).all(),
     env.DB.prepare("SELECT id,title FROM directions WHERE user_id=? AND active=1 ORDER BY sort_order").bind(user.id).all()
   ]);
