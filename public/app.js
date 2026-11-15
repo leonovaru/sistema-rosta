@@ -1008,6 +1008,7 @@ $("financial-goals-list").addEventListener("click",async e=>{const b=e.target.cl
 $("financial-goals-list").addEventListener("change",async e=>{const s=e.target.closest("[data-goal-status]");if(!s)return;try{await api("/api/dreams",{method:"PATCH",body:JSON.stringify({type:"goal",id:s.dataset.goalStatus,status:s.value})});await loadDreams();}catch(err){alert(err.message);}});
 
 let sleepSessions=[];
+let sleepTargetMinutes=null;
 function sleepLocalDate(){
  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:userSettings.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
  const v=Object.fromEntries(parts.map(p=>[p.type,p.value]));return v.year+"-"+v.month+"-"+v.day;
@@ -1059,6 +1060,14 @@ function sleepClockLabel(minutes){
  const value=((minutes%1440)+1440)%1440;
  return String(Math.floor(value/60)).padStart(2,"0")+":"+String(value%60).padStart(2,"0");
 }
+function sleepGoalComparison(sessions,days,targetMinutes){
+ if(!Number.isInteger(targetMinutes)||targetMinutes<180||targetMinutes>720)return {target:null,average:null,delta:null,count:0,below:0,atOrAbove:0};
+ const today=sleepLocalDate(),start=shiftDate(today,-(days-1));
+ const values=sessions.filter(s=>s.sleep_date>=start&&s.sleep_date<=today).map(s=>sleepDuration(s.fell_asleep_at,s.woke_at,s.asleep_timezone||s.timezone,s.wake_timezone||s.timezone)).filter(v=>v!==null);
+ if(!values.length)return {target:targetMinutes,average:null,delta:null,count:0,below:0,atOrAbove:0};
+ const average=Math.round(values.reduce((a,b)=>a+b,0)/values.length);
+ return {target:targetMinutes,average,delta:average-targetMinutes,count:values.length,below:values.filter(v=>v<targetMinutes).length,atOrAbove:values.filter(v=>v>=targetMinutes).length};
+}
 function sleepDurationLabel(minutes){
  if(minutes===null)return "Недостаточно данных";
  const h=Math.floor(minutes/60),m=minutes%60;return h+" ч"+(m?" "+m+" мин":"");
@@ -1086,8 +1095,12 @@ function renderSleep(){
   const asleep=averageSleepClock(sleepSessions,days,"fell_asleep_at");
   const wake=averageSleepClock(sleepSessions,days,"woke_at");
   const durationSpread=sleepDurationVariability(sleepSessions,days);
+  const goal=sleepGoalComparison(sleepSessions,days,sleepTargetMinutes);
   const metric=(name,value,detail)=>'<div class="sleep-stat"><span>'+name+'</span><strong>'+value+'</strong><small>'+detail+'</small></div>';
+  const goalValue=goal.target===null?"Цель не задана":goal.count?(goal.delta===0?"Среднее совпадает с целью":goal.delta>0?"На "+sleepDurationLabel(goal.delta)+" выше цели":"На "+sleepDurationLabel(Math.abs(goal.delta))+" ниже цели"):"Недостаточно данных";
+  const goalDetail=goal.target===null?"Задайте личную цель выше":goal.count?goal.count+" полных ночей · "+goal.below+" ниже · "+goal.atOrAbove+" на уровне или выше":"Пока нет полных ночей для сравнения";
   return metric("Средняя продолжительность · "+label,duration.count?sleepDurationLabel(duration.minutes):"Недостаточно данных",duration.count+" полных ночей"+(duration.incompleteCount?" · "+duration.incompleteCount+" неполных":""))
+   +metric("Сравнение с моей целью · "+label,goalValue,goalDetail)
    +metric("Среднее засыпание · "+label,sleepClockLabel(asleep.time),asleep.count+" отметок")
    +metric("Среднее пробуждение · "+label,sleepClockLabel(wake.time),wake.count+" отметок")
    +metric("Разброс времени засыпания · "+label,asleep.variation===null?"Недостаточно данных":sleepDurationLabel(asleep.variation),asleep.count+" отметок · среднее отклонение по кругу суток")
@@ -1106,8 +1119,30 @@ function renderSleep(){
  }).join(""):'<p class="muted">Здесь появится история сна.</p>';
 }
 async function loadSleep(){
- const data=await api("/api/sleep?limit=90");sleepSessions=data.sessions||[];renderSleep();
+ const data=await api("/api/sleep?limit=90");sleepSessions=data.sessions||[];sleepTargetMinutes=data.sleep_target_minutes==null?null:Number(data.sleep_target_minutes);
+ const field=$("sleep-goal-hours");if(field)field.value=sleepTargetMinutes===null?"":String(sleepTargetMinutes/60);
+ const goalStatus=$("sleep-goal-status");if(goalStatus)goalStatus.textContent=sleepTargetMinutes===null?"Личная цель не задана":"Цель: "+sleepDurationLabel(sleepTargetMinutes);
+ renderSleep();
 }
+async function saveSleepGoal(value){
+ const status=$("sleep-goal-status"),save=$("sleep-goal-form").querySelector('button[type="submit"]');
+ save.disabled=true;
+ try{
+  const minutes=value===""?null:Math.round(Number(value)*60);
+  const result=await api("/api/sleep",{method:"POST",body:JSON.stringify({action:"goal",sleep_target_minutes:minutes})});
+  sleepTargetMinutes=result.sleep_target_minutes==null?null:Number(result.sleep_target_minutes);
+  status.textContent=sleepTargetMinutes===null?"Личная цель не задана":"Сохранено: "+sleepDurationLabel(sleepTargetMinutes);
+  renderSleep();
+ }catch(error){status.textContent=error.message;}
+ finally{save.disabled=false;}
+}
+$("sleep-goal-form").addEventListener("submit",async event=>{
+ event.preventDefault();
+ const value=$("sleep-goal-hours").value;
+ if(value!==""&&(!Number.isFinite(Number(value))||Number(value)<3||Number(value)>12)){ $("sleep-goal-status").textContent="Укажите от 3 до 12 часов";return; }
+ await saveSleepGoal(value);
+});
+$("sleep-goal-clear").addEventListener("click",async()=>{ $("sleep-goal-hours").value="";await saveSleepGoal(""); });
 async function markSleep(action){
  const button=action==="bed"?$("sleep-bed"):action==="asleep"?$("sleep-asleep"):$("sleep-wake");
  button.disabled=true;
