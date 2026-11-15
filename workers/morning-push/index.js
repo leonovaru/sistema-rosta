@@ -85,7 +85,7 @@ export default {
       const id=crypto.randomUUID();
       await env.DB.prepare(`INSERT OR IGNORE INTO push_deliveries (id,user_id,subscription_id,local_date,timezone,scheduled_at,status)
         VALUES (?,?,?,?,?,?,'pending')`).bind(id,row.user_id,row.id,localDate,row.timezone,now.toISOString()).run();
-      const delivery=await env.DB.prepare("undefined").bind(row.id,localDate).first();
+      const delivery=await env.DB.prepare("SELECT id,status FROM push_deliveries WHERE subscription_id=? AND local_date=?").bind(row.id,localDate).first();
       if(!delivery||delivery.status==="sent")continue;
       const deliveryId=delivery.id;
       const claimed=await env.DB.prepare("UPDATE push_deliveries SET status='sending',error=NULL,updated_at=datetime('now') WHERE id=? AND (status IN ('pending','failed') OR (status='sending' AND updated_at<=datetime('now','-2 minutes')))").bind(deliveryId).run();
