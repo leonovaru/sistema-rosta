@@ -1,5 +1,6 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { isValidMeetingDate, cleanMeetingItems, normalizeMeetingAgreements, normalizeMeetingLinks } from "../_lib/meeting-notes.js";
+import { summarizeMeetingFollowup } from "../_lib/meeting-followup.js";
 
 function parseModelJson(value){
  if(typeof value!=="string")return value;
@@ -28,8 +29,7 @@ export async function onRequestGet({request,env}){
  const meetings=result.results.map(row=>({...row,decisions:parseModelJson(row.decisions_json)||[],agreements:(parseModelJson(row.agreements_json)||[]).map((agreement,index)=>{const link=(byMeeting.get(row.id)||[]).find(x=>x.agreement_index===index);return link?{...agreement,task_id:link.task_id,task_title:link.task_title,task_status:link.task_status,task_due_date:link.task_due_date}:agreement;}),open_questions:parseModelJson(row.open_questions_json)||[]}));
  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
  const today=new Intl.DateTimeFormat("en-CA",{timeZone:settings?.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
- const agreements=meetings.flatMap(meeting=>meeting.agreements.map(agreement=>({...agreement,meeting_title:meeting.title,meeting_date:meeting.meeting_date})));
- const followup_summary={agreements_total:agreements.length,linked_tasks:agreements.filter(x=>x.task_id).length,completed:agreements.filter(x=>x.task_status==="done").length,overdue:agreements.filter(x=>x.task_id&&x.task_status!=="done"&&(x.task_due_date||x.due_date)&&((x.task_due_date||x.due_date)<today)).length,pending:agreements.filter(x=>!x.task_id||x.task_status!=="done").length,open_questions:meetings.reduce((sum,x)=>sum+x.open_questions.length,0)};
+ const followup_summary=summarizeMeetingFollowup(meetings,today);
  return json({meetings,followup_summary,today});
 }
 
