@@ -56,7 +56,7 @@ test("reserve contributions stop when the target is fully funded",()=>{
 });
 
 test("yearly and quarterly irregular expenses appear on their actual recurrence dates",()=>{
- const x=buildCashflowForecast({today:"2026-11-15",horizonDays:100,reserves:[],irregularExpenses:[
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:110,reserves:[],irregularExpenses:[
   {id:"year",title:"Страховка",amount:12000,next_date:"2026-12-01",frequency:"yearly"},
   {id:"quarter",title:"Обслуживание",amount:3000,next_date:"2026-11-30",frequency:"quarterly"},
   {id:"once",title:"Покупка",amount:5000,next_date:"2026-12-15",frequency:"once"}
