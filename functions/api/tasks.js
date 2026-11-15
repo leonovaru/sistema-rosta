@@ -4,7 +4,13 @@ export async function onRequestGet({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error: "Необходим вход" }, 401);
   const { results } = await env.DB.prepare("SELECT t.*, d.title AS direction_title FROM tasks t LEFT JOIN directions d ON d.id=t.direction_id WHERE t.user_id=? ORDER BY CASE t.status WHEN 'doing' THEN 0 WHEN 'todo' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END, t.due_date IS NULL, t.due_date, t.created_at DESC").bind(user.id).all();
-  return json({ tasks: results });
+  const { results: steps } = await env.DB.prepare("SELECT id,task_id,title,estimated_minutes,status,sort_order FROM task_steps WHERE user_id=? ORDER BY task_id,sort_order").bind(user.id).all();
+  const byTask = new Map();
+  for (const step of steps) {
+    if (!byTask.has(step.task_id)) byTask.set(step.task_id, []);
+    byTask.get(step.task_id).push(step);
+  }
+  return json({ tasks: results.map(task => ({ ...task, steps: byTask.get(task.id) || [] })) });
 }
 
 export async function onRequestPost({ request, env }) {
