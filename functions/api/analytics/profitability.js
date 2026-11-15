@@ -8,10 +8,13 @@ export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first(),today=inZone(settings?.timezone||"Europe/Moscow"),url=new URL(request.url),to=String(url.searchParams.get("to")||today),from=String(url.searchParams.get("from")||shift(to,-89));
  if(!validDate(from)||!validDate(to)||from>to||Math.ceil((Date.parse(to+"T00:00:00Z")-Date.parse(from+"T00:00:00Z"))/86400000)>365)return json({error:"Укажи корректный период до 366 дней"},400);
- const [income,expenses,tasks]=await Promise.all([
+ const [income,expenses,tasks,openTaskTime]=await Promise.all([
  env.DB.prepare("SELECT i.direction_id,COALESCE(d.title,'Без направления') direction_title,SUM(i.amount) total FROM income_entries i LEFT JOIN directions d ON d.id=i.direction_id AND d.user_id=i.user_id WHERE i.user_id=? AND i.received_on>=? AND i.received_on<=? GROUP BY i.direction_id,d.title").bind(user.id,from,to).all(),
  env.DB.prepare("SELECT e.direction_id,COALESCE(d.title,'Без направления') direction_title,SUM(e.amount) total FROM expenses e LEFT JOIN directions d ON d.id=e.direction_id AND d.user_id=e.user_id WHERE e.user_id=? AND e.spent_on>=? AND e.spent_on<=? GROUP BY e.direction_id,d.title").bind(user.id,from,to).all(),
- env.DB.prepare("SELECT t.direction_id,COALESCE(d.title,'Без направления') direction_title,COUNT(*) completed_tasks,COALESCE(SUM(t.actual_minutes),0) actual_minutes FROM tasks t LEFT JOIN directions d ON d.id=t.direction_id AND d.user_id=t.user_id WHERE t.user_id=? AND t.status='done' AND t.completed_at IS NOT NULL AND substr(t.completed_at,1,10)>=? AND substr(t.completed_at,1,10)<=? GROUP BY t.direction_id,d.title").bind(user.id,from,to).all()
+ env.DB.prepare("SELECT t.direction_id,COALESCE(d.title,'Без направления') direction_title,COUNT(*) completed_tasks,COALESCE(SUM(t.actual_minutes),0) actual_minutes FROM tasks t LEFT JOIN directions d ON d.id=t.direction_id AND d.user_id=t.user_id WHERE t.user_id=? AND t.status='done' AND t.completed_at IS NOT NULL AND substr(t.completed_at,1,10)>=? AND substr(t.completed_at,1,10)<=? GROUP BY t.direction_id,d.title").bind(user.id,from,to).all(),
+ env.DB.prepare("SELECT t.direction_id,COALESCE(d.title,'Без направления') direction_title,COUNT(DISTINCT t.id) active_tasks,COALESCE(SUM(e.duration_minutes),0) tracked_minutes FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id LEFT JOIN directions d ON d.id=t.direction_id AND d.user_id=t.user_id WHERE e.user_id=? AND t.status!='done' AND e.ended_at IS NOT NULL AND e.started_at>=? AND e.started_at<? GROUP BY t.direction_id,d.title").bind(user.id,shift(from,-2)+"T00:00:00.000Z",shift(to,2)+"T00:00:00.000Z").all()
  ]);
- return json({period:{from,to,timezone:settings?.timezone||"Europe/Moscow"},...buildProfitability({incomeRows:income.results,expenseRows:expenses.results,taskRows:tasks.results})});
+ const timezone=settings?.timezone||"Europe/Moscow";
+ const trackedRows=openTaskTime.results.map(row=>({...row,tracked_minutes:row.tracked_minutes}));
+ return json({period:{from,to,timezone},...buildProfitability({incomeRows:income.results,expenseRows:expenses.results,taskRows:tasks.results,openTaskRows:trackedRows})});
 }
