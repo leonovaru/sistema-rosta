@@ -6,9 +6,9 @@ export function buildBudgetInsights(historyRows=[],budgetRows=[],{month,historyM
  for(const row of budgetRows){plans.set(String(row.category)+"|"+String(row.month),Number(row.planned_amount)||0);}
  const categories=new Set([...historyRows.map(x=>String(x.category)),...budgetRows.map(x=>String(x.category))]);
  return [...categories].sort((a,b)=>a.localeCompare(b,"ru")).map(category=>{
-  const history=months.map(m=>({month:m,actual:actual.get(category+"|"+m)||0,budget:plans.has(category+"|"+m)?plans.get(category+"|"+m):null}));
+  const history=months.map(m=>({month:m,actual:historyRows.filter(x=>String(x.category)===category&&String(x.month)===m).reduce((s,x)=>s+Number(x.actual??x.total||0),0),budget:plans.has(category+"|"+m)?plans.get(category+"|"+m):null}));
   const compared=history.filter(x=>x.budget!==null),overruns=compared.filter(x=>x.actual>x.budget);
-  const hasHistory=historyRows.length>0;
+  const hasHistory=historyRows.some(x=>String(x.category)===category);
   const observedMonths=hasHistory?historyMonths.length:0;
   const avg=observedMonths?history.reduce((s,x)=>s+x.actual,0)/observedMonths:0;
   const repeated=overruns.length>=2;
