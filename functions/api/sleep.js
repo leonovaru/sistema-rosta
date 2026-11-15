@@ -115,7 +115,7 @@ export async function onRequestPost({request,env}){
   if(action==="goal"){
     const raw=body?.sleep_target_minutes;
     const target=raw===null||raw===""?null:Number(raw);
-    if(target!==null&&(!Number.isInteger(target)||target<180||target>720))return json({error:"Цель сна должна быть от 180 до 720 минут или быть пустой"},400);
+    if(target!==null&&(!Number.isInteger(target)||target<180||target>720||target%15!==0))return json({error:"Цель сна должна быть от 180 до 720 минут с шагом 15 минут или быть пустой"},400);
     await env.DB.prepare("UPDATE settings SET sleep_target_minutes=?,updated_at=datetime('now') WHERE user_id=?").bind(target,user.id).run();
     return json({ok:true,sleep_target_minutes:target});
   }
