@@ -21,7 +21,9 @@
         <div class="main-grid">
           <section class="panel"><div class="section-head"><div><p class="eyebrow">ФОКУС</p><h2>Задачи</h2></div><span class="count" id="task-count">0</span></div><form id="task-form" class="task-create">
             <input id="task-title" placeholder="Следующий конкретный шаг…" required maxlength="240">
+            <textarea id="task-description" rows="2" placeholder="Контекст и ожидаемый результат (необязательно)"></textarea>
             <div class="task-create-options"><label>Срок<input id="task-date" type="date"></label><label>Направление<select id="task-direction"><option value="">Без привязки</option></select></label><label>Приоритет<select id="task-priority"><option value="high">Высокий</option><option value="medium" selected>Обычный</option><option value="low">Низкий</option></select></label></div>
+            <div class="estimate-actions"><button type="button" class="button ghost" id="estimate-task">Оценить время и делегирование с ИИ</button><span class="fine">ИИ предложит длительность и покажет, что сможет взять на себя.</span></div><div id="estimate-result" class="estimate-result hidden" aria-live="polite"></div>
             <button class="button primary">Добавить задачу</button>
           </form>
           <div class="task-filters"><button type="button" class="filter active" data-task-filter="today">Сегодня</button><button type="button" class="filter" data-task-filter="week">Неделя</button><button type="button" class="filter" data-task-filter="all">Все</button></div>
