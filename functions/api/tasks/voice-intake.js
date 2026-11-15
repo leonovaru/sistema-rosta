@@ -10,8 +10,8 @@ function localDate(timeZone){
  const v=Object.fromEntries(parts.map(x=>[x.type,x.value]));
  return v.year+"-"+v.month+"-"+v.day;
 }
-function normalizeTaskTitle(value){return String(value||"").toLocaleLowerCase("ru-RU").replace(/ё/g,"е").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");}
-function taskSimilarity(a,b){const x=new Set(normalizeTaskTitle(a).split(" ").filter(w=>w.length>2)),y=new Set(normalizeTaskTitle(b).split(" ").filter(w=>w.length>2));if(!x.size||!y.size)return 0;const intersection=[...x].filter(w=>y.has(w)).length;return intersection/Math.max(x.size,y.size);}
+export function normalizeTaskTitle(value){return String(value||"").toLocaleLowerCase("ru-RU").replace(/ё/g,"е").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");}
+export function taskSimilarity(a,b){const x=new Set(normalizeTaskTitle(a).split(" ").filter(w=>w.length>2)),y=new Set(normalizeTaskTitle(b).split(" ").filter(w=>w.length>2));if(!x.size||!y.size)return 0;const intersection=[...x].filter(w=>y.has(w)).length;return intersection/Math.max(x.size,y.size);}
 function safeDate(value){
  if(!value)return null;
  const s=String(value);
@@ -105,7 +105,9 @@ export async function onRequestPost({request,env}){
   if(!tasks.length||tasks.some(task=>!task.title))throw new Error("Some tasks have no title");
   for(const task of tasks){
    if(!task.possible_duplicate_task_id){
-    const candidate=existingTasks.results.map(existing=>({existing,score:taskSimilarity(task.title,existing.title)})).sort((a,b)=>b.score-a.score)[0];
+    const candidate=existingTasks.results
+     .filter(existing=>(task.project_id&&existing.project_id===task.project_id)||(task.client_id&&existing.client_id===task.client_id)||(task.life_area_id&&existing.life_area_id===task.life_area_id)||(task.direction_id&&existing.direction_id===task.direction_id))
+     .map(existing=>({existing,score:taskSimilarity(task.title,existing.title)})).sort((a,b)=>b.score-a.score)[0];
     if(candidate&&candidate.score>=0.85)task.possible_duplicate_task_id=candidate.existing.id;
    }
    if(task.project_id){
