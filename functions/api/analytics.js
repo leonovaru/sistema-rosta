@@ -1,6 +1,6 @@
 import { json, requireUser } from "../_lib/auth.js";
 import { buildTaskAnalytics, buildTimeAnalytics } from "../_lib/analytics.js";
-const DATE=/^\\d{4}-\\d{2}-\\d{2}$/;
+const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(value){if(!DATE.test(value))return false;const d=new Date(value+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}
 function dateInZone(zone){const p=new Intl.DateTimeFormat("en-CA",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const v=Object.fromEntries(p.map(x=>[x.type,x.value]));return v.year+"-"+v.month+"-"+v.day;}
 function shiftDate(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
