@@ -62,7 +62,13 @@ async function makeEnv(fetchImpl, subscriptionCount = 1, timezone = "Europe/Mosc
           }
           if (sql.includes("DELETE FROM push_subscriptions")) {
             const index = subscriptions.findIndex(item => item.id === values[0]);
-            if (index >= 0) subscriptions.splice(index, 1);
+            if (index >= 0) {
+              const [removed] = subscriptions.splice(index, 1);
+              // Mirror the migration's ON DELETE CASCADE for push_deliveries.
+              for (const [key, row] of deliveries) {
+                if (row.subscriptionId === removed.id) deliveries.delete(key);
+              }
+            }
             return { meta: { changes: index >= 0 ? 1 : 0 } };
           }
           return { meta: { changes: 0 } };
@@ -142,9 +148,10 @@ test("an expired device subscription is removed without blocking other devices",
     assert.equal(env._subscriptions.length, 1);
     assert.equal(env._subscriptions[0].id, "sub-2");
     const rows = [...env._deliveries.values()];
-    assert.equal(rows.length, 2);
-    assert.equal(rows.find(row => row.subscriptionId === "sub-1").status, "failed");
-    assert.equal(rows.find(row => row.subscriptionId === "sub-2").status, "sent");
+    // The expired subscription is deleted, so its delivery row cascades away.
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].subscriptionId, "sub-2");
+    assert.equal(rows[0].status, "sent");
   } finally { globalThis.fetch = nativeFetch; }
 });
 
