@@ -3,7 +3,7 @@ import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 function allowedEndpoint(value) {
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:") return false;
+    if (url.protocol !== "https:" || (url.port && url.port !== "443")) return false;
     const host = url.hostname.toLowerCase();
     return host === "fcm.googleapis.com" || host.endsWith(".push.services.mozilla.com") ||
       host === "push.services.mozilla.com" || host === "web.push.apple.com";
