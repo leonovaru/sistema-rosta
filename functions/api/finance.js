@@ -56,7 +56,7 @@ export async function onRequestPost({request,env}) {
   }
   if(action==="debt_payment"){
     const debtId=String(body.debt_id||""),amount=validAmount(body.amount),date=String(body.paid_on||"");
-    if(!debtId||!amount||!DATE.test(date))return json({error:"Проверь долг, сумму и дату платежа"},400);
+    if(!debtId||!amount||!validDate(date))return json({error:"Проверь долг, сумму и дату платежа"},400);
     const debt=await env.DB.prepare("SELECT id,balance FROM debts WHERE id=? AND user_id=? AND status='open'").bind(debtId,user.id).first();
     if(!debt)return json({error:"Открытый долг не найден"},404);
     if(amount>Number(debt.balance))return json({error:"Платёж не может превышать остаток долга"},400);
@@ -69,7 +69,7 @@ export async function onRequestPost({request,env}) {
   }
   if(action==="obligation_paid"){
     const obligationId=String(body.obligation_id||""),date=String(body.paid_on||"");
-    if(!obligationId||!DATE.test(date))return json({error:"Проверь обязательство и дату оплаты"},400);
+    if(!obligationId||!validDate(date))return json({error:"Проверь обязательство и дату оплаты"},400);
     const obligation=await env.DB.prepare("SELECT * FROM payment_obligations WHERE id=? AND user_id=? AND active=1").bind(obligationId,user.id).first();
     if(!obligation)return json({error:"Активный платёж не найден"},404);
     const nextDue=addPeriod(obligation.due_date,obligation.frequency,obligation.recurrence_day);
@@ -81,7 +81,7 @@ export async function onRequestPost({request,env}) {
   }
   if(action==="obligation"){
     const amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.due_date||""),frequency=String(body.frequency||"once");
-    if(!amount||!title||title.length>180||!DATE.test(date)||!["once","monthly","weekly"].includes(frequency))return json({error:"Проверь название, сумму, дату и периодичность платежа"},400);
+    if(!amount||!title||title.length>180||!validDate(date)||!["once","monthly","weekly"].includes(frequency))return json({error:"Проверь название, сумму, дату и периодичность платежа"},400);
     await env.DB.prepare("INSERT INTO payment_obligations (id,user_id,title,amount,due_date,frequency,recurrence_day,category,notes) VALUES (?,?,?,?,?,?,?,?,?)").bind(id,user.id,title,amount,date,frequency,frequency==="monthly"?Number(date.slice(8,10)):null,String(body.category||"Обязательный платёж").slice(0,80),String(body.notes||"").slice(0,500)).run();
     return json({ok:true,id},201);
   }
