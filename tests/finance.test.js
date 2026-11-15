@@ -23,8 +23,8 @@ test("date arithmetic handles leap day",()=>{
 
 test("quarterly and yearly irregular expenses keep their original calendar day",()=>{
   assert.equal(nextIrregularDate("2027-01-31","quarterly"),"2027-04-30");
-  assert.equal(nextIrregularDate("2027-04-30","quarterly"),"2027-07-30");
-  assert.equal(nextIrregularDate("2028-02-29","yearly"),"2029-02-28");
+  assert.equal(nextIrregularDate("2027-04-30","quarterly",31),"2027-07-31");
+  assert.equal(nextIrregularDate("2028-02-29","yearly",29),"2029-02-28");
 });
 test("one-time irregular expenses have no next date",()=>{
   assert.equal(nextIrregularDate("2026-11-15","once"),null);
