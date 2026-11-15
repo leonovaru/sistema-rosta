@@ -112,6 +112,28 @@ async function loadProfitability(){
 $("refresh-profitability").addEventListener("click",async()=>{const b=$("refresh-profitability");b.disabled=true;try{await loadProfitability();}catch(err){alert(err.message);}finally{b.disabled=false;}});
 
 let financeData = null;
+let incomeBucketsData = null;
+async function loadIncomeBuckets(){
+ incomeBucketsData=await api("/api/finance/buckets");
+ const rows=incomeBucketsData.buckets||[];
+ const totalAllocated=rows.reduce((s,x)=>s+Number(x.allocated||0),0);
+ const totalSpent=rows.reduce((s,x)=>s+Number(x.spent||0),0);
+ const totalBalance=rows.reduce((s,x)=>s+Number(x.balance||0),0);
+ $("income-bucket-summary").innerHTML=[["Распределено",money(totalAllocated)],["Потрачено из корзин",money(totalSpent)],["Остаток корзин",money(totalBalance)],["Сумма процентов",incomeBucketsData.percentage_total+"%"]].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
+ $("income-bucket-list").innerHTML=rows.map(b=>{const pct=b.allocated>0?Math.max(0,Math.min(100,b.spent/b.allocated*100)):0;return '<article class="finance-row"><div class="bucket-main"><b>'+escapeHtml(b.title)+(b.bucket_type==="capital"?' · капитал':'')+'</b><small>Распределено '+money(b.allocated)+' · потрачено '+money(b.spent)+' · доступно '+money(b.balance)+'</small><div class="progress"><span style="width:'+pct+'%"></span></div></div><label class="bucket-percent">Доля, %<input type="number" min="0" max="100" step="0.5" data-bucket-percent="'+escapeHtml(b.id)+'" value="'+Number(b.percentage)+'"></label></article>';}).join("");
+ $("income-bucket-note").textContent=incomeBucketsData.allocation_ready?"Проценты составляют 100%. Новые поступления будут распределяться автоматически.":"Сейчас доли составляют "+incomeBucketsData.percentage_total+"%. Измени значения до 100%, чтобы включить распределение.";
+ $("save-income-buckets").disabled=!rows.length;
+ $("expense-bucket").innerHTML='<option value="">Выбери корзину или вне корзин</option><option value="none">Вне корзин</option>'+rows.map(b=>'<option value="'+escapeHtml(b.id)+'">'+escapeHtml(b.title)+' · доступно '+money(b.balance)+'</option>').join("");
+}
+$("refresh-income-buckets").addEventListener("click",async()=>{try{await loadIncomeBuckets();}catch(err){alert(err.message);}});
+$("save-income-buckets").addEventListener("click",async()=>{
+ const inputs=[...document.querySelectorAll("[data-bucket-percent]")];
+ const buckets=inputs.map(input=>({id:input.dataset.bucketPercent,percentage:Number(input.value)}));
+ const total=buckets.reduce((s,x)=>s+x.percentage,0);
+ if(buckets.some(x=>!Number.isFinite(x.percentage)||x.percentage<0||x.percentage>100)||Math.abs(total-100)>0.0001){alert("Распредели ровно 100% между корзинами. Сейчас: "+total+"%.");return;}
+ try{await api("/api/finance/buckets",{method:"POST",body:JSON.stringify({action:"update_percentages",buckets})});await loadIncomeBuckets();alert("Распределение сохранено. Оно будет применяться к новым поступлениям.");}
+ catch(err){alert(err.message);}
+});
 
 let cashflowData=null;
 let cashReservesData=null;
@@ -284,6 +306,7 @@ $("budget-insights").addEventListener("click",async e=>{
 });
 async function loadFinance() {
   financeData = await api("/api/finance");
+  await loadIncomeBuckets();
   const s=financeData.summary;
   $("finance-period").textContent="С начала месяца по "+financeData.today;
   $("finance-income").textContent=money(s.income);
@@ -307,7 +330,7 @@ async function loadFinance() {
   $("finance-obligations").innerHTML=financeData.obligations.length?financeData.obligations.map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.due_date+' · '+(item.frequency==="monthly"?"ежемесячно":item.frequency==="weekly"?"еженедельно":"один раз")+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-obligation-paid="'+escapeHtml(item.id)+'">Оплачено</button></article>').join(""):'<p class="muted">Предстоящих платежей пока нет.</p>';
   const suggestions=financeData.recurring_expense_suggestions||[];
   $("recurring-expense-suggestions").innerHTML=suggestions.length?'<h4>Возможные регулярные платежи</h4><p class="fine">Нашла похожие расходы в истории. Ничего не добавляется автоматически — проверь суммы и даты, затем подтверди создание обязательства.</p>'+suggestions.map((x,i)=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+escapeHtml(x.category)+' · '+x.occurrences+' раза · '+(x.frequency==="monthly"?"ежемесячно":"еженедельно")+' · средняя сумма '+money(x.amount)+'</small><small>Последняя оплата: '+x.last_paid_on+' · следующая дата: '+x.next_date+'</small></div><button class="button ghost" data-recurring-add="'+i+'">Добавить в обязательства</button></article>').join(""):'<p class="muted">Пока не обнаружено достаточно устойчивых повторяющихся расходов. Для предложения нужны минимум три похожие оплаты с близкими суммами и интервалами.</p>';
-  $("finance-expense-list").innerHTML=financeData.expenses.length?financeData.expenses.slice(0,12).map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.spent_on+' · '+escapeHtml(item.category)+(item.direction_title?' · '+escapeHtml(item.direction_title):' · не распределён')+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-expense-delete="'+escapeHtml(item.id)+'">×</button></article>').join(""):'<p class="muted">Расходов пока нет.</p>';
+  $("finance-expense-list").innerHTML=financeData.expenses.length?financeData.expenses.slice(0,12).map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.spent_on+' · '+escapeHtml(item.category)+(item.direction_title?' · '+escapeHtml(item.direction_title):' · не распределён')+(item.bucket_title?' · корзина: '+escapeHtml(item.bucket_title):'')+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-expense-delete="'+escapeHtml(item.id)+'">×</button></article>').join(""):'<p class="muted">Расходов пока нет.</p>';
   await loadCashflowForecast();
   await loadDebtForecast();
   await loadRevenuePlan();
@@ -315,7 +338,7 @@ async function loadFinance() {
 }
 $("expense-form").addEventListener("submit",async e=>{
   e.preventDefault();
-  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"expense",title:$("expense-title").value,amount:$("expense-amount").value,category:$("expense-category").value,direction_id:$("expense-direction").value||null,spent_on:$("expense-date").value})});$("expense-form").reset();await loadFinance();await loadCashflowForecast();}
+  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"expense",title:$("expense-title").value,amount:$("expense-amount").value,category:$("expense-category").value,direction_id:$("expense-direction").value||null,bucket_id:$("expense-bucket").value==="none"?null:$("expense-bucket").value,spent_on:$("expense-date").value})});$("expense-form").reset();await loadFinance();await loadCashflowForecast();}
   catch(err){alert(err.message);}
 });
 $("debt-form").addEventListener("submit",async e=>{
