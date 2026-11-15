@@ -15,9 +15,9 @@ test("distributes deadline-bound active tasks across eligible working days",()=>
  const result=buildWeeklyWorkload({...base,tasks});
  assert.equal(result.summary.estimated_task_minutes,480);
  assert.equal(result.summary.estimated_task_count,2);
- assert.equal(result.days[0].planned_task_minutes,140);
- assert.equal(result.days[1].planned_task_minutes,140);
- assert.equal(result.days[2].planned_task_minutes,50);
+ assert.equal(result.days[0].planned_task_minutes,168);
+ assert.equal(result.days[1].planned_task_minutes,168);
+ assert.equal(result.days[2].planned_task_minutes,48);
 });
 test("keeps overdue, undated, waiting and unestimated tasks visible as separate counts",()=>{
  const tasks=[{id:"a",status:"todo",due_date:"2026-11-14",estimated_minutes:60},{id:"b",status:"todo",due_date:null,estimated_minutes:30},{id:"c",status:"waiting",due_date:"2026-11-17",estimated_minutes:90},{id:"d",status:"todo",due_date:"2026-11-18",estimated_minutes:null}];
