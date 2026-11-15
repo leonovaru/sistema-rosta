@@ -1013,27 +1013,27 @@ function sleepLocalDate(){
  const v=Object.fromEntries(parts.map(p=>[p.type,p.value]));return v.year+"-"+v.month+"-"+v.day;
 }
 function sleepWallTimeEpoch(value,timezone){
- if(!value)return null;
+ if(!value||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$/.test(value))return null;
  const [date,time]=value.split("T"),[year,month,day]=date.split("-").map(Number),[hour,minute]=time.split(":").map(Number);
- const target=Date.UTC(year,month-1,day,hour,minute);let guess=target;
- for(let i=0;i<4;i++){
-  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(guess));
-  const v=Object.fromEntries(parts.map(p=>[p.type,p.value]));
-  const represented=Date.UTC(Number(v.year),Number(v.month)-1,Number(v.day),Number(v.hour),Number(v.minute));
-  guess+=target-represented;
- }
- return guess;
+ const target=Date.UTC(year,month-1,day,hour,minute),normalized=new Date(target);
+ if(normalized.getUTCFullYear()!==year||normalized.getUTCMonth()!==month-1||normalized.getUTCDate()!==day||hour>23||minute>59)return null;
+ const partsAt=epoch=>Object.fromEntries(new Intl.DateTimeFormat("en-CA",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(epoch)).map(p=>[p.type,p.value]));
+ const offsets=new Set();
+ for(let delta=-2160;delta<=2160;delta+=180){const sample=target+delta*60000,p=partsAt(sample);offsets.add(Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute)-Math.floor(sample/60000)*60000);}
+ const matches=new Set();
+ for(const offset of offsets){const candidate=target-offset,p=partsAt(candidate);if(+p.year===year&&+p.month===month&&+p.day===day&&+p.hour===hour&&+p.minute===minute)matches.add(candidate);}
+ return matches.size===1?[...matches][0]:null;
 }
-function sleepDuration(start,end,timezone="Europe/Moscow"){
+function sleepDuration(start,end,startTimezone="Europe/Moscow",endTimezone=startTimezone){
  if(!start||!end)return null;
- try{const a=sleepWallTimeEpoch(start,timezone),b=sleepWallTimeEpoch(end,timezone);return b>a?Math.round((b-a)/60000):null;}catch{return null;}
+ try{const a=sleepWallTimeEpoch(start,startTimezone),b=sleepWallTimeEpoch(end,endTimezone);return a!==null&&b!==null&&b>a?Math.round((b-a)/60000):null;}catch{return null;}
 }
 function averageSleepMinutes(sessions,days){
  const today=sleepLocalDate(),start=shiftDate(today,-(days-1));
  // sleep_date is a local calendar date in the session's stored timezone.
  // Compare date-only ISO strings; do not reinterpret them as UTC instants.
  const period=sessions.filter(s=>s.sleep_date>=start&&s.sleep_date<=today);
- const values=period.map(s=>sleepDuration(s.fell_asleep_at,s.woke_at,s.timezone)).filter(v=>v!==null);
+ const values=period.map(s=>sleepDuration(s.fell_asleep_at,s.woke_at,s.asleep_timezone||s.timezone,s.wake_timezone||s.timezone)).filter(v=>v!==null);
  return {minutes:values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length):null,count:values.length,incompleteCount:period.length-values.length};
 }
 function sleepDurationLabel(minutes){
@@ -1048,8 +1048,9 @@ function renderSleep(){
  const status=$("sleep-status");
  status.textContent=current?(current.woke_at?"Пробуждение зафиксировано: "+current.woke_at.slice(11,16):"Ночь начата "+(current.went_to_bed_at?current.went_to_bed_at.slice(11,16):"без отметки времени")+" · пробуждение ещё не подтверждено"):"Пробуждение за сегодня ещё не подтверждено. Отметь его здесь, когда проснёшься.";
  $("sleep-history").innerHTML=sleepSessions.length?sleepSessions.map(s=>{
-  const durationMinutes=sleepDuration(s.fell_asleep_at,s.woke_at,s.timezone);
-  return '<article class="sleep-entry"><div class="sleep-entry-head"><strong>Ночь '+escapeHtml(s.sleep_date)+'</strong><b>'+sleepDurationLabel(durationMinutes)+'</b></div><form class="sleep-edit-form" data-sleep-edit="'+escapeHtml(s.id)+'"><label>Легла<input type="datetime-local" name="went_to_bed_at" value="'+escapeHtml(s.went_to_bed_at||"")+'"></label><label>Уснула примерно<input type="datetime-local" name="fell_asleep_at" value="'+escapeHtml(s.fell_asleep_at||"")+'"></label><label>Проснулась<input type="datetime-local" name="woke_at" value="'+escapeHtml(s.woke_at||"")+'"></label><label class="sleep-note">Заметка<input name="note" maxlength="1000" value="'+escapeHtml(s.note||"")+'"></label><button class="button ghost" type="submit">Сохранить исправления</button></form><button type="button" class="button ghost" data-sleep-delete="'+escapeHtml(s.id)+'">Удалить запись</button><small class="fine">Пробуждение: '+(s.woke_at?escapeHtml(s.woke_at.slice(11,16)):"не отмечено")+' · засыпание: '+(s.fell_asleep_at?escapeHtml(s.fell_asleep_at.slice(11,16)):"не указано")+'</small></article>';
+  const durationMinutes=sleepDuration(s.fell_asleep_at,s.woke_at,s.asleep_timezone||s.timezone,s.wake_timezone||s.timezone);
+  const bedTimezone=s.bed_timezone||s.timezone||"Europe/Moscow",asleepTimezone=s.asleep_timezone||s.timezone||"Europe/Moscow",wakeTimezone=s.wake_timezone||s.timezone||"Europe/Moscow";
+  return '<article class="sleep-entry"><div class="sleep-entry-head"><strong>Ночь '+escapeHtml(s.sleep_date)+'</strong><b>'+sleepDurationLabel(durationMinutes)+'</b></div><form class="sleep-edit-form" data-sleep-edit="'+escapeHtml(s.id)+'"><label>Легла<input type="datetime-local" name="went_to_bed_at" value="'+escapeHtml(s.went_to_bed_at||"")+'"></label><label>Часовой пояс отметки «Легла»<input name="bed_timezone" value="'+escapeHtml(bedTimezone)+'" placeholder="Europe/Amsterdam"></label><label>Уснула примерно<input type="datetime-local" name="fell_asleep_at" value="'+escapeHtml(s.fell_asleep_at||"")+'"></label><label>Часовой пояс засыпания<input name="asleep_timezone" value="'+escapeHtml(asleepTimezone)+'" placeholder="Europe/Amsterdam"></label><label>Проснулась<input type="datetime-local" name="woke_at" value="'+escapeHtml(s.woke_at||"")+'"></label><label>Часовой пояс пробуждения<input name="wake_timezone" value="'+escapeHtml(wakeTimezone)+'" placeholder="Europe/Amsterdam"></label><label class="sleep-note">Заметка<input name="note" maxlength="1000" value="'+escapeHtml(s.note||"")+'"></label><button class="button ghost" type="submit">Сохранить исправления</button></form><button type="button" class="button ghost" data-sleep-delete="'+escapeHtml(s.id)+'">Удалить запись</button><small class="fine">Часовые пояса задаются отдельно для каждого времени. Например, если поездка пересекла границу часового пояса, укажите его в соответствующем поле.</small></article>';
  }).join(""):'<p class="muted">Здесь появится история сна.</p>';
 }
 async function loadSleep(){
@@ -1146,7 +1147,7 @@ $("sleep-history").addEventListener("click",async event=>{
 $("sleep-history").addEventListener("submit",async event=>{
  const form=event.target.closest("[data-sleep-edit]");if(!form)return;event.preventDefault();
  const data=new FormData(form),payload={action:"edit",id:form.dataset.sleepEdit};
- for(const key of ["went_to_bed_at","fell_asleep_at","woke_at","note"])payload[key]=data.get(key)||null;
+ for(const key of ["went_to_bed_at","fell_asleep_at","woke_at","bed_timezone","asleep_timezone","wake_timezone","note"])payload[key]=data.get(key)||null;
  const button=form.querySelector("button");button.disabled=true;
  try{await api("/api/sleep",{method:"POST",body:JSON.stringify(payload)});await loadSleep();}
  catch(err){alert(err.message);button.disabled=false;}
