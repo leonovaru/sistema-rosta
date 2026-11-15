@@ -46,12 +46,13 @@ export function buildDebtForecast(debts, extraMonthlyPayment=0, maxMonths=60) {
   });
   return {extra_monthly_payment:extraMonthlyPayment,max_months:maxMonths,debts:items,summary:{current_balance:Math.round(items.reduce((s,x)=>s+x.current_balance,0)*100)/100,projected_interest:Math.round(items.reduce((s,x)=>s+x.total_interest,0)*100)/100,monthly_minimum:Math.round(items.reduce((s,x)=>s+x.minimum_payment,0)*100)/100,months_to_payoff:items.length&&items.every(x=>x.months_to_payoff!==null)?Math.max(...items.map(x=>x.months_to_payoff)):null,unresolved:items.some(x=>x.months_to_payoff===null)},months};
 }
-export function nextIrregularDate(date,frequency) {
+export function nextIrregularDate(date,frequency,recurrenceDay=null) {
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date)))return null;
   const [year,month,day]=date.split("-").map(Number);
+  const anchor=Number(recurrenceDay)||day;
   const step=frequency==="yearly"?12:frequency==="quarterly"?3:0;
   if(!step)return null;
   const next=new Date(Date.UTC(year,month-1+step,1,12));
   const last=new Date(Date.UTC(next.getUTCFullYear(),next.getUTCMonth()+1,0,12)).getUTCDate();
-  return next.getUTCFullYear()+"-"+String(next.getUTCMonth()+1).padStart(2,"0")+"-"+String(Math.min(day,last)).padStart(2,"0");
+  return next.getUTCFullYear()+"-"+String(next.getUTCMonth()+1).padStart(2,"0")+"-"+String(Math.min(anchor,last)).padStart(2,"0");
 }
