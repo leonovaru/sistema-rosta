@@ -19,7 +19,7 @@ async function owned(env, table, id, userId) {
 export async function onRequestGet({request,env}) {
   const user=await requireUser(request,env);
   if(!user)return json({error:"Необходим вход"},401);
-  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+  const settings=await env.DB.prepare("SELECT timezone,daily_capacity_minutes,work_capacity_configured,working_days_json FROM settings WHERE user_id=?").bind(user.id).first();
   const today=new Intl.DateTimeFormat("en-CA",{timeZone:settings?.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
   const count=await env.DB.prepare("SELECT COUNT(*) AS n FROM life_areas WHERE user_id=?").bind(user.id).first();
   if(!Number(count?.n||0)) {
@@ -76,8 +76,9 @@ export async function onRequestGet({request,env}) {
   }
   activitySummary.week.total=activitySummary.week.interactions+activitySummary.week.meetings+activitySummary.week.tasks_completed;
   activitySummary.month.total=activitySummary.month.interactions+activitySummary.month.meetings+activitySummary.month.tasks_completed;
-  const workload=calculateProjectWorkload(projects.results,today);
-  return json({today,client_activity_summary:activitySummary,clients:clients.results,project_workload_summary:workload.horizons,projects:workload.projects.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
+  let workingDays=[]; try { workingDays=JSON.parse(settings?.working_days_json||'[]'); } catch {}
+  const workload=calculateProjectWorkload(projects.results,today,{configured:Number(settings?.work_capacity_configured)===1,working_days:workingDays,daily_capacity_minutes:settings?.daily_capacity_minutes});
+  return json({today,client_activity_summary:activitySummary,clients:clients.results,project_workload_summary:workload.horizons,work_capacity:{configured:workload.capacity_configured,working_days:workload.working_days,daily_capacity_minutes:workload.daily_capacity_minutes},projects:workload.projects.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
 }
 
 export async function onRequestPost({request,env}) {
