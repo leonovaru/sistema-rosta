@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildDailyBlockPlans } from "../functions/_lib/daily-block-plans.js";
+import { buildDailyBlockPlans, buildDailyBlockScenarios } from "../functions/_lib/daily-block-plans.js";
 
 test("places work blocks only in free calendar windows",()=>{
  const [day]=buildDailyBlockPlans([{date:"2026-11-16",gross_capacity_minutes:480,available_minutes:420,planned_task_minutes:120,tasks:[{id:"a",title:"Анализ",minutes:120}]}],{startTime:"09:00",focusMinutes:50,breakMinutes:10,calendarEvents:[{event_type:"meeting",status:"planned",start_at:"2026-11-16T10:00",end_at:"2026-11-16T11:00"}]});
@@ -39,4 +39,21 @@ test("does not apply meeting buffers to sleep or work events",()=>{
  });
  assert.equal(day.blocks[0].start_time,"09:00");
  assert.equal(day.calendar_conflicts,0);
+});
+
+test("builds priority, focus and flexible daily plan variants without mutating source tasks",()=>{
+ const tasks=[
+  {id:"routine-long",title:"Разобрать почту",minutes:40,cognitive_load:"low",score:20},
+  {id:"deep",title:"Подготовить стратегию",minutes:60,cognitive_load:"high",score:50},
+  {id:"urgent",title:"Срочный звонок",minutes:20,cognitive_load:"low",score:90},
+  {id:"medium",title:"Сверить данные",minutes:30,cognitive_load:"medium",score:40}
+ ];
+ const original=tasks.map(task=>task.id);
+ const scenarios=buildDailyBlockScenarios([{date:"2026-11-16",gross_capacity_minutes:300,available_minutes:300,tasks}],{startTime:"09:00",focusMinutes:120,breakMinutes:10});
+ assert.deepEqual(scenarios.map(item=>item.key),["priority","focus","flexible"]);
+ const titles=key=>scenarios.find(item=>item.key===key).plans[0].blocks.filter(block=>block.type==="focus").map(block=>block.task_id);
+ assert.deepEqual(titles("priority"),["urgent","deep","medium","routine-long"]);
+ assert.deepEqual(titles("focus"),["deep","medium","urgent","routine-long"]);
+ assert.deepEqual(titles("flexible"),["urgent","routine-long","medium","deep"]);
+ assert.deepEqual(tasks.map(task=>task.id),original);
 });
