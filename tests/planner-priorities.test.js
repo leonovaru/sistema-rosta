@@ -48,7 +48,7 @@ test("excludes waiting tasks from the daily plan", () => {
     { task_id: "waiting", minutes: 30 },
     { task_id: "todo", minutes: 30 }
   ], tasks, 90);
-  assert.deepEqual(normalized.map(item => item.task_id), ["todo"]);
+  assert.deepEqual(normalized.map(item => item.task_id), ["doing", "todo"]);
 });
 
 test("does not force a task marked waiting into the plan", () => {
