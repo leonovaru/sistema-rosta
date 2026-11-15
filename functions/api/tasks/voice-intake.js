@@ -12,7 +12,7 @@ function localDate(timeZone){
 }
 export function normalizeTaskTitle(value){return String(value||"").toLocaleLowerCase("ru-RU").replace(/ё/g,"е").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");}
 export function taskSimilarity(a,b){const x=new Set(normalizeTaskTitle(a).split(" ").filter(w=>w.length>2)),y=new Set(normalizeTaskTitle(b).split(" ").filter(w=>w.length>2));if(!x.size||!y.size)return 0;const intersection=[...x].filter(w=>y.has(w)).length;return intersection/Math.max(x.size,y.size);}
-export function appendTaskDescription(existing,addition){return [String(existing||"").trim(),String(addition||"").trim()].filter(Boolean).filter((value,index,all)=>all.findIndex(x=>x.toLocaleLowerCase("ru-RU")===value.toLocaleLowerCase("ru-RU"))===index).join("\\n\\n").slice(0,2000);}
+export function appendTaskDescription(existing,addition){return [String(existing||"").trim(),String(addition||"").trim()].filter(Boolean).filter((value,index,all)=>all.findIndex(x=>x.toLocaleLowerCase("ru-RU")===value.toLocaleLowerCase("ru-RU"))===index).join("\n\n").slice(0,2000);}
 function safeDate(value){
  if(!value)return null;
  const s=String(value);
