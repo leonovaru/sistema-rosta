@@ -1,6 +1,6 @@
 import { json, requireUser } from "../../_lib/auth.js";
 import { buildProfitability } from "../../_lib/profitability.js";
-const DATE=/^\\d{4}-\\d{2}-\\d{2}$/;
+const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(v){if(!DATE.test(v))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
 function inZone(zone){const p=new Intl.DateTimeFormat("en-CA",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date()),o=Object.fromEntries(p.map(x=>[x.type,x.value]));return o.year+"-"+o.month+"-"+o.day;}
 function shift(v,n){const d=new Date(v+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
