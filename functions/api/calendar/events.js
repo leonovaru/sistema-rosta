@@ -32,6 +32,7 @@ function cleanEvent(body) {
   if ((actual_start_at && !DATE_TIME.test(actual_start_at)) || (actual_end_at && !DATE_TIME.test(actual_end_at)) || (actual_start_at && actual_end_at && actual_end_at <= actual_start_at)) return { error:"Проверь фактическое время" };
   if (repeat_rule !== "none" && (!repeat_until || !DATE.test(repeat_until) || repeat_until < start_at.slice(0,10))) return { error:"Для повторяющегося события укажи дату окончания повторения не раньше первого события" };
   if (repeat_rule !== "none" && status !== "planned") return { error:"Серию событий можно оставить запланированной. Фактическое время фиксируй отдельным событием на конкретную дату." };
+  if (repeat_rule !== "none" && (actual_start_at || actual_end_at)) return { error:"Фактическое время фиксируй отдельным событием на конкретную дату, не в шаблоне серии." };
   return { value:{
     title,event_type,mode,start_at,end_at,actual_start_at,actual_end_at,status,repeat_rule,repeat_until,
     location:String(body?.location || "").trim().slice(0,240),
