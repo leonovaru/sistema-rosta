@@ -41,6 +41,7 @@ export async function onRequestPost({request,env}){
    parent_index:Number.isInteger(t.parent_index)&&t.parent_index>=0&&t.parent_index<i?t.parent_index:null
   })).filter(t=>t.title);
   if(!prepared.length)return json({error:"Не найдено задач для сохранения"},400);
+  const statements=[];
   for(let i=0;i<prepared.length;i++){
    const t=prepared[i],parent=t.parent_index===null?null:prepared[t.parent_index];
    if(parent){t.direction_id=t.direction_id||parent.direction_id;t.client_id=t.client_id||parent.client_id;t.project_id=t.project_id||parent.project_id;t.life_area_id=t.life_area_id||parent.life_area_id;}
@@ -50,9 +51,10 @@ export async function onRequestPost({request,env}){
     t.client_id=p.client_id;t.direction_id=p.direction_id;
    }
    if(parent&&(t.project_id!==parent.project_id||t.life_area_id!==parent.life_area_id||t.client_id!==parent.client_id||t.direction_id!==parent.direction_id))return json({error:"Подзадача должна относиться к той же области, что и родительская задача"},400);
-   await env.DB.prepare("INSERT INTO tasks (id,user_id,direction_id,client_id,project_id,life_area_id,parent_task_id,title,description,due_date,priority,estimated_minutes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-    .bind(t.id,user.id,t.direction_id,t.client_id,t.project_id,t.life_area_id,parent?.id||null,t.title,t.description,t.due_date,t.priority,t.estimated_minutes).run();
+   statements.push(env.DB.prepare("INSERT INTO tasks (id,user_id,direction_id,client_id,project_id,life_area_id,parent_task_id,title,description,due_date,priority,estimated_minutes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+    .bind(t.id,user.id,t.direction_id,t.client_id,t.project_id,t.life_area_id,parent?.id||null,t.title,t.description,t.due_date,t.priority,t.estimated_minutes));
   }
+  await env.DB.batch(statements);
   const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
   const today=localDate(settings?.timezone||"Europe/Moscow");
   await env.DB.prepare("DELETE FROM daily_plans WHERE user_id=? AND plan_date=?").bind(user.id,today).run();
