@@ -90,6 +90,7 @@ async function loadAnalytics(){
  ['Время по таймерам',duration(data.time.tracked_minutes)]
  ].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join('');
  $('analytics-directions').innerHTML=analyticsRows(data.by_direction,'Нет задач по направлениям за выбранный период.');
+ $('analytics-clients').innerHTML=analyticsRows(data.by_client,'Нет задач по клиентам за выбранный период.');
  $('analytics-projects').innerHTML=analyticsRows(data.by_project,'Нет задач по проектам за выбранный период.');
  $('analytics-life-areas').innerHTML=analyticsRows(data.by_life_area,'Нет личных задач за выбранный период.');
  $('analytics-months').innerHTML=analyticsRows(data.by_month,'Пока недостаточно данных для динамики.');
