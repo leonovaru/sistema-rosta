@@ -68,3 +68,25 @@ test("summarizes calendar commitments by event type and duration",()=>{
  assert.equal(events.hobby.minutes,120);
  assert.equal(events.sleep.minutes,480);
 });
+
+test("compares weekly planned task time with explicitly configured personal and income targets",()=>{
+ const result=buildWeeklyWorkload({...base,targets:[
+  {life_area_id:"home",title:"Дом",target_minutes:180},
+  {direction_id:"d1",title:"Автоматизация",target_minutes:120},
+  {life_area_id:"cats",title:"Коты",target_minutes:0}
+ ],tasks:[
+  {id:"a",status:"todo",due_date:"2026-11-16",life_area_id:"home",life_area_title:"Дом",estimated_minutes:240},
+  {id:"b",status:"todo",due_date:"2026-11-17",direction_id:"d1",direction_title:"Автоматизация",estimated_minutes:60}
+ ]});
+ const rows=Object.fromEntries(result.area_balance.map(x=>[x.title,x]));
+ assert.equal(rows.Дом.weekly_estimated_minutes,240);
+ assert.equal(rows.Дом.target_gap_minutes,-60);
+ assert.equal(rows.Дом.target_status,"above");
+ assert.equal(rows.Автоматизация.target_status,"below");
+ assert.equal(rows.Коты.target_status,"on_target");
+});
+test("does not invent targets for areas without a saved target",()=>{
+ const result=buildWeeklyWorkload({...base,tasks:[{id:"a",status:"todo",due_date:"2026-11-16",life_area_id:"home",life_area_title:"Дом",estimated_minutes:30}]});
+ assert.equal(result.area_balance[0].target_minutes,null);
+ assert.equal(result.area_balance[0].target_status,"not_set");
+});
