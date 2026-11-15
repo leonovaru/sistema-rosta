@@ -1,0 +1,83 @@
+import { json, requireUser, readJson, newId } from "../_lib/auth.js";
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+function dateInZone(timeZone) {
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));
+  return values.year+"-"+values.month+"-"+values.day;
+}
+function validAmount(value) {
+  const amount=Number(value);
+  return Number.isFinite(amount)&&amount>0&&amount<=100000000?amount:null;
+}
+function addDays(date,days) {
+  const value=new Date(date+"T12:00:00Z");value.setUTCDate(value.getUTCDate()+days);
+  return value.toISOString().slice(0,10);
+}
+export async function onRequestGet({request,env}) {
+  const user=await requireUser(request,env);
+  if(!user)return json({error:"Необходим вход"},401);
+  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+  const today=dateInZone(settings?.timezone||"Europe/Moscow"),monthStart=today.slice(0,7)+"-01",next30=addDays(today,30);
+  const [income,expenses,debtPayments,debtRows,expenseRows,obligations,paymentRows]=await Promise.all([
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=?").bind(user.id,monthStart,today).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<=?").bind(user.id,monthStart,today).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM debt_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?").bind(user.id,monthStart,today).first(),
+    env.DB.prepare("SELECT * FROM debts WHERE user_id=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, balance DESC").bind(user.id).all(),
+    env.DB.prepare("SELECT * FROM expenses WHERE user_id=? ORDER BY spent_on DESC,created_at DESC LIMIT 100").bind(user.id).all(),
+    env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 AND due_date<=? ORDER BY due_date LIMIT 100").bind(user.id,next30).all(),
+    env.DB.prepare("SELECT p.*,d.title AS debt_title FROM debt_payments p JOIN debts d ON d.id=p.debt_id WHERE p.user_id=? ORDER BY p.paid_on DESC,p.created_at DESC LIMIT 30").bind(user.id).all()
+  ]);
+  const debtBalance=debtRows.results.filter(x=>x.status==="open").reduce((sum,x)=>sum+Number(x.balance),0);
+  const upcomingTotal=obligations.results.reduce((sum,x)=>sum+Number(x.amount),0);
+  const incomeTotal=Number(income?.total||0),expenseTotal=Number(expenses?.total||0),debtPaid=Number(debtPayments?.total||0);
+  return json({today,month_start:monthStart,summary:{income:incomeTotal,expenses:expenseTotal,debt_payments:debtPaid,net:incomeTotal-expenseTotal-debtPaid,debt_balance:debtBalance,upcoming_obligations:upcomingTotal},debts:debtRows.results,expenses:expenseRows.results,obligations:obligations.results,debt_payments:paymentRows.results});
+}
+export async function onRequestPost({request,env}) {
+  const user=await requireUser(request,env);
+  if(!user)return json({error:"Необходим вход"},401);
+  const body=await readJson(request),action=String(body?.action||""),id=newId();
+  if(action==="expense"){
+    const amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.spent_on||"");
+    if(!amount||!title||title.length>180||!DATE.test(date))return json({error:"Проверь название, сумму и дату расхода"},400);
+    await env.DB.prepare("INSERT INTO expenses (id,user_id,category,title,amount,spent_on,note) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500)).run();
+    return json({ok:true,id},201);
+  }
+  if(action==="debt"){
+    const amount=validAmount(body.initial_amount),title=String(body.title||"").trim(),dueDay=body.due_day===""||body.due_day==null?null:Number(body.due_day);
+    const rate=Number(body.interest_rate||0),minimum=Number(body.minimum_payment||0);
+    if(!amount||!title||title.length>180||!Number.isFinite(rate)||rate<0||rate>1000||!Number.isFinite(minimum)||minimum<0||minimum>amount||(dueDay!==null&&(!Number.isInteger(dueDay)||dueDay<1||dueDay>31)))return json({error:"Проверь название, сумму, ставку и параметры долга"},400);
+    await env.DB.prepare("INSERT INTO debts (id,user_id,title,creditor,initial_amount,balance,interest_rate,minimum_payment,due_day,notes) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,title,String(body.creditor||"").slice(0,160),amount,amount,rate,minimum,dueDay,String(body.notes||"").slice(0,1000)).run();
+    return json({ok:true,id},201);
+  }
+  if(action==="debt_payment"){
+    const debtId=String(body.debt_id||""),amount=validAmount(body.amount),date=String(body.paid_on||"");
+    if(!debtId||!amount||!DATE.test(date))return json({error:"Проверь долг, сумму и дату платежа"},400);
+    const debt=await env.DB.prepare("SELECT id,balance FROM debts WHERE id=? AND user_id=? AND status='open'").bind(debtId,user.id).first();
+    if(!debt)return json({error:"Открытый долг не найден"},404);
+    if(amount>Number(debt.balance))return json({error:"Платёж не может превышать остаток долга"},400);
+    const next=Math.max(0,Number(debt.balance)-amount);
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO debt_payments (id,user_id,debt_id,amount,paid_on,note) VALUES (?,?,?,?,?,?)").bind(id,user.id,debtId,amount,date,String(body.note||"").slice(0,500)),
+      env.DB.prepare("UPDATE debts SET balance=?,status=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(next,next===0?"closed":"open",debtId,user.id)
+    ]);
+    return json({ok:true,id,balance:next},201);
+  }
+  if(action==="obligation"){
+    const amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.due_date||""),frequency=String(body.frequency||"once");
+    if(!amount||!title||title.length>180||!DATE.test(date)||!["once","monthly","weekly"].includes(frequency))return json({error:"Проверь название, сумму, дату и периодичность платежа"},400);
+    await env.DB.prepare("INSERT INTO payment_obligations (id,user_id,title,amount,due_date,frequency,category,notes) VALUES (?,?,?,?,?,?,?,?)").bind(id,user.id,title,amount,date,frequency,String(body.category||"Обязательный платёж").slice(0,80),String(body.notes||"").slice(0,500)).run();
+    return json({ok:true,id},201);
+  }
+  return json({error:"Неизвестный тип финансовой операции"},400);
+}
+export async function onRequestDelete({request,env}) {
+  const user=await requireUser(request,env);
+  if(!user)return json({error:"Необходим вход"},401);
+  const body=await readJson(request),id=String(body?.id||""),type=String(body?.type||"");
+  if(!id||!["expense","obligation"].includes(type))return json({error:"Операцию нельзя удалить или неверный тип"},400);
+  const table=type==="expense"?"expenses":"payment_obligations";
+  const result=await env.DB.prepare("DELETE FROM "+table+" WHERE id=? AND user_id=?").bind(id,user.id).run();
+  if(!result.meta.changes)return json({error:"Запись не найдена"},404);
+  return json({ok:true});
+}
