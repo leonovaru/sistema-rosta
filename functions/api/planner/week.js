@@ -11,6 +11,7 @@ import { attachWeeklyTaskPriority } from "../../_lib/weekly-task-priority.js";
 import { buildWeeklyAttentionScenarios } from "../../_lib/weekly-attention-scenarios.js";
 import { buildDailyRhythmInsights } from "../../_lib/daily-rhythm-insights.js";
 import { buildRecoveryInsights } from "../../_lib/recovery-insights.js";
+import { buildDailyBlockPlans } from "../../_lib/daily-block-plans.js";
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day;}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 export async function onRequestGet({request,env}){
@@ -44,5 +45,6 @@ export async function onRequestGet({request,env}){
  week.attention_scenarios=buildWeeklyAttentionScenarios(week.days);
  week.daily_rhythm=buildDailyRhythmInsights(rhythmTimeRows.results,sleepRows.results,timezone);
  week.recovery_insights=buildRecoveryInsights(rhythmTimeRows.results,timezone);
+ week.daily_block_plans=buildDailyBlockPlans(week.days);
  return json({week});
 }
