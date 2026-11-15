@@ -987,11 +987,56 @@ $("dreams-list").addEventListener("change",async e=>{const s=e.target.closest("[
 $("financial-goals-list").addEventListener("click",async e=>{const b=e.target.closest("[data-goal-plan]");if(!b)return;const id=b.dataset.goalPlan,slot=$("goal-plan-"+id);b.disabled=true;b.textContent="Рассчитываю…";try{const result=await api("/api/dreams/plan",{method:"POST",body:JSON.stringify({goal_id:id})});const c=result.calculation;slot.innerHTML='<div class="goal-plan-box"><b>Предварительная оценка достижимости</b><p>Средний остаток после расходов и выплат: '+(c.average_monthly_surplus===null?'недостаточно данных':money(c.average_monthly_surplus))+' в месяц</p><p>Расходы по бюджету и истории: '+money(result.expense_basis.monthly_forecast)+' в месяц</p><small>Категорий по бюджету: '+result.expense_basis.budgeted_categories+' · по истории: '+result.expense_basis.history_categories+'</small><p>Другие активные цели: '+money(c.active_goal_contributions)+' в месяц</p><p>Осторожный доступный взнос: '+(c.safe_monthly_contribution===null?'пока нельзя рассчитать':money(c.safe_monthly_contribution))+' в месяц</p>'+(c.required_monthly_contribution!==null?'<p>Для выбранного срока нужно: '+money(c.required_monthly_contribution)+' в месяц</p>':'')+(c.estimated_months!==null?'<p>При осторожном взносе ориентир: '+c.estimated_months+' мес.</p>':'')+'<b>'+(c.feasible===true?'Выбранный срок выглядит достижимым по зарегистрированной истории.':c.feasible===false?'Выбранный срок слишком напряжённый по текущей истории.':'Для надёжной оценки нужны записи о доходах за период.')+'</b><small>'+escapeHtml(result.disclaimer)+'</small></div>';}catch(err){slot.textContent=err.message;}finally{b.disabled=false;b.textContent="Обновить оценку";}});
 $("financial-goals-list").addEventListener("change",async e=>{const s=e.target.closest("[data-goal-status]");if(!s)return;try{await api("/api/dreams",{method:"PATCH",body:JSON.stringify({type:"goal",id:s.dataset.goalStatus,status:s.value})});await loadDreams();}catch(err){alert(err.message);}});
 
+let sleepSessions=[];
+function sleepLocalDate(){
+ const parts=new Intl.DateTimeFormat("en-CA",{timeZone:userSettings.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+ const v=Object.fromEntries(parts.map(p=>[p.type,p.value]));return v.year+"-"+v.month+"-"+v.day;
+}
+function sleepDuration(start,end){
+ if(!start||!end)return null;const a=new Date(start),b=new Date(end);
+ return Number.isFinite(a.getTime())&&Number.isFinite(b.getTime())&&b>a?Math.round((b-a)/60000):null;
+}
+function sleepDurationLabel(minutes){
+ if(minutes===null)return "Недостаточно данных";
+ const h=Math.floor(minutes/60),m=minutes%60;return h+" ч"+(m?" "+m+" мин":"");
+}
+function renderSleep(){
+ const today=sleepLocalDate(),yesterday=shiftDate(today,-1);
+ const current=sleepSessions.find(s=>s.sleep_date===today||s.sleep_date===yesterday);
+ const status=$("sleep-status");
+ status.textContent=current?(current.woke_at?"Пробуждение зафиксировано: "+current.woke_at.slice(11,16):"Ночь начата "+(current.went_to_bed_at?current.went_to_bed_at.slice(11,16):"без отметки времени")+" · пробуждение ещё не подтверждено"):"Пока нет отметок за текущую ночь.";
+ $("sleep-history").innerHTML=sleepSessions.length?sleepSessions.map(s=>{
+  const durationMinutes=sleepDuration(s.fell_asleep_at,s.woke_at);
+  return '<article class="sleep-entry"><div class="sleep-entry-head"><strong>Ночь '+escapeHtml(s.sleep_date)+'</strong><b>'+sleepDurationLabel(durationMinutes)+'</b></div><form class="sleep-edit-form" data-sleep-edit="'+escapeHtml(s.id)+'"><label>Легла<input type="datetime-local" name="went_to_bed_at" value="'+escapeHtml(s.went_to_bed_at||"")+'"></label><label>Уснула примерно<input type="datetime-local" name="fell_asleep_at" value="'+escapeHtml(s.fell_asleep_at||"")+'"></label><label>Проснулась<input type="datetime-local" name="woke_at" value="'+escapeHtml(s.woke_at||"")+'"></label><label class="sleep-note">Заметка<input name="note" maxlength="1000" value="'+escapeHtml(s.note||"")+'"></label><button class="button ghost" type="submit">Сохранить исправления</button></form><small class="fine">Пробуждение: '+(s.woke_at?escapeHtml(s.woke_at.slice(11,16)):"не отмечено")+' · засыпание: '+(s.fell_asleep_at?escapeHtml(s.fell_asleep_at.slice(11,16)):"не указано")+'</small></article>';
+ }).join(""):'<p class="muted">Здесь появится история сна.</p>';
+}
+async function loadSleep(){
+ const data=await api("/api/sleep?limit=14");sleepSessions=data.sessions||[];renderSleep();
+}
+async function markSleep(action){
+ const button=action==="bed"?$("sleep-bed"):action==="asleep"?$("sleep-asleep"):$("sleep-wake");
+ button.disabled=true;
+ try{await api("/api/sleep",{method:"POST",body:JSON.stringify({action})});await loadSleep();}
+ catch(err){alert(err.message);}
+ finally{button.disabled=false;}
+}
+$("sleep-bed").addEventListener("click",()=>markSleep("bed"));
+$("sleep-asleep").addEventListener("click",()=>markSleep("asleep"));
+$("sleep-wake").addEventListener("click",()=>markSleep("wake"));
+$("sleep-history").addEventListener("submit",async event=>{
+ const form=event.target.closest("[data-sleep-edit]");if(!form)return;event.preventDefault();
+ const data=new FormData(form),payload={action:"edit",id:form.dataset.sleepEdit};
+ for(const key of ["went_to_bed_at","fell_asleep_at","woke_at","note"])payload[key]=data.get(key)||null;
+ const button=form.querySelector("button");button.disabled=true;
+ try{await api("/api/sleep",{method:"POST",body:JSON.stringify(payload)});await loadSleep();}
+ catch(err){alert(err.message);button.disabled=false;}
+});
+
 async function boot() {
   try {
     const { user } = await api("/api/auth/me");
     if (!user) return showAuth();
-    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadProfitability(); await loadRevenuePlan(); await loadRevenueScenarios(); await loadSalesPlan(); await loadAnalytics(); await loadWorkspace(); await loadCharity(); await loadDreams(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
+    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadProfitability(); await loadRevenuePlan(); await loadRevenueScenarios(); await loadSalesPlan(); await loadAnalytics(); await loadWorkspace(); await loadCharity(); await loadDreams(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadSleep(); await loadPlanner();
   } catch { showAuth(); }
 }
 boot();
