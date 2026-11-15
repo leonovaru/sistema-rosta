@@ -16,3 +16,13 @@ test("duration uses the selected timezone rather than the server timezone",()=>{
 test("duration accounts for daylight-saving transition in Europe/Amsterdam",()=>{
   assert.equal(calculateSleepDurationMinutes("2026-10-24T23:00","2026-10-25T07:00","Europe/Amsterdam"),540);
 });
+
+test("ambiguous repeated local time during autumn DST transition is not guessed",()=>{
+  assert.equal(calculateSleepDurationMinutes("2026-10-25T02:30","2026-10-25T07:00","Europe/Amsterdam"),null);
+});
+test("nonexistent local time during spring DST transition is rejected",()=>{
+  assert.equal(calculateSleepDurationMinutes("2026-03-29T02:30","2026-03-29T07:00","Europe/Amsterdam"),null);
+});
+test("unambiguous times surrounding spring DST transition use elapsed time",()=>{
+  assert.equal(calculateSleepDurationMinutes("2026-03-29T01:30","2026-03-29T03:30","Europe/Amsterdam"),60);
+});
