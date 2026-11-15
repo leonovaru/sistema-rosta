@@ -16,7 +16,10 @@ export function expandRecurringEvents(rows, from, to) {
     else {
       const until = row.repeat_until || toDate;
       const step = rule === "daily" ? 1 : 7;
-      let date = baseStart, guard = 0;
+      const daysBeforeRange = Math.floor((Date.parse(fromDate+"T00:00:00Z") - Date.parse(baseStart+"T00:00:00Z")) / 86400000);
+      let offset = Math.max(0, daysBeforeRange - endOffsetDays);
+      offset = Math.ceil(offset / step) * step;
+      let date = shiftDate(baseStart, offset), guard = 0;
       while (date <= until && date < toDate && guard++ < 500) {
         if (date >= fromDate || shiftDate(date, endOffsetDays) >= fromDate) dates.push(date);
         date = shiftDate(date, step);
