@@ -46,9 +46,21 @@ $("estimate-task").addEventListener("click", async () => {
     const delegation = ({full:"Можно поручить ИИ почти целиком",partial:"ИИ выполнит часть работы, тебе останется проверить результат",manual:"Нужно твоё участие или действие вне приложения"})[taskEstimate.delegation];
     const steps = (taskEstimate.steps || []).map(step => "<li>" + escapeHtml(step.title) + " — " + duration(step.minutes) + "</li>").join("");
     $("estimate-result").innerHTML = "<strong>Оценка: " + duration(taskEstimate.range_min) + "–" + duration(taskEstimate.range_max) + "</strong><p>" + escapeHtml(taskEstimate.rationale || "") + "</p><p><b>" + delegation + "</b></p><p>" + escapeHtml(taskEstimate.delegation_reason || "") + "</p>" + (steps ? "<ul>"+steps+"</ul>" : "") + "<small>" + (taskEstimate.source === "ai" ? "Оценка ИИ" : "Черновая алгоритмическая оценка") + (taskEstimate.note ? " · "+escapeHtml(taskEstimate.note) : "") + "</small>";
+    if (taskEstimate.source === "ai" && taskEstimate.delegation !== "manual") {
+      $("estimate-result").innerHTML += '<button type="button" class="button primary" id="delegate-task">Поручить ИИ подготовить результат</button><div id="delegated-output" class="delegated-output hidden"></div>';
+      $("delegate-task").addEventListener("click", async () => {
+        const delegateButton = $("delegate-task"); const output = $("delegated-output");
+        delegateButton.disabled = true; delegateButton.textContent = "ИИ выполняет задачу…";
+        output.classList.remove("hidden"); output.textContent = "Готовлю результат. Это может занять некоторое время."; 
+        try { const delegated = await api("/api/tasks/delegate", { method: "POST", body: JSON.stringify({ title, description: $("task-description").value }) }); output.textContent = delegated.result; }
+        catch (err) { output.textContent = err.message; }
+        finally { delegateButton.disabled = false; delegateButton.textContent = "Повторить выполнение ИИ"; }
+      });
+    }
   } catch (err) { taskEstimate = null; $("estimate-result").textContent = err.message; }
   finally { button.disabled = false; button.textContent = "Оценить время и делегирование с ИИ"; }
 });
+["task-title","task-description"].forEach(id => $(id).addEventListener("input", () => { taskEstimate = null; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; }));
 $("task-form").addEventListener("submit", async e => {
   e.preventDefault();
   try { await api("/api/tasks", { method: "POST", body: JSON.stringify({ title: $("task-title").value, description: $("task-description").value, due_date: $("task-date").value || null, direction_id: $("task-direction").value || null, priority: $("task-priority").value, estimated_minutes: taskEstimate?.minutes ?? null, ai_plan: taskEstimate ? JSON.stringify(taskEstimate) : "" }) }); $("task-title").value = ""; $("task-description").value = ""; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; taskEstimate = null; await loadTasks(); }
