@@ -56,7 +56,7 @@
           <section class="cashflow-section">
             <div class="section-head"><div><p class="eyebrow">ПЛАНИРОВАНИЕ ДЕНЕГ</p><h3>Прогноз денежного потока</h3></div><div class="analytics-actions"><select id="cashflow-days" aria-label="Период прогноза"><option value="30">30 дней</option><option value="90" selected>90 дней</option></select><button type="button" class="button ghost" id="refresh-cashflow">Обновить</button></div></div>
             <div class="cashflow-opening"><label>Сколько денег сейчас доступно, ₽<input id="cashflow-opening-balance" type="number" min="0" step="0.01" value="0"></label><button type="button" class="button ghost" id="save-opening-balance">Сохранить остаток</button><small class="fine">Это стартовая сумма для прогноза, не доход и не прибыль.</small></div>
-            <div class="analytics-metrics" id="cashflow-summary"></div>
+            <div class="analytics-metrics" id="cashflow-summary"></div><div id="variable-expense-forecast" class="finance-list"></div>
             <div class="cashflow-columns"><div><h4>Планируемое поступление или расход</h4><form id="cashflow-form" class="finance-form">
               <label>Название<input id="cashflow-title" maxlength="180" required placeholder="Оплата клиента, закупка, сервис"></label>
               <label>Тип<select id="cashflow-type"><option value="income">Ожидаемое поступление</option><option value="expense">Планируемый расход</option></select></label>
@@ -66,7 +66,7 @@
               <button class="button primary">Добавить в план</button>
             </form></div><div><h4>Ожидаемые движения</h4><div id="cashflow-events" class="finance-list"></div></div></div>
             <div class="cashflow-days"><h4>Динамика остатка по дням</h4><div id="cashflow-daily" class="finance-list"></div></div>
-            <p class="fine">Прогноз учитывает плановые записи, активные повторяющиеся обязательства и минимальные платежи по открытым долгам. Он не включает автоматически ещё не внесённые доходы и переменные расходы; неизвестные проценты по долгам не начисляются. Отрицательные дни показывают риск кассового разрыва.</p>
+            <p class="fine">Прогноз денежных потоков учитывает плановые записи, платежи с конкретными датами и минимальные платежи по долгам. Отдельно показывается прогноз переменных расходов на следующий месяц по категориям на основе трёх последних завершённых месяцев. Он не распределяет эти переменные расходы по конкретным дням, чтобы не придумывать даты покупок. Отрицательные дни показывают риск кассового разрыва.</p>
           </section>
           <section class="revenue-plan-section">
             <div class="section-head"><div><p class="eyebrow">ЦЕЛЬ 300 000 ₽</p><h3>План дохода по направлениям</h3></div><button type="button" class="button ghost" id="refresh-revenue-plan">Обновить</button></div>
