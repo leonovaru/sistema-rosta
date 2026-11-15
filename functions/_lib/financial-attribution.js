@@ -8,3 +8,7 @@ export function buildFinancialAttributionSnapshot({direction=null,client=null,pr
   project_title_snapshot:project?.title||null
  };
 }
+
+export function resolveHistoricalLabel(snapshot,currentLabel="") {
+ return String(snapshot||currentLabel||"");
+}
