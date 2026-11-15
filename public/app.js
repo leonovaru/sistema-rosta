@@ -65,7 +65,7 @@ $("income-form").addEventListener("submit", async e => {
   e.preventDefault();
   try {
     await api("/api/income", { method: "POST", body: JSON.stringify({ amount: $("income-amount").value, direction_id: $("income-direction").value || null, received_on: $("income-date").value, note: $("income-note").value }) });
-    $("income-amount").value = ""; $("income-note").value = ""; await loadDashboardData();
+    $("income-amount").value = ""; $("income-note").value = ""; await loadDashboardData(); await loadFinance();
   } catch (err) { alert(err.message); }
 });
 let financeData = null;
@@ -78,7 +78,7 @@ async function loadFinance() {
   $("finance-debt-paid").textContent=money(s.debt_payments);
   $("finance-net").textContent=money(s.net);
   $("finance-debt-balance").textContent=money(s.debt_balance);
-  $("finance-upcoming").textContent=money(s.upcoming_obligations);
+  $("finance-upcoming").textContent=money(s.upcoming_obligations);\n  $("finance-after-upcoming").textContent=money(s.net-s.upcoming_obligations);
   $("expense-date").value=financeData.today;
   $("obligation-date").value=financeData.today;
   $("debt-payment-date").value=financeData.today;
