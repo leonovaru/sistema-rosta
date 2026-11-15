@@ -40,3 +40,23 @@ export function buildDailyBlockPlans(days=[],{focusMinutes=50,breakMinutes=10,st
   return {date:day.date,available_minutes:budget,planned_minutes:Math.max(0,Number(day.planned_task_minutes)||0),focus_minutes:focusTotal,break_minutes:breakTotal,blocks,unallocated,overloaded:Boolean(day.overloaded)||unallocated.length>0,calendar_conflicts:conflicts};
  });
 }
+
+const DAILY_BLOCK_VARIANTS=[
+ {key:"priority",title:"Приоритетный",description:"Сначала срочные и важные задачи"},
+ {key:"focus",title:"Концентрация",description:"Сначала задачи с высокой когнитивной нагрузкой"},
+ {key:"flexible",title:"Гибкий",description:"Сначала короткая рутина, затем длинные сложные блоки"}
+];
+export function buildDailyBlockScenarios(days=[],options={}){
+ const scenarios=DAILY_BLOCK_VARIANTS.map(variant=>{
+  const ordered=(days||[]).map(day=>({...day,tasks:[...(day.tasks||[])].sort((a,b)=>{
+   const score=(task)=>Number(task.score)||0;
+   const load=(task)=>task.cognitive_load==="high"?3:task.cognitive_load==="medium"?2:1;
+   const minutes=(task)=>Math.max(0,Number(task.minutes)||0);
+   if(variant.key==="priority")return score(b)-score(a)||(Number(a.urgency_days??999)-Number(b.urgency_days??999));
+   if(variant.key==="focus")return load(b)-load(a)||score(b)-score(a)||minutes(b)-minutes(a);
+   return load(a)-load(b)||(load(a)===1?minutes(a)-minutes(b):minutes(b)-minutes(a))||score(b)-score(a);
+  })}));
+  return {...variant,plans:buildDailyBlockPlans(ordered,options)};
+ });
+ return scenarios;
+}
