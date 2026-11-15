@@ -29,3 +29,10 @@ export function calculateUnionWorkMinutes(calendarIntervals = [], trackedInterva
   return mergeMinuteIntervals([...calendarIntervals, ...trackedIntervals])
     .reduce((sum, interval) => sum + interval.end - interval.start, 0);
 }
+
+export function localDateForInstant(value, timezone = "Europe/Moscow") {
+  const epoch = Date.parse(value);
+  if (!Number.isFinite(epoch)) return null;
+  const parts = localParts(epoch, timezone);
+  return parts.year + "-" + parts.month + "-" + parts.day;
+}
