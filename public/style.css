@@ -236,3 +236,7 @@
 .sleep-chart-missing{display:block;width:4px;height:3px;border-radius:2px;background:var(--muted,#888);opacity:.35}
 .sleep-chart-day small{font-size:.62rem;color:var(--muted);font-variant-numeric:tabular-nums}
 @media(max-width:480px){.sleep-chart-card{padding:10px}.sleep-chart-grid{gap:2px}.sleep-chart-day small{font-size:.55rem}.sleep-chart-wrap{grid-template-columns:25px minmax(0,1fr)}}
+
+.sleep-goal-form{display:grid;grid-template-columns:minmax(160px,240px) auto auto minmax(160px,1fr);align-items:end;gap:10px;padding:14px;margin:14px 0;border:1px solid var(--line);border-radius:12px;background:var(--surface,#fff)}
+.sleep-goal-form label{margin:0}.sleep-goal-form input{max-width:180px}.sleep-goal-form .fine{margin:0 0 10px}
+@media(max-width:640px){.sleep-goal-form{grid-template-columns:1fr 1fr}.sleep-goal-form label,.sleep-goal-form .fine{grid-column:1/-1}.sleep-goal-form .button{width:100%}}
