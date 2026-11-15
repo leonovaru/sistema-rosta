@@ -30,6 +30,6 @@ export function buildRemainingDailyPlan({days=[],calendarEvents=[],now=new Date(
  const available=gaps.reduce((sum,gap)=>sum+gap.end-gap.start,0);
  if(!available)return {date:today,available_minutes:0,focus_minutes:0,break_minutes:0,blocks:[],unallocated:(day.tasks||[]).filter(task=>Number(task.minutes)>0).map(task=>({task_id:task.id,title:task.title,minutes:Number(task.minutes)})),overloaded:true,remaining_plan:true};
  const adjustedDay={...day,gross_capacity_minutes:windowEnd-cursor,available_minutes:available,planned_task_minutes:(day.tasks||[]).reduce((sum,task)=>sum+Math.max(0,Number(task.minutes)||0),0),tasks:(day.tasks||[]).map(task=>({...task,minutes:Math.max(0,Number(task.minutes)||0)}))};
- const [plan]=buildDailyBlockPlans([adjustedDay],{focusMinutes,breakMinutes,startTime:local.hour+":"+local.minute,prepBeforeMinutes:0,bufferAfterMinutes:0,calendarEvents});
+ const [plan]=buildDailyBlockPlans([adjustedDay],{focusMinutes,breakMinutes,startTime:local.hour+":"+local.minute,prepBeforeMinutes:prep,bufferAfterMinutes:after,calendarEvents});
  return plan?{...plan,remaining_plan:true,as_of:local.hour+":"+local.minute}:null;
 }
