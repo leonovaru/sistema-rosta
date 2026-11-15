@@ -19,6 +19,17 @@ export async function onRequestPost({request,env}){
   if(!item)return json({error:"Активный нерегулярный расход не найден"},404);
   if(await env.DB.prepare("SELECT id FROM irregular_expense_payments WHERE irregular_expense_id=? AND paid_on=? LIMIT 1").bind(expenseId,paidOn).first())return json({error:"Оплата за эту дату уже зарегистрирована"},409);
   const amount=Number(item.amount),paymentId=newId(),expenseEntryId=newId();
+  const bucket=await env.DB.prepare("SELECT id,title FROM income_buckets WHERE user_id=? AND active=1 AND title=?").bind(user.id,String(item.category||"")).first();
+  if(bucket){
+   const [allocated,spent,debt,obligations]=await Promise.all([
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_bucket_allocations WHERE user_id=? AND bucket_id=?").bind(user.id,bucket.id).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id=? AND bucket_id=?").bind(user.id,bucket.id).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM debt_payments WHERE user_id=? AND bucket_id=?").bind(user.id,bucket.id).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM obligation_payments WHERE user_id=? AND bucket_id=?").bind(user.id,bucket.id).first()
+   ]);
+   const available=Number(allocated.total||0)-Number(spent.total||0)-Number(debt.total||0)-Number(obligations.total||0);
+   if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
+  }
   let nextDate=null,active=0;
   if(item.frequency!=="once"){
    nextDate=nextIrregularDate(item.next_date,item.frequency,item.recurrence_day);
@@ -29,7 +40,7 @@ export async function onRequestPost({request,env}){
   }
   await env.DB.batch([
    env.DB.prepare("INSERT INTO irregular_expense_payments (id,user_id,irregular_expense_id,amount,paid_on) VALUES (?,?,?,?,?)").bind(paymentId,user.id,expenseId,amount,paidOn),
-   env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note) VALUES (?,?,NULL,?,?,?,?,?)").bind(expenseEntryId,user.id,item.category,item.title,amount,paidOn,"Оплата нерегулярного расхода"),
+   env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id) VALUES (?,?,NULL,?,?,?,?,?,?)").bind(expenseEntryId,user.id,item.category,item.title,amount,paidOn,"Оплата нерегулярного расхода",bucket?.id||null),
    env.DB.prepare("UPDATE irregular_expenses SET next_date=COALESCE(?,next_date),active=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(nextDate,active,expenseId,user.id)
   ]);
   return json({ok:true,payment_id:paymentId,expense_id:expenseEntryId,next_date:nextDate,active});
