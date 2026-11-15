@@ -5,6 +5,10 @@ const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const LOCAL_DATE_TIME=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 const SOURCES=["manual","app","push","health_import"];
 const CONFIDENCE=["exact","approximate","imported"];
+export function normalizeSleepLimit(value){
+  const parsed=Number(value||30);
+  return Number.isFinite(parsed)?Math.min(90,Math.max(1,Math.trunc(parsed))):30;
+}
 
 function localParts(date,timezone){
   const parts=new Intl.DateTimeFormat("en-CA",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(date);
@@ -34,7 +38,7 @@ function validateTime(value){
 
 export async function onRequestGet({request,env}){
   const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
-  const url=new URL(request.url),rawLimit=Number(url.searchParams.get("limit")||30),limit=Number.isFinite(rawLimit)?Math.min(90,Math.max(1,Math.trunc(rawLimit))):30;
+  const url=new URL(request.url),limit=normalizeSleepLimit(url.searchParams.get("limit"));
   const {results}=await env.DB.prepare("SELECT * FROM sleep_sessions WHERE user_id=? ORDER BY sleep_date DESC LIMIT ?").bind(user.id,limit).all();
   const settings=await env.DB.prepare("SELECT sleep_target_minutes FROM settings WHERE user_id=?").bind(user.id).first();
   return json({sessions:results,sleep_target_minutes:settings?.sleep_target_minutes==null?null:Number(settings.sleep_target_minutes)});
