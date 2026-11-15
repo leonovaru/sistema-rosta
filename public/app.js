@@ -111,7 +111,10 @@ function renderTasks() {
       '<label class="task"><input type="checkbox" data-task="' + t.id + '" ' + (t.status === "done" ? "checked" : "") + '><span class="task-body"><b>' + escapeHtml(t.title) + '</b><small>' + escapeHtml(dateText) + ' · ' + escapeHtml(t.direction_title || "Без направления") + ' · ' + priorityText + '</small></span></label>' +
       '<div class="task-time"><span>План: <b>' + (t.estimated_minutes ? duration(t.estimated_minutes) : "не задан") + '</b></span><label>Факт, мин<input type="number" min="0" max="10000" step="5" placeholder="—" value="' + (t.actual_minutes ?? "") + '" data-actual-time="' + t.id + '"></label><button type="button" class="button ghost" data-save-time="' + t.id + '">Сохранить</button></div>' +
       '<div class="task-ai"><button type="button" class="button ghost" data-delegate-task="' + t.id + '">' + (t.delegated_result ? "Подготовить заново с ИИ" : "Поручить ИИ") + '</button>' +
-      (t.delegated_result ? '<details class="delegated-saved"><summary>Результат ИИ' + (t.delegated_at ? ' · ' + escapeHtml(t.delegated_at) : '') + '</summary><div class="delegated-output">' + escapeHtml(t.delegated_result) + '</div></details>' : '') + '</div></article>';
+      (t.delegated_result ? '<details class="delegated-saved"><summary>Результат ИИ' + (t.delegated_at ? ' · ' + escapeHtml(t.delegated_at) : '') + '</summary><div class="delegated-output">' + escapeHtml(t.delegated_result) + '</div></details>' : '') + '</div>' +
+      '<div class="task-steps"><div class="task-steps-head"><b>План выполнения</b><button type="button" class="button ghost" data-plan-task="' + t.id + '">' + (t.steps?.length ? "Обновить план" : "Разбить на этапы с ИИ") + '</button></div>' +
+      (t.steps?.length ? '<div class="task-step-list">' + t.steps.map(step => '<label class="task-step ' + (step.status === "done" ? "done" : "") + '"><input type="checkbox" data-task-step="' + step.id + '" ' + (step.status === "done" ? "checked" : "") + '><span>' + escapeHtml(step.title) + '</span><small>' + duration(step.estimated_minutes) + '</small></label>').join("") + '</div><small class="task-step-progress">Готово: ' + t.steps.filter(step => step.status === "done").length + ' из ' + t.steps.length + '</small>' : '<small class="muted">ИИ может превратить большую задачу в последовательность конкретных шагов.</small>') +
+      '</div></article>';
   }).join("") : '<p class="muted">В этом периоде задач нет. Добавь следующий конкретный шаг.</p>';
   document.querySelectorAll("[data-task]").forEach(input => input.addEventListener("change", async () => {
     await api("/api/tasks", { method: "PATCH", body: JSON.stringify({ id: input.dataset.task, status: input.checked ? "done" : "todo" }) }); await loadTasks();
@@ -129,6 +132,15 @@ function renderTasks() {
       await api("/api/tasks/delegate", { method: "POST", body: JSON.stringify({ task_id: task.id, title: task.title, description: task.description || "" }) });
       await loadTasks();
     } catch (err) { alert(err.message); button.disabled = false; button.textContent = task.delegated_result ? "Подготовить заново с ИИ" : "Поручить ИИ"; }
+  }));
+  document.querySelectorAll("[data-plan-task]").forEach(button => button.addEventListener("click", async () => {
+    button.disabled = true; button.textContent = "Составляю план…";
+    try { await api("/api/tasks/plan", { method: "POST", body: JSON.stringify({ task_id: button.dataset.planTask }) }); await loadTasks(); }
+    catch (err) { alert(err.message); button.disabled = false; button.textContent = "Повторить план"; }
+  }));
+  document.querySelectorAll("[data-task-step]").forEach(input => input.addEventListener("change", async () => {
+    try { await api("/api/tasks/steps", { method: "PATCH", body: JSON.stringify({ id: input.dataset.taskStep, status: input.checked ? "done" : "todo" }) }); await loadTasks(); }
+    catch (err) { alert(err.message); input.checked = !input.checked; }
   }));
 }
 document.querySelectorAll("[data-task-filter]").forEach(button => button.addEventListener("click", () => {
