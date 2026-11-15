@@ -226,7 +226,8 @@ $('refresh-analytics').addEventListener('click',async()=>{const b=$('refresh-ana
 
 let profitabilityData=null;
 async function loadProfitability(){
- profitabilityData=await api("/api/analytics/profitability");
+ const allocationHours=Math.max(1,Math.min(80,Number($("allocation-hours")?.value)||5));
+ profitabilityData=await api("/api/analytics/profitability?available_hours="+allocationHours);
  const s=profitabilityData.summary;
  $("profitability-period").textContent=profitabilityData.period.from+" — "+profitabilityData.period.to;
  $("profitability-summary").innerHTML=[
@@ -234,7 +235,29 @@ async function loadProfitability(){
  ].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
  $("profitability-directions").innerHTML=profitabilityData.directions.length?profitabilityData.directions.map(x=>'<article class="analytics-row"><div><b>'+escapeHtml(x.direction_title)+'</b><small>Доход '+money(x.revenue)+' ('+(x.share_percent===null?"—":x.share_percent+"% от общего")+') · расходы '+money(x.direct_expenses)+' · маржа '+(x.margin_percent===null?"—":x.margin_percent+"%")+' · задач: '+x.completed_tasks+' завершено / '+x.active_tasks+' активных · время '+duration(x.total_minutes)+'</small><small>Воронка за 90 дней: контакты '+(x.observed_contacted_clients||0)+' · квалифицированные '+(x.qualified_clients||0)+' · выиграно '+(x.won_clients||0)+' · контакт → обращение '+(x.observed_contact_to_lead_percent===null?"недостаточно данных":x.observed_contact_to_lead_percent+"%")+' · обращение → продажа '+(x.observed_lead_to_sale_percent===null?"недостаточно данных":x.observed_lead_to_sale_percent+"%")+'</small><small>Средний цикл до переговоров: '+(x.avg_contact_to_negotiation_days===null?"—":x.avg_contact_to_negotiation_days+" дн. ("+x.contact_to_negotiation_sample+")")+' · до предложения: '+(x.avg_contact_to_proposal_days===null?"—":x.avg_contact_to_proposal_days+" дн. ("+x.contact_to_proposal_sample+")")+' · до продажи: '+(x.avg_contact_to_won_days===null?"—":x.avg_contact_to_won_days+" дн. ("+x.contact_to_won_sample+")")+'</small></div><div><strong>'+money(x.contribution)+'</strong><small>вклад · '+(x.contribution_per_hour===null?"нет учёта времени":money(x.contribution_per_hour)+"/ч")+'</small></div></article>').join(""):'<p class="muted">Пока нет доходов, расходов или завершённых задач за период.</p>';
 }
+ const allocation=profitabilityData.time_allocation;
+ $("time-allocation-results").innerHTML=allocation.recommendations.length?allocation.recommendations.map((x,i)=>'<article class="analytics-row"><div><b>'+escapeHtml(x.direction_title)+'</b><small>Предложение: '+x.recommended_hours+' ч/нед. · вклад на час '+money(x.contribution_per_hour)+' · '+escapeHtml(x.confidence)+' оценка</small><small>'+x.allocation_reasons.map(escapeHtml).join(' · ')+'</small></div><div><strong>'+(i+1)+'</strong><small>приоритет</small></div></article>').join(''):'<p class="muted">Пока недостаточно фактических данных о положительном вкладе на час. Продолжайте фиксировать поступления и время — тогда появится обоснованное распределение.</p>';
+ if(allocation.excluded_directions.length)$("time-allocation-results").innerHTML+='<p class="fine">Пока не включены: '+allocation.excluded_directions.map(x=>escapeHtml(x.direction_title)+' — '+escapeHtml(x.reason)).join('; ')+'</p>';
+ $("create-allocation-tasks").disabled=!allocation.recommendations.length;
+
 $("refresh-profitability").addEventListener("click",async()=>{const b=$("refresh-profitability");b.disabled=true;try{await loadProfitability();}catch(err){alert(err.message);}finally{b.disabled=false;}});
+$("allocation-hours").addEventListener("change",async()=>{try{await loadProfitability();}catch(err){alert(err.message);}});
+$("create-allocation-tasks").addEventListener("click",async()=>{
+ const rows=profitabilityData?.time_allocation?.recommendations||[];
+ if(!rows.length)return;
+ const details=rows.map(x=>x.direction_title+": "+x.recommended_hours+" ч/нед.").join("\\n");
+ if(!confirm("Создать задачи-предложения на основе распределения?\\n\\n"+details+"\\n\\nЗадачи будут добавлены в список, расписание автоматически не изменится."))return;
+ const button=$("create-allocation-tasks");button.disabled=true;
+ try{
+  for(const row of rows){
+   await api("/api/tasks",{method:"POST",body:JSON.stringify({direction_id:row.direction_id,title:"Выделить "+row.recommended_hours+" ч на направление: "+row.direction_title,description:"Предложение системы распределения рабочего времени. Основание: "+row.allocation_reasons.join("; ")+". Плановая дополнительная нагрузка: "+row.recommended_hours+" часа в неделю. Проверьте загрузку и при необходимости скорректируйте задачу вручную.",estimated_minutes:Math.max(5,Math.round(row.recommended_hours*60)),priority:"medium"})});
+  }
+  alert("Создано задач: "+rows.length+". Проверьте их в общем списке задач.");
+  if(typeof loadTasks==="function")await loadTasks();
+  if(typeof loadPlanner==="function")await loadPlanner();
+ }catch(err){alert("Не все задачи удалось создать: "+err.message);}
+ finally{button.disabled=false;}
+});
 
 let financeData = null;
 let incomeBucketsData = null;
