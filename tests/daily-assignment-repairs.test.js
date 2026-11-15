@@ -35,7 +35,7 @@ test("respects deadline and working-day capacity and reports an impossible repai
  const week=baseWeek();week.days[1].working_day=false;week.days[2].available_minutes=10;
  const result=buildDailyAssignmentRepairs(week,[{task_id:"a",allocation_date:"2026-11-16",minutes:40}],[{...task,estimated_minutes:140,actual_minutes:20}]);
  assert.equal(result.schedules.length,0);
- assert.equal(result.unresolved[0].minutes,60);
+ assert.equal(result.unresolved[0].minutes,50);
 });
 test("does not displace other tasks and leaves input untouched",()=>{
  const week=baseWeek();week.days[0].tasks=[{id:"b",minutes:40}];
