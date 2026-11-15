@@ -10,7 +10,7 @@ test("detects monthly utility bills with changing amounts and forecasts the aver
  const result=detectVariableRecurringExpenses(rows,{today:"2026-11-15",horizonDays:60});
  assert.equal(result.suggestions.length,1);
  assert.equal(result.suggestions[0].average_amount,1500);
- assert.deepEqual(result.events.map(x=>x.date),["2026-12-10"]);
+ assert.deepEqual(result.events.map(x=>x.date),["2026-12-10","2027-01-10"]);
  assert.deepEqual(result.matched_expense_ids,["1","2","3"]);
 });
 test("does not classify stable bills or irregular expenses as variable recurring",()=>{
