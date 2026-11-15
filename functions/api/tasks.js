@@ -18,12 +18,14 @@ export async function onRequestGet({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error: "Необходим вход" }, 401);
   const { results } = await env.DB.prepare(`
-    SELECT t.*, d.title AS direction_title, c.name AS client_name,
-      p.title AS project_title, a.title AS life_area_title, pt.title AS parent_task_title
+    SELECT t.*, d.title AS direction_title, c.name AS client_name,c.status AS client_status,
+      p.title AS project_title,p.status AS project_status,pc.status AS project_client_status,
+      a.title AS life_area_title, pt.title AS parent_task_title
     FROM tasks t
     LEFT JOIN directions d ON d.id=t.direction_id
     LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id
     LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id
+    LEFT JOIN clients pc ON pc.id=p.client_id AND pc.user_id=p.user_id
     LEFT JOIN life_areas a ON a.id=t.life_area_id AND a.user_id=t.user_id
     LEFT JOIN tasks pt ON pt.id=t.parent_task_id AND pt.user_id=t.user_id
     WHERE t.user_id=?
