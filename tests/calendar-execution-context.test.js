@@ -5,9 +5,9 @@ import { buildCalendarExecutionContext } from "../functions/_lib/calendar-execut
 const log=(date,start,end,status="done")=>({block_date:date,start_time:start,end_time:end,planned_minutes:40,status});
 test("separates clear blocks from blocks near meetings",()=>{
  const logs=[
-  log("2026-11-02","09:00","09:40","done"),
-  log("2026-11-02","11:00","11:40","skipped"),
-  log("2026-11-02","14:00","14:40","done")
+  ...Array.from({length:4},(_,i)=>log("2026-11-0"+(2+i),"09:00","09:40","done")),
+  ...Array.from({length:4},(_,i)=>log("2026-11-0"+(2+i),"11:00","11:40","skipped")),
+  log("2026-11-06","14:00","14:40","done")
  ];
  const events=[{event_type:"meeting",status:"planned",start_at:"2026-11-02T10:00",end_at:"2026-11-02T10:30"}];
  const result=buildCalendarExecutionContext(logs,events);
