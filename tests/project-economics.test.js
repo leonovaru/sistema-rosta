@@ -23,3 +23,17 @@ test("missing history does not invent hourly metrics or margins",()=>{
  assert.equal(x.margin_percent,null);
  assert.equal(x.outstanding,20000);
 });
+
+test("client economics calculates contribution and effective hourly rates from tracked time",()=>{
+ const x=calculateClientEconomics({revenue:48000,directExpenses:8000,trackedMinutes:600});
+ assert.equal(x.contribution,40000);
+ assert.equal(x.margin_percent,83.33);
+ assert.equal(x.hours,10);
+ assert.equal(x.revenue_per_hour,4800);
+ assert.equal(x.contribution_per_hour,4000);
+});
+test("client economics leaves hourly rates blank when there is no tracked time",()=>{
+ const x=calculateClientEconomics({revenue:12000,directExpenses:2000});
+ assert.equal(x.revenue_per_hour,null);
+ assert.equal(x.contribution_per_hour,null);
+});
