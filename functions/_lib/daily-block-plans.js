@@ -74,7 +74,7 @@ function summarizeDailyBlockScenario(days,plans){
 export function buildDailyBlockScenarios(days=[],options={}){
  const scenarios=DAILY_BLOCK_VARIANTS.map(variant=>{
   const ordered=(days||[]).map(day=>({...day,tasks:[...(day.tasks||[])].sort((a,b)=>{
-   const score=(task)=>Number(task.score)||0;
+   const score=(task)=>Number(task.priority_score??task.score)||0;
    const load=(task)=>task.cognitive_load==="high"?3:task.cognitive_load==="medium"?2:1;
    const minutes=(task)=>Math.max(0,Number(task.minutes)||0);
    if(variant.key==="priority")return score(b)-score(a)||(Number(a.urgency_days??999)-Number(b.urgency_days??999));
