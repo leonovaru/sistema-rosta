@@ -1,5 +1,8 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
 import { applySavedDailyTaskAllocations } from "../../_lib/daily-task-assignments.js";
+import { expandRecurringEvents } from "../../_lib/calendar.js";
+import { calculateCalendarBusyByDay } from "../../_lib/calendar-capacity.js";
+import { buildWeeklyWorkload } from "../../_lib/weekly-workload.js";
 function addDays(date,days){const value=new Date(date+"T12:00:00Z");value.setUTCDate(value.getUTCDate()+days);return value.toISOString().slice(0,10);}
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));return values.year+"-"+values.month+"-"+values.day;}
 export async function onRequestGet({request,env}){
@@ -11,7 +14,7 @@ export async function onRequestGet({request,env}){
 }
 export async function onRequestPut({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
- const body=await readJson(request)||{},schedules=body.schedules;
+ const body=await readJson(request)||{},schedules=body.schedules,move=body.move||null;
  if(!Array.isArray(schedules)||!schedules.length||schedules.length>50)return json({error:"Передан некорректный список назначений"},400);
  const settings=await env.DB.prepare("SELECT timezone,working_days_json,work_capacity_configured,daily_capacity_minutes FROM settings WHERE user_id=?").bind(user.id).first();
  const today=localDate(settings?.timezone||"Europe/Moscow"),weekEnd=addDays(today,6);
@@ -35,6 +38,39 @@ export async function onRequestPut({request,env}){
   }
   if(total!==remaining)return json({error:"Сумма дневных назначений должна совпадать с оставшейся оценкой задачи"},400);
   normalized.push({taskId,rows});
+ }
+ if(move){
+  const taskId=String(move.task_id||""),fromDate=String(move.from_date||""),toDate=String(move.to_date||""),moveMinutes=Number(move.minutes);
+  const schedule=normalized.find(item=>item.taskId===taskId);
+  if(!schedule||normalized.length!==1||!/^\d{4}-\d{2}-\d{2}$/.test(fromDate)||!/^\d{4}-\d{2}-\d{2}$/.test(toDate)||fromDate===toDate||!Number.isInteger(moveMinutes)||moveMinutes<=0||!/^\d{2}:\d{2}$/.test(String(move.start_time||""))||!/^\d{2}:\d{2}$/.test(String(move.end_time||"")))return json({error:"Параметры переноса некорректны"},400);
+  const oldTask=await env.DB.prepare("SELECT id,status,due_date,estimated_minutes,actual_minutes FROM tasks WHERE id=? AND user_id=?").bind(taskId,user.id).first();
+  if(!oldTask||!["todo","doing"].includes(oldTask.status))return json({error:"Задача больше не активна"},409);
+  const allTasks=await env.DB.prepare("SELECT id,title,status,due_date,estimated_minutes,actual_minutes,project_id,life_area_id,direction_id,client_id FROM tasks WHERE user_id=? AND status IN ('todo','doing','waiting')").bind(user.id).all();
+  const calendarRows=await env.DB.prepare("SELECT id,title,event_type,start_at,end_at,actual_start_at,actual_end_at,status,repeat_rule,repeat_until FROM calendar_events WHERE user_id=? AND status!='cancelled' AND ((start_at < ? AND end_at > ?) OR (repeat_rule!='none' AND start_at < ? AND repeat_until >= ?)) ORDER BY start_at").bind(user.id,addDays(weekEnd,1)+"T00:00",today+"T00:00",addDays(weekEnd,1)+"T00:00",today).all();
+  const events=expandRecurringEvents(calendarRows.results,today+"T00:00",addDays(weekEnd,1)+"T00:00");
+  const calendarDays=calculateCalendarBusyByDay(events,today,7,workingDays);
+  const baseWeek=buildWeeklyWorkload({today,workingDays,dailyCapacityMinutes:settings?.daily_capacity_minutes,configured:true,calendarDays,calendarEvents:events,tasks:allTasks.results,targets:[]});
+  const existingRows=await env.DB.prepare("SELECT task_id,allocation_date,minutes FROM daily_task_allocations WHERE user_id=? AND allocation_date>=? AND allocation_date<=?").bind(user.id,today,weekEnd).all();
+  applySavedDailyTaskAllocations(baseWeek,existingRows.results,allTasks.results);
+  const baseByDate=new Map();
+  for(const day of baseWeek.days)for(const row of day.tasks||[])if(String(row.id)===taskId)baseByDate.set(day.date,(baseByDate.get(day.date)||0)+Number(row.minutes||0));
+  const sourceCurrent=baseByDate.get(fromDate)||0,targetCurrent=baseByDate.get(toDate)||0;
+  const newByDate=new Map(schedule.rows.map(row=>[row.date,row.minutes]));
+  if(sourceCurrent<moveMinutes||newByDate.get(fromDate)!==sourceCurrent-moveMinutes||newByDate.get(toDate)!==targetCurrent+moveMinutes)return json({error:"Распределение задачи изменилось. Пересчитайте недельный план и подтвердите перенос заново."},409);
+  const dates=new Set([...baseByDate.keys(),...newByDate.keys()]);
+  for(const date of dates)if(date!==fromDate&&date!==toDate&&(baseByDate.get(date)||0)!==(newByDate.get(date)||0))return json({error:"Перенос изменяет дополнительные даты. Обновите предложение."},409);
+  if(!baseWeek.days.some(day=>day.date===fromDate&&day.working_day)||!baseWeek.days.some(day=>day.date===toDate&&day.working_day))return json({error:"Исходная или целевая дата больше не является рабочим днём"},409);
+  const adjusted=new Map(baseWeek.days.map(day=>[day.date,{...day,tasks:[...(day.tasks||[])],planned_task_minutes:Number(day.planned_task_minutes)||0}]));
+  for(const day of adjusted.values()){
+   const removed=day.tasks.filter(row=>String(row.id)===taskId);
+   day.tasks=day.tasks.filter(row=>String(row.id)!==taskId);
+   day.planned_task_minutes-=removed.reduce((sum,row)=>sum+Number(row.minutes||0),0);
+  }
+  for(const row of schedule.rows){const day=adjusted.get(row.date);day.planned_task_minutes+=row.minutes;day.tasks.push({id:taskId,minutes:row.minutes});}
+  const target=adjusted.get(toDate);
+  if(!target||target.planned_task_minutes>target.available_minutes)return json({error:"На целевой день больше не хватает свободной дневной ёмкости с учётом календаря и остальных задач"},409);
+  const toMinutes=value=>Number(value.slice(0,2))*60+Number(value.slice(3,5));
+  if(toMinutes(move.end_time)-toMinutes(move.start_time)<moveMinutes)return json({error:"Предложенное временное окно больше не подходит по длительности"},409);
  }
  const statements=[];
  for(const schedule of normalized){
