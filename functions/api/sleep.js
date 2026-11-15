@@ -112,6 +112,13 @@ export async function onRequestPost({request,env}){
     if(!result.meta.changes)return json({error:"Запись не найдена"},404);
     return json({ok:true});
   }
+  if(action==="goal"){
+    const raw=body?.sleep_target_minutes;
+    const target=raw===null||raw===""?null:Number(raw);
+    if(target!==null&&(!Number.isInteger(target)||target<180||target>720))return json({error:"Цель сна должна быть от 180 до 720 минут или быть пустой"},400);
+    await env.DB.prepare("UPDATE settings SET sleep_target_minutes=?,updated_at=datetime('now') WHERE user_id=?").bind(target,user.id).run();
+    return json({ok:true,sleep_target_minutes:target});
+  }
   if(action==="delete"){
     const id=String(body?.id||"");if(!id)return json({error:"Запись не выбрана"},400);
     const result=await env.DB.prepare("DELETE FROM sleep_sessions WHERE id=? AND user_id=?").bind(id,user.id).run();
