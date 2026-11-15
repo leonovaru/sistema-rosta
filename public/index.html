@@ -53,6 +53,21 @@
             <article><span>Просрочено и к оплате за 30 дней</span><b id="finance-upcoming">0 ₽</b></article><article><span>Останется после них</span><b id="finance-after-upcoming">0 ₽</b></article>
           </div>
           <section class="profitability-section"><div class="section-head"><div><p class="eyebrow">ЭКОНОМИКА НАПРАВЛЕНИЙ</p><h3>Что приносит больше результата</h3></div><div class="analytics-actions"><span id="profitability-period" class="muted"></span><button id="refresh-profitability" type="button" class="button ghost">Обновить</button></div></div><div id="profitability-summary" class="analytics-metrics"></div><div id="profitability-directions" class="analytics-list"></div><p class="fine">Вклад = поступления минус расходы, прямо отнесённые к направлению. Доход на час и вклад на час рассчитываются по фактическому времени завершённых задач. Это управленческая оценка, а не бухгалтерская прибыль: общие расходы и проценты по долгам сюда не распределяются.</p></section>
+          <section class="cashflow-section">
+            <div class="section-head"><div><p class="eyebrow">ПЛАНИРОВАНИЕ ДЕНЕГ</p><h3>Прогноз денежного потока</h3></div><div class="analytics-actions"><select id="cashflow-days" aria-label="Период прогноза"><option value="30">30 дней</option><option value="90" selected>90 дней</option></select><button type="button" class="button ghost" id="refresh-cashflow">Обновить</button></div></div>
+            <div class="cashflow-opening"><label>Сколько денег сейчас доступно, ₽<input id="cashflow-opening-balance" type="number" min="0" step="0.01" value="0"></label><button type="button" class="button ghost" id="save-opening-balance">Сохранить остаток</button><small class="fine">Это стартовая сумма для прогноза, не доход и не прибыль.</small></div>
+            <div class="analytics-metrics" id="cashflow-summary"></div>
+            <div class="cashflow-columns"><div><h4>Планируемое поступление или расход</h4><form id="cashflow-form" class="finance-form">
+              <label>Название<input id="cashflow-title" maxlength="180" required placeholder="Оплата клиента, закупка, сервис"></label>
+              <label>Тип<select id="cashflow-type"><option value="income">Ожидаемое поступление</option><option value="expense">Планируемый расход</option></select></label>
+              <label>Сумма, ₽<input id="cashflow-amount" type="number" min="0.01" step="0.01" required></label>
+              <label>Дата<input id="cashflow-date" type="date" required></label>
+              <label>Направление дохода<select id="cashflow-direction"><option value="">Без направления</option></select></label>
+              <button class="button primary">Добавить в план</button>
+            </form></div><div><h4>Ожидаемые движения</h4><div id="cashflow-events" class="finance-list"></div></div></div>
+            <div class="cashflow-days"><h4>Динамика остатка по дням</h4><div id="cashflow-daily" class="finance-list"></div></div>
+            <p class="fine">Прогноз учитывает плановые записи, активные повторяющиеся обязательства и минимальные платежи по открытым долгам. Он не включает автоматически ещё не внесённые доходы и переменные расходы; неизвестные проценты по долгам не начисляются. Отрицательные дни показывают риск кассового разрыва.</p>
+          </section>
           <p class="fine">Погашение долгов и оплата обязательных платежей учитываются отдельно. Не записывай их повторно как обычные расходы. Проценты по долгам пока фиксируются справочно и не начисляются автоматически.</p>
           <div class="finance-forms">
             <form id="expense-form" class="finance-form"><h3>Записать расход</h3>
