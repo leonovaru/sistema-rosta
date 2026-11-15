@@ -39,7 +39,9 @@ export async function onRequestPost({request,env}){
    due_date:safeDate(t.due_date),priority:["low","medium","high"].includes(t.priority)?t.priority:"medium",
    estimated_minutes:Number.isInteger(Number(t.estimated_minutes))&&Number(t.estimated_minutes)>=5&&Number(t.estimated_minutes)<=10000?Number(t.estimated_minutes):null,
    parent_index:Number.isInteger(t.parent_index)&&t.parent_index>=0&&t.parent_index<i?t.parent_index:null
-  })).filter(t=>t.title);
+  }));
+  if(prepared.some(t=>!t.title))return json({error:"У каждой задачи должно быть название. Проверь пустые строки в черновике."},400);
+  if(prepared.some(t=>t.parent_index!==null&&t.parent_index>=prepared.length))return json({error:"Проверь связь подзадач с родительскими задачами."},400);
   if(!prepared.length)return json({error:"Не найдено задач для сохранения"},400);
   const statements=[];
   for(let i=0;i<prepared.length;i++){
@@ -74,14 +76,17 @@ export async function onRequestPost({request,env}){
  if(!env.AI)return json({error:"Разбор голосовых задач требует подключения Workers AI. Текст распознан, но автоматическое распределение пока недоступно.",transcript,source:"unavailable"},503);
  try{
   const response=await env.AI.run("@cf/google/gemma-4-26b-a4b-it",{
+   response_format:{type:"json_object"},
    messages:[
     {role:"system",content:"Ты диспетчер задач личной системы управления. Разбери русскую диктовку в 1–15 конкретных задач. Верни ТОЛЬКО JSON: {summary:string,tasks:[{title:string,description:string,due_date:'YYYY-MM-DD'|null,priority:'low'|'medium'|'high',estimated_minutes:integer|null,direction_id:string|null,client_id:string|null,project_id:string|null,life_area_id:string|null,parent_index:integer|null}],clarifying_questions:string[]}. Контекст с допустимыми сущностями передан пользователем. Выбирай ID ТОЛЬКО из этого контекста, никогда не придумывай ID. Если проект однозначно найден по смыслу, привяжи задачу к нему и унаследуй его клиента и направление. Если упоминается клиент, выбери только точное/очевидное совпадение. Личные дела направляй в life_area_id, не в коммерческое направление. Если нет уверенности — оставь соответствующий ID null и добавь короткий вопрос. Относительные даты считай от today в timezone из контекста; если срок не сказан — null, не выдумывай. Если в речи перечислены несколько самостоятельных действий — создай отдельные задачи. Если есть большая цель и шаги — создай родительскую задачу и шаги как следующие задачи с parent_index равным индексу родителя. Не превращай каждое слово в задачу. Сохраняй важные детали, названия, суммы и условия. Русский язык. Не считай рекомендации и пожелания подтверждёнными фактами."},
     {role:"user",content:"Контекст доступных направлений, клиентов, проектов и личных областей:\n"+JSON.stringify(context)+"\n\nДиктовка:\n"+transcript}
    ],max_tokens:2200,temperature:0.1
   });
-  const parsed=parseJson(response?.response);
+  const modelText=response?.response ?? response?.choices?.[0]?.message?.content ?? response?.result?.response;
+  const parsed=typeof modelText==="string"?parseJson(modelText):(modelText&&typeof modelText==="object"?modelText:null);
   if(!Array.isArray(parsed?.tasks)||!parsed.tasks.length)throw new Error("Invalid response");
   const allowed={direction_id:new Set(dirs.results.map(x=>x.id)),client_id:new Set(clients.results.map(x=>x.id)),project_id:new Set(projects.results.map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
+  const clarifyingQuestions=Array.isArray(parsed.clarifying_questions)?parsed.clarifying_questions.slice(0,5).map(x=>String(x).slice(0,300)):[];
   const tasks=parsed.tasks.slice(0,15).map((t,i)=>({
    title:String(t.title||"").trim().slice(0,240),description:String(t.description||"").trim().slice(0,2000),
    due_date:safeDate(t.due_date),priority:["low","medium","high"].includes(t.priority)?t.priority:"medium",
@@ -93,7 +98,14 @@ export async function onRequestPost({request,env}){
    parent_index:Number.isInteger(t.parent_index)&&t.parent_index>=0&&t.parent_index<i?t.parent_index:null
   })).filter(t=>t.title);
   if(!tasks.length)throw new Error("No usable tasks");
-  return json({ok:true,source:"ai",summary:String(parsed.summary||"Задачи разобраны").slice(0,500),tasks,clarifying_questions:Array.isArray(parsed.clarifying_questions)?parsed.clarifying_questions.slice(0,5).map(x=>String(x).slice(0,300)):[],context});
+  for(const task of tasks){
+   if(task.project_id){
+    const project=projects.results.find(x=>x.id===task.project_id);
+    if(project){task.client_id=project.client_id||null;task.direction_id=project.direction_id||null;}
+   }
+   if(task.parent_index!==null&&task.parent_index>=tasks.length)task.parent_index=null;
+  }
+  return json({ok:true,source:"ai",summary:String(parsed.summary||"Задачи разобраны").slice(0,500),tasks,clarifying_questions:clarifyingQuestions,context});
  }catch{
   return json({error:"Не удалось надёжно разобрать диктовку. Попробуй переформулировать её или добавь задачу вручную.",transcript},502);
  }
