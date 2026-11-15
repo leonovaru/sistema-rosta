@@ -33,7 +33,16 @@ function renderDailyBlockCards(plans) {
 function renderDailyBlockScenarios(scenarios,selected="priority") {
  const valid=(scenarios||[]).some(item=>item.key===selected)?selected:"priority";
  return '<div class="daily-block-variant-tabs">'+(scenarios||[]).map(item=>'<button type="button" class="button '+(item.key===valid?'':'ghost')+'" data-daily-block-scenario="'+escapeHtml(item.key)+'" aria-pressed="'+(item.key===valid?'true':'false')+'">'+escapeHtml(item.title)+'</button>').join("")+'</div>'+
- (scenarios||[]).map(item=>'<section class="daily-block-variant" data-daily-block-panel="'+escapeHtml(item.key)+'" '+(item.key===valid?'':'hidden')+'><p class="fine">'+escapeHtml(item.description)+' · только черновик, задачи и календарь не меняются</p>'+renderDailyBlockCards(item.plans)+'</section>').join("");
+ (scenarios||[]).map(item=>{
+  const m=item.summary||{};
+  const comparison='<div class="balance-row"><div><b>Полностью помещаются</b><small>Задачи без остатка</small></div><strong>'+Number(m.completed_tasks||0)+' из '+Number(m.total_tasks||0)+'</strong></div>'+
+   '<div class="balance-row"><div><b>Важные задачи</b><small>Полностью помещаются</small></div><strong>'+Number(m.high_priority_completed||0)+' из '+Number(m.high_priority_tasks||0)+'</strong></div>'+
+   '<div class="balance-row"><div><b>Частично / не помещаются</b><small>'+Number(m.partially_scheduled_tasks||0)+' частично · '+Number(m.unplaced_tasks||0)+' не начаты</small></div><strong>'+duration(m.unallocated_minutes||0)+'</strong></div>'+
+   '<div class="balance-row"><div><b>Свободный остаток</b><small>После блоков и перерывов</small></div><strong>'+duration(m.unused_minutes||0)+'</strong></div>'+
+   '<div class="balance-row"><div><b>Перегруженные дни</b><small>Есть задачи с нераспределённым временем</small></div><strong>'+Number(m.overloaded_days||0)+'</strong></div>'+
+   '<div class="balance-row"><div><b>Переносы между днями</b><small>В этом сравнении задачи остаются в исходных днях</small></div><strong>0</strong></div>';
+  return '<section class="daily-block-variant" data-daily-block-panel="'+escapeHtml(item.key)+'" '+(item.key===valid?'':'hidden')+'><p class="fine">'+escapeHtml(item.description)+' · только черновик, задачи и календарь не меняются</p><article class="weekly-focus-card"><b>Сравнение варианта</b>'+comparison+'</article>'+renderDailyBlockCards(item.plans)+'</section>';
+ }).join("");
 }
 
 const money = n => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(n || 0)) + " ₽";
