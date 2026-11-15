@@ -17,12 +17,13 @@ export async function onRequestPost({request,env}){
   if(!expenseId||!validDate(paidOn))return json({error:"Укажи корректную дату оплаты"},400);
   const item=await env.DB.prepare("SELECT * FROM irregular_expenses WHERE id=? AND user_id=? AND active=1").bind(expenseId,user.id).first();
   if(!item)return json({error:"Активный нерегулярный расход не найден"},404);
+  if(await env.DB.prepare("SELECT id FROM irregular_expense_payments WHERE irregular_expense_id=? AND paid_on=? LIMIT 1").bind(expenseId,paidOn).first())return json({error:"Оплата за эту дату уже зарегистрирована"},409);
   const amount=Number(item.amount),paymentId=newId(),expenseEntryId=newId();
   let nextDate=null,active=0;
   if(item.frequency!=="once"){
    nextDate=nextIrregularDate(item.next_date,item.frequency,item.recurrence_day);
    let guard=0;
-   while(nextDate&&nextDate<=paidOn&&guard++<40)nextDate=nextIrregularDate(nextDate,item.frequency);
+   while(nextDate&&nextDate<=paidOn&&guard++<40)nextDate=nextIrregularDate(nextDate,item.frequency,item.recurrence_day);
    if(!nextDate)return json({error:"Не удалось рассчитать следующую дату"},400);
    active=1;
   }
