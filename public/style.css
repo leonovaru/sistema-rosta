@@ -157,3 +157,10 @@
 .meeting-followup-summary small{color:var(--muted,#687080);font-size:12px}
 .meeting-followup-summary b{font-size:20px;font-variant-numeric:tabular-nums}
 .meeting-followup-summary .is-overdue{border-color:var(--danger,#c44)}
+
+.meeting-followup-list{margin:8px 0 14px;padding:10px 12px;border:1px solid var(--line,#ddd);border-radius:9px}
+.meeting-followup-list summary{cursor:pointer;font-weight:600}
+.meeting-followup-list ul{margin:8px 0 0;padding-left:20px}
+.meeting-followup-list li{margin:8px 0}
+.meeting-followup-list li small{display:block;color:var(--muted,#687080);margin-top:2px}
+.meeting-followup-list li.is-overdue{color:var(--danger,#b42318)}
