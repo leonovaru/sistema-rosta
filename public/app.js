@@ -206,6 +206,28 @@ async function loadDebtForecast(){
 $("refresh-debt-forecast").addEventListener("click",()=>loadDebtForecast().catch(err=>alert(err.message)));
 $("debt-extra-payment").addEventListener("change",()=>loadDebtForecast().catch(err=>alert(err.message)));
 $("debt-forecast-months").addEventListener("change",()=>loadDebtForecast().catch(err=>alert(err.message)));
+async function loadCategoryBudget(){
+ const month=$("budget-month").value;
+ const data=await api("/api/finance/budget?month="+encodeURIComponent(month));
+ const s=data.summary;
+ $("budget-summary").innerHTML=[["План",money(s.planned)],["Факт",money(s.actual)],["Превышение лимитов",money(s.over_budget)]].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
+ $("budget-categories").innerHTML=data.categories.length?data.categories.map(x=>{
+  const status=x.planned===null?"Лимит не задан":x.remaining<0?"Превышен на "+money(-x.remaining):"Осталось "+money(x.remaining);
+  const width=x.planned>0?Math.min(100,x.actual/x.planned*100):0;
+  return '<article class="finance-row"><div class="budget-category-main"><b>'+escapeHtml(x.category)+'</b><small>Факт '+money(x.actual)+' · '+status+'</small>'+(x.planned!==null?'<div class="progress"><span style="width:'+width+'%"></span></div>':'')+'</div><strong>'+(x.planned===null?"—":money(x.planned))+'</strong>'+(x.planned!==null?'<button class="button ghost" data-budget-delete="'+escapeHtml(x.category)+'">×</button>':'')+'</article>';
+ }).join(""):'<p class="muted">Пока нет расходов и бюджетов за этот месяц.</p>';
+}
+$("budget-month").addEventListener("change",()=>loadCategoryBudget().catch(err=>alert(err.message)));
+$("budget-form").addEventListener("submit",async e=>{
+ e.preventDefault();
+ try{await api("/api/finance/budget",{method:"POST",body:JSON.stringify({month:$("budget-month").value,category:$("budget-category").value,planned_amount:$("budget-amount").value})});$("budget-amount").value="";await loadCategoryBudget();}
+ catch(err){alert(err.message);}
+});
+$("budget-categories").addEventListener("click",async e=>{
+ const b=e.target.closest("[data-budget-delete]");if(!b)return;
+ try{await api("/api/finance/budget",{method:"DELETE",body:JSON.stringify({month:$("budget-month").value,category:b.dataset.budgetDelete})});await loadCategoryBudget();}
+ catch(err){alert(err.message);}
+});
 async function loadFinance() {
   financeData = await api("/api/finance");
   const s=financeData.summary;
@@ -218,6 +240,7 @@ async function loadFinance() {
   $("finance-debt-balance").textContent=money(s.debt_balance);
   $("finance-upcoming").textContent=money(s.upcoming_obligations);
   $("finance-after-upcoming").textContent=money(s.net-s.upcoming_obligations);
+  $("budget-month").value=financeData.today.slice(0,7);
   $("expense-date").value=financeData.today;
   $("cashflow-direction").innerHTML='<option value="">Без направления</option>'+directions.map(d=>'<option value="'+escapeHtml(d.id)+'">'+escapeHtml(d.title)+'</option>').join("");
   $("expense-direction").innerHTML='<option value="">Не распределять / личный расход</option>'+directions.map(d=>'<option value="'+escapeHtml(d.id)+'">'+escapeHtml(d.title)+'</option>').join("");
@@ -232,6 +255,7 @@ async function loadFinance() {
   await loadCashflowForecast();
   await loadDebtForecast();
   await loadRevenuePlan();
+  await loadCategoryBudget();
 }
 $("expense-form").addEventListener("submit",async e=>{
   e.preventDefault();
