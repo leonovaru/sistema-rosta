@@ -153,6 +153,26 @@
           <div class="charity-columns"><div><h3>Проекты и сборы</h3><div id="charity-projects" class="workspace-list"></div></div><div><h3>Последние операции</h3><div id="charity-transactions" class="finance-list"></div></div><div><h3>Люди и партнёры</h3><div id="charity-people" class="workspace-list"></div></div></div>
           <p class="fine">Операции этого раздела не попадают в коммерческую выручку и личные расходы. Для отражения реального движения денег в общем бюджете позднее добавим явную связь с личными счетами, чтобы не задваивать пожертвования и переводы.</p>
         </section>
+                <section class="panel dreams-panel">
+          <div class="section-head"><div><p class="eyebrow">ЖИЗНЬ, К КОТОРОЙ ИДЁМ</p><h2>Мечты и финансовые цели</h2></div><span class="muted">Мечта становится планом только по твоему решению</span></div>
+          <form id="dream-form" class="dream-form">
+            <h3>Добавить мечту</h3>
+            <div class="dream-form-grid">
+              <label>Что хочется осуществить?<input id="dream-title" required maxlength="180" placeholder="Например, собственный дом"></label>
+              <label>Категория<select id="dream-category"><option value="home">Дом и недвижимость</option><option value="travel">Путешествия</option><option value="business">Бизнес и проекты</option><option value="health">Здоровье</option><option value="learning">Обучение</option><option value="experience">Впечатления</option><option value="help">Помощь другим</option><option value="purchase">Покупки</option><option value="other">Другое</option></select></label>
+              <label>Примерная стоимость, ₽<input id="dream-cost" type="number" min="0" step="0.01" placeholder="Можно пока не указывать"></label>
+              <label>Желаемый срок<input id="dream-date" type="date"></label>
+              <label>Приоритет<select id="dream-priority"><option value="high">Очень хочется</option><option value="medium" selected>Важно</option><option value="low">Когда-нибудь</option></select></label>
+              <label>Ссылка на изображение<input id="dream-image" type="url" maxlength="1000" placeholder="https://..."></label>
+              <label class="dream-wide">Ссылка / источник<input id="dream-link" type="url" maxlength="1000" placeholder="Сайт, объявление, место"></label>
+              <label class="dream-wide">Описание<textarea id="dream-description" rows="2" maxlength="3000" placeholder="Как ты представляешь эту мечту?"></textarea></label>
+              <label class="dream-wide">Почему это важно<textarea id="dream-reason" rows="2" maxlength="1000"></textarea></label>
+            </div>
+            <button class="button primary">Сохранить мечту</button>
+          </form>
+          <div class="dreams-layout"><div><h3>Мои мечты</h3><div id="dreams-list" class="dreams-list"></div></div><div><h3>Финансовые цели</h3><div id="financial-goals-list" class="dreams-list"></div></div></div>
+          <p class="fine">Мечты не входят в бюджет и не создают обязательств. Финансовая цель появляется только после отдельного подтверждения.</p>
+        </section>
         <section class="panel analytics-panel">
           <div class="section-head"><div><p class="eyebrow">АНАЛИЗ РЕЗУЛЬТАТОВ</p><h2>Время и эффективность</h2></div><div class="analytics-actions"><span class="muted" id="analytics-period"></span><button type="button" class="button ghost" id="refresh-analytics">Обновить</button></div></div>
           <div class="analytics-metrics" id="analytics-summary"></div>
