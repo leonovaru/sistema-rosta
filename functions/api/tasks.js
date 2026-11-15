@@ -1,5 +1,13 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 
+async function invalidateTodayPlan(env, userId) {
+  const settings = await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(userId).first();
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone:settings?.timezone || "Europe/Moscow", year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  const today = values.year + "-" + values.month + "-" + values.day;
+  await env.DB.prepare("DELETE FROM daily_plans WHERE user_id=? AND plan_date=?").bind(userId, today).run();
+}
+
 async function owned(env, table, id, userId) {
   if (!id) return true;
   return Boolean(await env.DB.prepare(`SELECT id FROM ${table} WHERE id=? AND user_id=?`).bind(id,userId).first());
@@ -66,6 +74,7 @@ export async function onRequestPost({ request, env }) {
   const id = newId();
   await env.DB.prepare("INSERT INTO tasks (id,user_id,direction_id,client_id,project_id,life_area_id,parent_task_id,title,description,due_date,priority,estimated_minutes,ai_plan) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
     .bind(id,user.id,finalDirectionId,finalClientId,finalProjectId,finalLifeAreaId,parentTaskId,title,description,dueDate,["low","medium","high"].includes(body?.priority)?body.priority:"medium",estimated,String(body?.ai_plan||"").slice(0,3000)).run();
+  await invalidateTodayPlan(env, user.id);
   return json({ ok: true, id }, 201);
 }
 
@@ -80,11 +89,13 @@ export async function onRequestPatch({ request, env }) {
     if (actual !== null && (!Number.isInteger(actual) || actual < 0 || actual > 10000)) return json({ error: "Укажите фактическое время в минутах" }, 400);
     const result = await env.DB.prepare("UPDATE tasks SET actual_minutes=? WHERE id=? AND user_id=?").bind(actual,id,user.id).run();
     if (!result.meta.changes) return json({ error: "Задача не найдена" }, 404);
+    await invalidateTodayPlan(env, user.id);
     return json({ ok: true });
   }
   const status = String(body?.status || "");
   if (!["todo","doing","waiting","done"].includes(status)) return json({ error: "Некорректные данные" }, 400);
   const result = await env.DB.prepare("UPDATE tasks SET status=?,completed_at=CASE WHEN ?='done' THEN datetime('now') ELSE NULL END WHERE id=? AND user_id=?").bind(status,status,id,user.id).run();
   if (!result.meta.changes) return json({ error: "Задача не найдена" }, 404);
+  await invalidateTodayPlan(env, user.id);
   return json({ ok: true });
 }
