@@ -9,8 +9,9 @@ test("keeps ordinary and unlinked tasks available for planning",()=>{
  assert.equal(isTaskAvailableForPlanning({project_status:null,client_status:null}),true);
 });
 
-test("excludes tasks belonging to archived projects or closed clients",()=>{
+test("excludes tasks belonging to archived or completed projects and closed clients",()=>{
  assert.equal(isTaskAvailableForPlanning({project_status:"archived"}),false);
+ assert.equal(isTaskAvailableForPlanning({project_status:"done"}),false);
  assert.equal(isTaskAvailableForPlanning({client_status:"closed"}),false);
  assert.equal(isTaskAvailableForPlanning({project_status:"active",project_client_status:"closed"}),false);
 });
@@ -21,6 +22,7 @@ test("does not count archived workspace tasks in weekly planning or waiting coun
   tasks:[
    {id:"active",title:"Активная",status:"todo",due_date:"2026-11-16",estimated_minutes:60,project_status:"active"},
    {id:"archived-project",title:"Архивный проект",status:"todo",due_date:"2026-11-16",estimated_minutes:120,project_status:"archived"},
+   {id:"completed-project",title:"Завершённый проект",status:"todo",due_date:"2026-11-16",estimated_minutes:180,project_status:"done"},
    {id:"closed-client",title:"Закрытый клиент",status:"waiting",due_date:"2026-11-16",estimated_minutes:90,client_status:"closed"},
    {id:"closed-project-client",title:"Проект закрытого клиента",status:"todo",due_date:"2026-11-16",estimated_minutes:30,project_status:"active",project_client_status:"closed"}
   ]
