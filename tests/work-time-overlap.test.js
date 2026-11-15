@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { taskTimeIntervalsForLocalDay, calculateUnionWorkMinutes } from "../functions/_lib/work-time-overlap.js";
+import { taskTimeIntervalsForLocalDay, calculateUnionWorkMinutes, localDateForInstant } from "../functions/_lib/work-time-overlap.js";
 
 test("converts tracked task time into the configured local day", () => {
   const intervals = taskTimeIntervalsForLocalDay([
@@ -30,4 +30,9 @@ test("merges task timer and calendar work intervals so overlapping time is count
     [{ start: 10 * 60, end: 11 * 60 }, { start: 12 * 60 + 30, end: 13 * 60 + 30 }]
   );
   assert.equal(minutes, 210);
+});
+
+test("assigns tracked sessions to the configured local date rather than UTC date", () => {
+  assert.equal(localDateForInstant("2026-11-14T23:30:00.000Z", "Europe/Amsterdam"), "2026-11-15");
+  assert.equal(localDateForInstant("2026-11-15T22:30:00.000Z", "Europe/Amsterdam"), "2026-11-15");
 });
