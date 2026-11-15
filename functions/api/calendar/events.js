@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
-import { expandRecurringEvents, isValidCalendarDate, isValidCalendarDateTime } from "../../_lib/calendar.js";
+import { expandRecurringEvents, createSleepCalendarEvents, isValidCalendarDate, isValidCalendarDateTime } from "../../_lib/calendar.js";
 
 const TYPES = ["meeting","travel","hobby","sleep","work","personal","other"];
 const MODES = ["none","online","offline"];
@@ -53,7 +53,15 @@ export async function onRequestGet({ request, env }) {
       AND ((start_at < ? AND end_at > ?) OR (repeat_rule!='none' AND start_at < ? AND repeat_until >= ?))
     ORDER BY start_at
   `).bind(user.id,to,from,to,from.slice(0,10)).all();
-  return json({ events:expandRecurringEvents(results,from,to) });
+  const settings = await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+  const timezone = settings?.timezone || "Europe/Moscow";
+  const fromDate = new Date(from.slice(0,10) + "T12:00:00Z");
+  fromDate.setUTCDate(fromDate.getUTCDate() - 1);
+  const sleepFrom = fromDate.toISOString().slice(0,10);
+  const sleepRows = await env.DB.prepare("SELECT * FROM sleep_sessions WHERE user_id=? AND sleep_date>=? AND sleep_date<=? AND fell_asleep_at IS NOT NULL AND woke_at IS NOT NULL").bind(user.id,sleepFrom,to.slice(0,10)).all();
+  const events = expandRecurringEvents(results,from,to);
+  const sleepEvents = createSleepCalendarEvents(sleepRows.results,from,to,timezone,events);
+  return json({ events:[...events,...sleepEvents].sort((a,b)=>a.start_at.localeCompare(b.start_at)) });
 }
 
 export async function onRequestPost({ request, env }) {
