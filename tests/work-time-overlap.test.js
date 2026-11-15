@@ -13,7 +13,7 @@ test("clips a tracked session that crosses local midnight to the selected day", 
   const intervals = taskTimeIntervalsForLocalDay([
     { started_at: "2026-11-14T22:30:00.000Z", ended_at: "2026-11-15T02:00:00.000Z" }
   ], "2026-11-15", "Europe/Amsterdam");
-  assert.deepEqual(intervals, [{ start: 30, end: 180 }]);
+  assert.deepEqual(intervals, [{ start: 0, end: 180 }]);
 });
 
 test("uses the current time for an active timer and ignores invalid intervals", () => {
@@ -27,7 +27,7 @@ test("uses the current time for an active timer and ignores invalid intervals", 
 test("merges task timer and calendar work intervals so overlapping time is counted once", () => {
   const minutes = calculateUnionWorkMinutes(
     [{ start: 9 * 60, end: 10 * 60 + 30 }, { start: 12 * 60, end: 13 * 60 }],
-    [{ start: 10 * 60, end: 11 * 60 }, { start: 12 * 60 + 30, end: 13 * 30 }]
+    [{ start: 10 * 60, end: 11 * 60 }, { start: 12 * 60 + 30, end: 13 * 60 + 30 }]
   );
   assert.equal(minutes, 210);
 });
