@@ -114,6 +114,33 @@ function renderVoiceDraft(){
  });
  $("voice-discard").addEventListener("click",()=>{voiceDraft=null;renderVoiceDraft();});
 }
+let meetingDraft=null;
+function renderMeetingPreview(){
+ const box=$("meeting-preview");
+ if(!meetingDraft){box.classList.add("hidden");box.innerHTML="";return;}
+ const m=meetingDraft;
+ const list=(items)=>items?.length?'<ul>'+items.map(x=>'<li>'+escapeHtml(typeof x==="string"?x:x.task+(x.assignee?" · Ответственный: "+x.assignee:"")+(x.due_date?" · срок "+x.due_date:""))+'</li>').join("")+'</ul>':'<p class="fine">Не выявлено</p>';
+ box.classList.remove("hidden");
+ box.innerHTML='<div class="meeting-review"><h3>Проверь протокол</h3><label>Название встречи<input id="meeting-title" maxlength="180" value="'+escapeHtml(m.title||"Встреча")+'"></label><label>Дата<input id="meeting-date" type="date" value="'+escapeHtml(m.meeting_date||"")+'"></label><label>Участники<input id="meeting-participants" maxlength="1000" value="'+escapeHtml(m.participants||"")+'"></label><label>Проект<select id="meeting-project"><option value="">Не привязывать</option>'+workspaceData.projects.map(p=>'<option value="'+escapeHtml(p.id)+'" '+(m.project_id===p.id?"selected":"")+'>'+escapeHtml(p.title)+'</option>').join("")+'</select></label><label>Клиент<select id="meeting-client"><option value="">Не привязывать</option>'+workspaceData.clients.map(x=>'<option value="'+escapeHtml(x.id)+'" '+(m.client_id===x.id?"selected":"")+'>'+escapeHtml(x.name)+'</option>').join("")+'</select></label><label>Краткое содержание<textarea id="meeting-summary" rows="3">'+escapeHtml(m.summary||"")+'</textarea></label><h4>Принятые решения</h4>'+list(m.decisions)+'<h4>Договорённости и поручения</h4>'+list(m.agreements)+'<h4>Предложения — ещё не согласованы</h4>'+list(m.proposed_actions)+'<h4>Открытые вопросы</h4>'+list(m.open_questions)+(m.clarifying_questions?.length?'<h4>Нужно уточнить</h4>'+list(m.clarifying_questions):'')+'<div class="voice-controls"><button type="button" class="button primary" id="meeting-save">Сохранить протокол</button><button type="button" class="button secondary" id="meeting-create-tasks" '+(!m.agreements?.length||m.tasks_created?"disabled":"")+'>'+ (m.tasks_created?"Задачи уже добавлены":"Создать задачи по договорённостям")+'</button><button type="button" class="button ghost" id="meeting-discard">Закрыть</button></div><p class="fine" id="meeting-status"></p></div>';
+ $("meeting-save").addEventListener("click",async()=>{
+  const button=$("meeting-save");button.disabled=true;
+  try{const result=await api("/api/meetings",{method:"POST",body:JSON.stringify({action:"save",title:$("meeting-title").value,meeting_date:$("meeting-date").value,participants:$("meeting-participants").value,project_id:$("meeting-project").value||null,client_id:$("meeting-client").value||null,summary:$("meeting-summary").value,decisions:m.decisions,agreements:m.agreements.map(x=>x.task+(x.assignee?" (ответственный: "+x.assignee+")":"")+(x.due_date?" (срок: "+x.due_date+")":"")),open_questions:m.open_questions,transcript:m.transcript})});$("meeting-status").textContent="Протокол сохранён.";button.textContent="Сохранено";}catch(err){$("meeting-status").textContent=err.message;button.disabled=false;}
+ });
+ $("meeting-create-tasks").addEventListener("click",async()=>{
+  const button=$("meeting-create-tasks");button.disabled=true;
+  try{const tasks=m.agreements.map(a=>({title:a.task,description:[a.assignee?"Ответственный: "+a.assignee:"", "Договорённость встречи: "+m.title].filter(Boolean).join("\n"),due_date:a.due_date,priority:"medium",project_id:a.project_id||m.project_id||null,client_id:a.client_id||m.client_id||null,operation:"create"}));
+   await api("/api/tasks/voice-intake",{method:"POST",body:JSON.stringify({action:"save",tasks})});m.tasks_created=true;button.textContent="Задачи добавлены";$("meeting-status").textContent="Создано задач: "+tasks.length;await loadTasks();
+  }catch(err){$("meeting-status").textContent=err.message;button.disabled=false;}
+ });
+ $("meeting-discard").addEventListener("click",()=>{meetingDraft=null;renderMeetingPreview();});
+}
+$("meeting-analyze").addEventListener("click",async()=>{
+ const transcript=$("voice-transcript").value.trim();if(!transcript){alert("Сначала надиктуй или вставь текст встречи в поле выше.");return;}
+ const button=$("meeting-analyze");button.disabled=true;button.textContent="Разбираю встречу…";
+ try{meetingDraft=await api("/api/meetings",{method:"POST",body:JSON.stringify({action:"analyze",transcript})});meetingDraft.transcript=transcript;renderMeetingPreview();}
+ catch(err){alert(err.message);meetingDraft=null;renderMeetingPreview();}
+ finally{button.disabled=false;button.textContent="Разобрать как встречу";}
+});
 function initVoiceInput(){
  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
  if(!SpeechRecognition){$("voice-start").disabled=true;$("voice-status").textContent="Диктовка недоступна в этом браузере — вставь текст вручную";return;}
