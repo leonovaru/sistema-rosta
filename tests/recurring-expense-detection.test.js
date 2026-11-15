@@ -27,3 +27,18 @@ test("does not duplicate existing obligations or re-suggest paid irregular expen
  const found=detectRecurringExpenses(rows,{today:"2026-11-10",existingTitles:["Страховка"]});
  assert.equal(found.length,0);
 });
+
+test("preserves end-of-month billing day when suggesting monthly payments",()=>{
+ const rows=["2026-08-31","2026-09-30","2026-10-31"].map(spent_on=>({title:"Аренда склада",category:"Аренда",amount:12000,spent_on}));
+ const found=detectRecurringExpenses(rows,{today:"2026-11-15"});
+ assert.equal(found.length,1);
+ assert.equal(found[0].next_date,"2026-11-30");
+});
+
+test("recognizes stable weekly payments",()=>{
+ const rows=["2026-10-19","2026-10-26","2026-11-02"].map(spent_on=>({title:"Занятия",category:"Обучение",amount:900,spent_on}));
+ const found=detectRecurringExpenses(rows,{today:"2026-11-10"});
+ assert.equal(found.length,1);
+ assert.equal(found[0].frequency,"weekly");
+ assert.equal(found[0].next_date,"2026-11-09");
+});
