@@ -67,12 +67,13 @@ export async function onRequestPost({request,env}){
  }
  const transcript=String(body.transcript||"").trim();
  if(!transcript||transcript.length>6000)return json({error:"Надиктуй или вставь текст задачи (до 6000 символов)"},400);
- const [settings,dirs,clients,projects,areas]=await Promise.all([
+ const [settings,dirs,clients,projects,areas,existingTasks]=await Promise.all([
   env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first(),
   env.DB.prepare("SELECT id,title FROM directions WHERE user_id=? ORDER BY sort_order").bind(user.id).all(),
   env.DB.prepare("SELECT id,name,direction_id FROM clients WHERE user_id=? AND status IN ('lead','active','paused')").bind(user.id).all(),
   env.DB.prepare("SELECT id,title,client_id,direction_id,description,deadline FROM projects WHERE user_id=? AND status NOT IN ('done','archived')").bind(user.id).all(),
-  env.DB.prepare("SELECT id,title,description FROM life_areas WHERE user_id=? ORDER BY title").bind(user.id).all()
+  env.DB.prepare("SELECT id,title,description FROM life_areas WHERE user_id=? ORDER BY title").bind(user.id).all(),
+  env.DB.prepare("SELECT id,title,project_id,client_id,direction_id,life_area_id,due_date FROM tasks WHERE user_id=? AND status!='done' ORDER BY created_at DESC LIMIT 150").bind(user.id).all()
  ]);
  const today=localDate(settings?.timezone||"Europe/Moscow");
  const context={today,timezone:settings?.timezone||"Europe/Moscow",directions:dirs.results,clients:clients.results,projects:projects.results,life_areas:areas.results,existing_open_tasks:existingTasks.results};
