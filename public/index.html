@@ -138,7 +138,9 @@
                 <label>Комментарий<input id="deal-notes" maxlength="1500" placeholder="Следующий шаг, договорённости"></label>
                 <div class="deal-form-actions"><button class="button primary" id="deal-form-submit" type="submit">Добавить сделку</button><button class="button ghost hidden" id="deal-form-cancel" type="button">Отменить редактирование</button></div>
               </form>
-              <div id="deals-summary" class="analytics-metrics"></div><div id="deals-loss-analysis" class="deals-loss-analysis"></div><div id="deals-list" class="analytics-list"></div>
+              <div id="deals-summary" class="analytics-metrics"></div>
+              <section class="deal-monthly-section"><h4>План и факт поступлений по месяцам</h4><div id="deals-monthly-forecast" class="deal-monthly-forecast"></div><p class="fine">План — открытые сделки с указанной датой оплаты. Прогноз — сумма с учётом вероятности. Факт — зарегистрированные поступления в финансовом учёте. Выигранные сделки не дублируются в факте автоматически.</p></section>
+              <div id="deals-loss-analysis" class="deals-loss-analysis"></div><div id="deals-list" class="analytics-list"></div>
               <p class="fine">Взвешенный прогноз = сумма сделки × вероятность. Выигранные сделки учитываются отдельно; они не заменяют фактические поступления в финансовом учёте.</p>
             </section>
           </section>
