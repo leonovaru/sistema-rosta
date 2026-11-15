@@ -201,13 +201,13 @@ export async function onRequestDelete({request,env}) {
     const activeTimer=await env.DB.prepare("SELECT e.id FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id WHERE e.user_id=? AND e.ended_at IS NULL AND (t.client_id=? OR p.client_id=?) LIMIT 1").bind(user.id,id,id).first();
     if(activeTimer)return json({error:"Сначала поставьте на паузу активный таймер по этому клиенту или его проектам"},409);
     // Keep client interactions, linked projects, deals and financial history intact.
-    const r=await env.DB.prepare("UPDATE clients SET closed_previous_status=CASE WHEN status!='closed' THEN status ELSE closed_previous_status END,status='closed',updated_at=datetime('now') WHERE id=? AND user_id=?").bind(id,user.id).run();
+    const r=await env.DB.prepare("UPDATE clients SET closed_previous_status=CASE WHEN status!='closed' THEN status ELSE closed_previous_status END,status='closed',updated_at=datetime('now') WHERE id=? AND user_id=? AND NOT EXISTS (SELECT 1 FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id WHERE e.user_id=clients.user_id AND e.ended_at IS NULL AND (t.client_id=clients.id OR p.client_id=clients.id))").bind(id,user.id).run();
     if(!r.meta.changes)return json({error:"Клиент не найден"},404);
   } else {
     const activeTimer=await env.DB.prepare("SELECT e.id FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id WHERE e.user_id=? AND e.ended_at IS NULL AND t.project_id=? LIMIT 1").bind(user.id,id).first();
     if(activeTimer)return json({error:"Сначала поставьте на паузу активный таймер по этому проекту"},409);
     // Archive projects instead of breaking task, meeting, cashflow and finance links.
-    const r=await env.DB.prepare("UPDATE projects SET archived_previous_status=CASE WHEN status!='archived' THEN status ELSE archived_previous_status END,status='archived',updated_at=datetime('now') WHERE id=? AND user_id=?").bind(id,user.id).run();
+    const r=await env.DB.prepare("UPDATE projects SET archived_previous_status=CASE WHEN status!='archived' THEN status ELSE archived_previous_status END,status='archived',updated_at=datetime('now') WHERE id=? AND user_id=? AND NOT EXISTS (SELECT 1 FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id WHERE e.user_id=projects.user_id AND e.ended_at IS NULL AND t.project_id=projects.id)").bind(id,user.id).run();
     if(!r.meta.changes)return json({error:"Проект не найден"},404);
   }
   return json({ok:true,archived:type!=="life_area"});
