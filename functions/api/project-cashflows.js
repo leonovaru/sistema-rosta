@@ -31,7 +31,7 @@ export async function onRequestPatch({request,env}){
  const b=await readJson(request),id=String(b.id||""),action=String(b.action||"");
  if(action!=="link"){
   const status=String(b.status||"");
-  if(!id||!["planned","cancelled"].includes(status))return json({error:"Некорректный статус записи"},400);
+  if(!id||status!=="cancelled")return json({error:"Изменить статус можно только на «Убрано из графика»; исполнение рассчитывается по связанным операциям"},400);
   const result=await env.DB.prepare("UPDATE planned_cashflows SET status=? WHERE id=? AND user_id=? AND archived_at IS NULL AND project_id IN (SELECT id FROM projects WHERE user_id=?)").bind(status,id,user.id,user.id).run();
   if(!result.meta.changes)return json({error:"Плановая запись не найдена"},404);
   return json({ok:true});
