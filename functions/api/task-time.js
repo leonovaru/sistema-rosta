@@ -41,7 +41,7 @@ export async function onRequestPost({ request, env }) {
     try {
       const [, timerInsert] = await env.DB.batch([
         env.DB.prepare("UPDATE tasks SET status='doing' WHERE id=? AND user_id=? AND status!='done' AND NOT EXISTS (SELECT 1 FROM task_time_entries WHERE user_id=? AND ended_at IS NULL)").bind(taskId,user.id,user.id),
-        env.DB.prepare("INSERT INTO task_time_entries(id,user_id,task_id,started_at) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM tasks WHERE id=? AND user_id=? AND status='doing') AND NOT EXISTS (SELECT 1 FROM task_time_entries WHERE user_id=? AND ended_at IS NULL)").bind(id,user.id,taskId,now,taskId,user.id,user.id)
+        env.DB.prepare("INSERT INTO task_time_entries(id,user_id,task_id,started_at,attribution_captured,direction_id,project_id,life_area_id,client_id,direction_title,project_title,life_area_title,client_name) SELECT ?,?,?,?,1,COALESCE(t.direction_id,p.direction_id,c.direction_id),t.project_id,t.life_area_id,t.client_id,d.title,p.title,la.title,c.name FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN directions d ON d.id=COALESCE(t.direction_id,p.direction_id,c.direction_id) AND d.user_id=t.user_id LEFT JOIN life_areas la ON la.id=t.life_area_id AND la.user_id=t.user_id WHERE t.id=? AND t.user_id=? AND t.status='doing' AND NOT EXISTS (SELECT 1 FROM task_time_entries WHERE user_id=? AND ended_at IS NULL)").bind(id,user.id,taskId,now,taskId,user.id,user.id)
       ]);
       if (!timerInsert.meta.changes) return json({ error:"Задача уже завершена или запущен другой таймер. Обновите страницу." },409);
     } catch {
