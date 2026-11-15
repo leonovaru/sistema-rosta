@@ -1,6 +1,6 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 const STAGES=new Set(["contact","negotiation","proposal","awaiting_payment","won","lost"]);
-const validDate=value=>!value||(/^\\d{4}-\\d{2}-\\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+"T00:00:00Z"))&&new Date(value+"T00:00:00Z").toISOString().slice(0,10)===value);
+const validDate=value=>!value||(/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+"T00:00:00Z"))&&new Date(value+"T00:00:00Z").toISOString().slice(0,10)===value);
 async function owned(env,table,id,userId){if(!id)return true;return Boolean(await env.DB.prepare("SELECT id FROM "+table+" WHERE id=? AND user_id=?").bind(id,userId).first());}
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
