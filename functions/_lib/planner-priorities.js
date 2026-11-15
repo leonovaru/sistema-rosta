@@ -37,3 +37,32 @@ export function normalizePlannerItems(items, tasks, capacity) {
     return true;
   }).slice(0, 7);
 }
+
+export function calibrateTaskEstimates(tasks, history) {
+  const ratiosByDirection = new Map();
+  const ratiosGlobal = [];
+  for (const item of history || []) {
+    const estimate = Number(item.estimated_minutes);
+    const actual = Number(item.actual_minutes);
+    if (!Number.isFinite(estimate) || !Number.isFinite(actual) || estimate < 5 || actual < 1) continue;
+    const ratio = Math.max(0.5, Math.min(2, actual / estimate));
+    ratiosGlobal.push(ratio);
+    if (item.direction_id) {
+      if (!ratiosByDirection.has(item.direction_id)) ratiosByDirection.set(item.direction_id, []);
+      ratiosByDirection.get(item.direction_id).push(ratio);
+    }
+  }
+  const median = values => {
+    const sorted = [...values].sort((a,b)=>a-b);
+    return sorted.length ? sorted[Math.floor(sorted.length/2)] : 1;
+  };
+  return (tasks || []).map(task => {
+    const estimate = Math.max(5, Math.round(Number(task.estimated_minutes) || 30));
+    if (task.status === "doing") {
+      return { ...task, planning_minutes:Math.max(5,estimate-Math.max(0,Number(task.actual_minutes)||0)), estimate_basis:"remaining" };
+    }
+    const local = ratiosByDirection.get(task.direction_id) || [];
+    const ratio = local.length >= 3 ? median(local) : ratiosGlobal.length >= 3 ? median(ratiosGlobal) : 1;
+    return { ...task, planning_minutes:Math.max(5,Math.round(estimate*ratio)), estimate_basis:local.length>=3?"direction_history":ratiosGlobal.length>=3?"overall_history":"initial_estimate" };
+  });
+}
