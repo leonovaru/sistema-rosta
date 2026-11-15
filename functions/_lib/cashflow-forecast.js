@@ -2,7 +2,7 @@ import { addDays, addPeriod } from "./finance.js";
 const positive=value=>{const n=Number(value);return Number.isFinite(n)&&n>0?n:0;};
 function dateValid(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const d=new Date(value+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}
 function monthDays(month){return new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0,12)).getUTCDate();}
-export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,planned=[],obligations=[],debts=[],variableExpensesByMonth=[]}){
+export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,planned=[],obligations=[],debts=[],variableExpensesByMonth=[],reserves=[]}){
  if(!dateValid(today))throw new Error("Invalid forecast date");
  const end=addDays(today,horizonDays),events=[];
  for(const row of planned){
@@ -29,7 +29,7 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
  }
  events.sort((a,b)=>a.date.localeCompare(b.date)||(a.type===b.type?a.title.localeCompare(b.title):a.type==="income"?-1:1));
  const variableByMonth=new Map(variableExpensesByMonth.map(x=>[x.month,positive(x.total)]));
- const days=[];let balance=Number(startingBalance)||0,totalVariableExpenses=0;
+ const days=[];let balance=Number(startingBalance)||0,totalVariableExpenses=0,totalNewReserveAllocations=0;\n const activeReserves=reserves.filter(r=>Number(r.active)!==0).map(r=>({title:r.title,remaining:Math.max(0,Number(r.target_amount)-Number(r.current_amount)),monthly:positive(r.monthly_contribution)}));\n const existingReserved=activeReserves.reduce((sum,r)=>sum+Math.max(0,Number(reserves.find(x=>x.title===r.title)?.current_amount)||0),0);
  for(let date=today;date<=end;date=addDays(date,1)){
   const dayEvents=events.filter(e=>e.date===date);
   const income=dayEvents.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0);
@@ -41,5 +41,5 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
  }
  const totalIncome=events.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0);
  const totalExpenses=events.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0);
- return {period:{from:today,to:end,days:horizonDays},summary:{starting_balance:Number(startingBalance)||0,planned_income:totalIncome,planned_expenses:totalExpenses,variable_expenses:Math.round(totalVariableExpenses*100)/100,total_expenses:Math.round((totalExpenses+totalVariableExpenses)*100)/100,net:Math.round((totalIncome-totalExpenses-totalVariableExpenses)*100)/100,ending_balance:Math.round(balance*100)/100,lowest_balance:Math.min(Number(startingBalance)||0,...days.map(d=>d.balance)),negative_days:days.filter(d=>d.balance<0).map(d=>d.date)},events,days};
+ return {period:{from:today,to:end,days:horizonDays},summary:{starting_balance:Number(startingBalance)||0,planned_income:totalIncome,planned_expenses:totalExpenses,variable_expenses:Math.round(totalVariableExpenses*100)/100,existing_reserves:Math.round(existingReserved*100)/100,new_reserve_allocations:Math.round(totalNewReserveAllocations*100)/100,total_reserved:Math.round((existingReserved+totalNewReserveAllocations)*100)/100,available_ending_balance:Math.round((balance-existingReserved-totalNewReserveAllocations)*100)/100,total_expenses:Math.round((totalExpenses+totalVariableExpenses)*100)/100,net:Math.round((totalIncome-totalExpenses-totalVariableExpenses)*100)/100,ending_balance:Math.round(balance*100)/100,lowest_balance:Math.min(Number(startingBalance)||0,...days.map(d=>d.balance)),lowest_available_balance:Math.min((Number(startingBalance)||0)-existingReserved,...days.map(d=>d.available_balance)),negative_days:days.filter(d=>d.available_balance<0).map(d=>d.date)},events,days};
 }
