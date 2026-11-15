@@ -29,7 +29,8 @@ export async function onRequestPost({request,env}){
    env.DB.prepare("SELECT id FROM clients WHERE user_id=?").bind(user.id).all()
   ]);
   const links=normalizeMeetingLinks(body.project_id,body.client_id,projects.results,clients.results);
-  const decisions=cleanMeetingItems(body.decisions),agreements=cleanMeetingItems(body.agreements),questions=cleanMeetingItems(body.open_questions);
+  const projectIds=new Set(projects.results.map(x=>x.id)),clientIds=new Set(clients.results.map(x=>x.id));
+  const decisions=cleanMeetingItems(body.decisions),agreements=normalizeMeetingAgreements(body.agreements,projectIds,clientIds),questions=cleanMeetingItems(body.open_questions);
   const values=[links.project_id,links.client_id,title,meetingDate,String(body.participants||"").slice(0,1000),String(body.summary||"").slice(0,5000),JSON.stringify(decisions),JSON.stringify(agreements),JSON.stringify(questions),transcript];
   const existingId=String(body.id||"");
   if(existingId){
