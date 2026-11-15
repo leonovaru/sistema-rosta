@@ -109,7 +109,8 @@ export async function onRequestPost({request,env}) {
     }else{
       const project=await env.DB.prepare("SELECT status,archived_previous_status,client_id FROM projects WHERE id=? AND user_id=?").bind(id,user.id).first();
       if(!project)return json({error:"Проект не найден"},404);if(project.status!=="archived")return json({error:"Проект уже не находится в архиве"},409);
-      if(project.client_id){const client=await env.DB.prepare("SELECT status FROM clients WHERE id=? AND user_id=?").bind(project.client_id,user.id).first();if(!isClientSelectable(client))return json({error:"Сначала восстанови клиента, к которому относится проект"},409);}
+      const parentClient=project.client_id?await env.DB.prepare("SELECT status FROM clients WHERE id=? AND user_id=?").bind(project.client_id,user.id).first():null;
+      if(!canRestoreProject(project,parentClient))return json({error:"Сначала восстанови клиента, к которому относится проект"},409);
       await env.DB.prepare("UPDATE projects SET status=?,archived_previous_status=NULL,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(restoredProjectStatus(project.archived_previous_status),id,user.id).run();
     }
     return json({ok:true,restored:true});
