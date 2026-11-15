@@ -73,6 +73,7 @@ export async function onRequestPost({request,env}){
    target_task_id:allowedTaskIds.has(t.target_task_id)?t.target_task_id:null
   }));
   if(meetingId){
+   if(prepared.some(item=>item.operation!=="create"))return json({error:"Поручения встречи можно только создавать как новые задачи"},400);
    const indices=prepared.map(x=>x.meeting_agreement_index);
    if(indices.some(index=>index===null||index<0||index>=meetingAgreements.length)||new Set(indices).size!==indices.length)return json({error:"Не удалось сопоставить поручения с протоколом встречи"},400);
    const existing=await env.DB.prepare("SELECT agreement_index FROM meeting_task_links WHERE user_id=? AND meeting_id=?").bind(user.id,meetingId).all();
