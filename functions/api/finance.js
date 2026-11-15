@@ -1,4 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
+import { addDays, addPeriod } from "../_lib/finance.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 function dateInZone(timeZone) {
@@ -9,18 +10,6 @@ function dateInZone(timeZone) {
 function validAmount(value) {
   const amount=Number(value);
   return Number.isFinite(amount)&&amount>0&&amount<=100000000?amount:null;
-}
-function addDays(date,days) {
-  const value=new Date(date+"T12:00:00Z");value.setUTCDate(value.getUTCDate()+days);
-  return value.toISOString().slice(0,10);
-}
-function addPeriod(date,frequency) {
-  if(frequency==="weekly")return addDays(date,7);
-  if(frequency!=="monthly")return null;
-  const [year,month,day]=date.split("-").map(Number);
-  const next=new Date(Date.UTC(year,month,1,12));
-  const last=new Date(Date.UTC(next.getUTCFullYear(),next.getUTCMonth()+1,0,12)).getUTCDate();
-  return next.getUTCFullYear()+"-"+String(next.getUTCMonth()+1).padStart(2,"0")+"-"+String(Math.min(day,last)).padStart(2,"0");
 }
 export async function onRequestGet({request,env}) {
   const user=await requireUser(request,env);
