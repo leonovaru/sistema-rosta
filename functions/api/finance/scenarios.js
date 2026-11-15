@@ -11,7 +11,7 @@ function workDays(settings){
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const settings=await env.DB.prepare("SELECT timezone,monthly_target,daily_capacity_minutes,working_days_json,work_capacity_configured FROM settings WHERE user_id=?").bind(user.id).first();
- const zone=settings?.timezone||"Europe/Moscow",today=todayInZone(zone),from=shift(today,-89),start=monthStart(today);
+ const zone=settings?.timezone||"Europe/Moscow",today=todayInZone(zone),from=shift(today,-89),start=monthStart(today),daysInMonth=new Date(Number(today.slice(0,4)),Number(today.slice(5,7)),0).getDate(),elapsedDays=Number(today.slice(8,10)),remainingDays=Math.max(0,daysInMonth-elapsedDays);
  const [directions,monthIncome,historyIncome,tasks,timerEntries]=await Promise.all([
   env.DB.prepare("SELECT d.id,d.title,COALESCE(t.share_percent,0) share_percent,COALESCE(t.average_sale_amount,0) average_sale_amount FROM directions d LEFT JOIN direction_revenue_targets t ON t.direction_id=d.id AND t.user_id=d.user_id WHERE d.user_id=? ORDER BY d.sort_order,d.id").bind(user.id).all(),
   env.DB.prepare("SELECT direction_id,SUM(amount) revenue FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=? GROUP BY direction_id").bind(user.id,start,today).all(),
@@ -32,5 +32,5 @@ export async function onRequestGet({request,env}){
  const daily=n(settings?.daily_capacity_minutes)||300,days=workDays(settings),capacityConfigured=Boolean(settings?.work_capacity_configured);
  const weeklyCapacityHours=capacityConfigured?daily*days/60:0;
  const target=n(settings?.monthly_target)||300000;
- return json({period:{month_start:start,month_to:today,history_from:from,history_to:today,history_days:90,timezone:zone},capacity_configured:capacityConfigured,work_days_per_week:days,...buildRevenueScenarios({monthlyTarget:target,directionRows:directions.results,actualRows:monthIncome.results,historyRows:historyIncome.results,taskRows,weeklyCapacityHours})});
+ return json({period:{month_start:start,month_to:today,history_from:from,history_to:today,history_days:90,elapsed_days:elapsedDays,days_in_month:daysInMonth,remaining_days:remainingDays,timezone:zone},capacity_configured:capacityConfigured,work_days_per_week:days,...buildRevenueScenarios({monthlyTarget:target,directionRows:directions.results,actualRows:monthIncome.results,historyRows:historyIncome.results,taskRows,weeklyCapacityHours,elapsedDays,daysInMonth,remainingDays})});
 }
