@@ -124,7 +124,8 @@ async function loadCashReserves(){
 $("reserve-form").addEventListener("submit",async e=>{e.preventDefault();try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({title:$("reserve-title").value,target_amount:$("reserve-target").value,current_amount:$("reserve-current").value,monthly_contribution:$("reserve-monthly").value,target_date:$("reserve-date").value||null,purpose:$("reserve-purpose").value})});$("reserve-form").reset();$("reserve-current").value="0";$("reserve-monthly").value="0";await loadCashReserves();await loadCashflowForecast();}catch(err){alert(err.message);}});
 $("cash-reserves").addEventListener("click",async e=>{const b=e.target.closest("[data-reserve-delete]");if(!b)return;if(!confirm("Удалить этот резерв?"))return;try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({action:"delete",id:b.dataset.reserveDelete})});await loadCashReserves();await loadCashflowForecast();}catch(err){alert(err.message);}});
 async function loadCashflowForecast(){
- cashflowData=await api("/api/finance/forecast?days="+$("cashflow-days").value);\n await loadCashReserves();
+ cashflowData=await api("/api/finance/forecast?days="+$("cashflow-days").value);
+ await loadCashReserves();
  $("cashflow-opening-balance").value=String(cashflowData.starting_balance||0);
  $("cashflow-date").min=cashflowData.period.from;
  $("cashflow-date").value=cashflowData.period.from;
