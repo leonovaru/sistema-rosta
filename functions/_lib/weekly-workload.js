@@ -58,7 +58,7 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
    if(!share)return;
    day.planned_task_minutes+=share;
    day.task_count++;
-   day.tasks.push({id:task.id,title:task.title,direction_title:task.direction_title||null,minutes:share,due_date:task.due_date});
+   day.tasks.push({id:task.id,title:task.title,direction_title:task.direction_title||null,project_id:task.project_id||null,life_area_id:task.life_area_id||null,direction_id:task.direction_id||null,minutes:share,due_date:task.due_date});
   });
  }
  for(const day of days)day.overloaded=day.working_day&&day.planned_task_minutes>day.available_minutes;
