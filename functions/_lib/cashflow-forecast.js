@@ -17,7 +17,7 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
   }
  }
  for(const row of irregularExpenses){
-  let due=row.next_date,guard=0;const anchorDay=Number(String(row.next_date||"").slice(8,10));
+  let due=row.next_date,guard=0;const anchorDay=Number(row.recurrence_day)||Number(String(row.next_date||"").slice(8,10));
   while(due&&due<=end&&guard++<40){
    if(due>=today)events.push({id:row.id,date:due,type:"expense",title:row.title,amount:positive(row.amount),source:"irregular_expense",category:row.category||"Нерегулярные расходы",frequency:row.frequency});
    if(row.frequency==="once")break;
