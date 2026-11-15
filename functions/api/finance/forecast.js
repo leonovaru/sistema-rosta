@@ -4,6 +4,7 @@ import { buildCashflowForecast } from "../../_lib/cashflow-forecast.js";
 import { buildVariableExpenseForecast } from "../../_lib/variable-expense-forecast.js";
 import { buildMonthlyVariableExpenseSchedule } from "../../_lib/monthly-variable-expense-schedule.js";
 import { detectVariableRecurringExpenses } from "../../_lib/variable-recurring-expenses.js";
+import { buildDealCashflowScenarios } from "../../_lib/deal-cashflow-scenarios.js";
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(v){if(!DATE.test(v))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
 function shiftMonth(date,delta){const [y,m]=date.slice(0,7).split("-").map(Number),d=new Date(Date.UTC(y,m-1+delta,1,12));return d.toISOString().slice(0,10);}
@@ -23,15 +24,17 @@ export async function onRequestGet({request,env}){
  const expenseHistory=[...monthlyTotals.entries()].map(([key,total])=>{const [category,month]=key.split("|");return {category,month,total};});
  const variableExpenseForecast=buildVariableExpenseForecast(expenseHistory,{today});
  const variableExpensesByMonth=buildMonthlyVariableExpenseSchedule({historicalCategories:variableExpenseForecast.categories,budgets:budgets.results,today,horizonDays:horizon});
- const [planned,obligations,debts,reserves,irregularExpenses]=await Promise.all([
+ const [planned,obligations,debts,reserves,irregularExpenses,deals]=await Promise.all([
   env.DB.prepare("SELECT p.*,d.title direction_title,pr.title project_title,cl.name client_name FROM planned_cashflows p LEFT JOIN directions d ON d.id=p.direction_id AND d.user_id=p.user_id LEFT JOIN projects pr ON pr.id=p.project_id AND pr.user_id=p.user_id LEFT JOIN clients cl ON cl.id=p.client_id AND cl.user_id=p.user_id WHERE p.user_id=? AND p.status='planned' AND p.expected_date>=? AND p.expected_date<=? ORDER BY p.expected_date").bind(user.id,today,end).all(),
   env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 AND due_date<=? ORDER BY due_date").bind(user.id,end).all(),
   env.DB.prepare("SELECT title,balance,minimum_payment,due_day,status FROM debts WHERE user_id=? AND status='open'").bind(user.id).all(),
   env.DB.prepare("SELECT title,target_amount,current_amount,monthly_contribution,target_date,active FROM cash_reserves WHERE user_id=? AND active=1").bind(user.id).all(),
-  env.DB.prepare("SELECT id,title,category,amount,next_date,frequency,recurrence_day FROM irregular_expenses WHERE user_id=? AND active=1 AND next_date<=? ORDER BY next_date").bind(user.id,end).all()
+  env.DB.prepare("SELECT id,title,category,amount,next_date,frequency,recurrence_day FROM irregular_expenses WHERE user_id=? AND active=1 AND next_date<=? ORDER BY next_date").bind(user.id,end).all(),
+  env.DB.prepare("SELECT id,title,amount,probability_percent,expected_close_date FROM deals WHERE user_id=? AND stage NOT IN ('won','lost') AND expected_close_date>=? AND expected_close_date<=? ORDER BY expected_close_date").bind(user.id,today,end).all()
  ]);
  const forecast=buildCashflowForecast({today,horizonDays:horizon,startingBalance:settings?.starting_balance||0,planned:planned.results,obligations:obligations.results,debts:debts.results,variableExpensesByMonth,reserves:reserves.results,irregularExpenses:irregularExpenses.results,variableRecurringEvents:variableRecurring.events});
- return json({...forecast,planned:planned.results,starting_balance:Number(settings?.starting_balance||0),variable_expense_forecast:variableExpenseForecast,variable_expenses_by_month:variableExpensesByMonth,variable_recurring_expenses:variableRecurring.suggestions,reserves:reserves.results,irregular_expenses:irregularExpenses.results});
+ const deal_scenarios=buildDealCashflowScenarios({days:forecast.days,deals:deals.results});
+ return json({...forecast,deal_scenarios,planned:planned.results,starting_balance:Number(settings?.starting_balance||0),variable_expense_forecast:variableExpenseForecast,variable_expenses_by_month:variableExpensesByMonth,variable_recurring_expenses:variableRecurring.suggestions,reserves:reserves.results,irregular_expenses:irregularExpenses.results});
 }
 export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
