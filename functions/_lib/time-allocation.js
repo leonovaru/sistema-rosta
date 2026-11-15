@@ -10,7 +10,7 @@ export function buildTimeAllocationRecommendations(directions=[],availableHours=
   const conversionFactor=Number.isFinite(winRate)&&leadSample>=3?Math.max(.65,Math.min(1.35,.65+winRate/100)):0.85;
   const speedFactor=Number.isFinite(cycle)&&cycleSample>=3?Math.max(.75,Math.min(1.15,30/Math.max(1,cycle))):1;
   const score=contributionPerHour*conversionFactor*speedFactor*evidence;
-  return {...row,allocation_score:round(score),confidence:leadSample>=5&&cycleSample>=3?"выше":"предварительная",allocation_reasons:[`вклад на час — ${Math.round(contributionPerHour)} ₽`,Number.isFinite(winRate)&&winSample>=3?`конверсия в продажу — ${winRate}%`:"конверсия пока не подтверждена",Number.isFinite(cycle)&&cycleSample>=3?`цикл продажи — ${cycle} дн.`:"длительность цикла пока не подтверждена"]};
+  return {...row,allocation_score:round(score),confidence:leadSample>=5&&cycleSample>=3?"выше":"предварительная",allocation_reasons:[`вклад на час — ${Math.round(contributionPerHour)} ₽`,Number.isFinite(winRate)&&leadSample>=3?`конверсия в продажу — ${winRate}%`:"конверсия пока не подтверждена",Number.isFinite(cycle)&&cycleSample>=3?`цикл продажи — ${cycle} дн.`:"длительность цикла пока не подтверждена"]};
  }).filter(Boolean).sort((a,b)=>b.allocation_score-a.allocation_score);
  const selected=candidates.slice(0,3),total=selected.reduce((sum,x)=>sum+x.allocation_score,0);
  const recommendations=selected.map(row=>({...row,recommended_hours:round(capacity*row.allocation_score/total)}));
