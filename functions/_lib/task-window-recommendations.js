@@ -8,11 +8,11 @@ function deadlineLabel(days){
 }
 function historyFor(window,patterns){
  const overall=patterns?.overall||{},period=(patterns?.by_period||[]).find(row=>row.period===periodFor(window.start_time));
- const enough=Number(overall.sample_size)>=8&&Number(period?.sample_size)>=4&&Number.isFinite(Number(period?.completion_rate));
+ const enough=Number(overall.sample_size)>=8&&Number(period?.sample_size)>=4&&Number.isFinite(Number(overall.completion_rate))&&Number.isFinite(Number(period?.completion_rate));
  return enough?{rate:Number(period.completion_rate),count:Number(period.sample_size),overall:Number(overall.completion_rate)}:null;
 }
 function taskUrgency(task){
- if(Number.isFinite(Number(task.urgency_days)))return Number(task.urgency_days);
+ if(task.urgency_days!==null&&task.urgency_days!==undefined&&Number.isFinite(Number(task.urgency_days)))return Number(task.urgency_days);
  if(!task.due_date)return Infinity;
  const a=new Date(String(task.due_date).slice(0,10)+"T12:00:00Z"),b=new Date(String(task.date||"").slice(0,10)+"T12:00:00Z");
  return Number.isFinite(a.getTime())&&Number.isFinite(b.getTime())?Math.round((a-b)/86400000):Infinity;
