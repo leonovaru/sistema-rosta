@@ -1029,9 +1029,12 @@ function sleepDuration(start,end,timezone="Europe/Moscow"){
  try{const a=sleepWallTimeEpoch(start,timezone),b=sleepWallTimeEpoch(end,timezone);return b>a?Math.round((b-a)/60000):null;}catch{return null;}
 }
 function averageSleepMinutes(sessions,days){
- const today=sleepLocalDate(),cutoff=Date.parse(shiftDate(today,-(days-1))+"T00:00:00Z");
- const values=sessions.filter(s=>Date.parse(s.sleep_date+"T00:00:00Z")>=cutoff).map(s=>sleepDuration(s.fell_asleep_at,s.woke_at,s.timezone)).filter(v=>v!==null);
- return values.length?{minutes:Math.round(values.reduce((a,b)=>a+b,0)/values.length),count:values.length}:null;
+ const today=sleepLocalDate(),start=shiftDate(today,-(days-1));
+ // sleep_date is a local calendar date in the session's stored timezone.
+ // Compare date-only ISO strings; do not reinterpret them as UTC instants.
+ const period=sessions.filter(s=>s.sleep_date>=start&&s.sleep_date<=today);
+ const values=period.map(s=>sleepDuration(s.fell_asleep_at,s.woke_at,s.timezone)).filter(v=>v!==null);
+ return {minutes:values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length):null,count:values.length,incompleteCount:period.length-values.length};
 }
 function sleepDurationLabel(minutes){
  if(minutes===null)return "Недостаточно данных";
@@ -1039,7 +1042,7 @@ function sleepDurationLabel(minutes){
 }
 function renderSleep(){
  const stats7=averageSleepMinutes(sleepSessions,7),stats30=averageSleepMinutes(sleepSessions,30);
- $("sleep-summary").innerHTML='<div class="sleep-stat"><span>Средний сон · 7 дней</span><strong>'+(stats7?sleepDurationLabel(stats7.minutes):"Недостаточно данных")+'</strong><small>'+(stats7?stats7.count+" ночей":"Нужны записи засыпание + пробуждение")+'</small></div><div class="sleep-stat"><span>Средний сон · 30 дней</span><strong>'+(stats30?sleepDurationLabel(stats30.minutes):"Недостаточно данных")+'</strong><small>'+(stats30?stats30.count+" ночей":"Нужны записи засыпание + пробуждение")+'</small></div>';
+ $("sleep-summary").innerHTML=[{label:"7 дней",stats:stats7},{label:"30 дней",stats:stats30}].map(({label,stats})=>'<div class="sleep-stat"><span>Средний сон · '+label+'</span><strong>'+(stats.count?sleepDurationLabel(stats.minutes):"Недостаточно данных")+'</strong><small>'+stats.count+' полных ночей'+(stats.incompleteCount?' · '+stats.incompleteCount+' неполных':'')+'</small></div>').join("")+'<p class="fine">В среднем учитываются только записи с временем засыпания и пробуждения. Пропущенные дни не считаются нулевым сном.</p>';
  const today=sleepLocalDate(),yesterday=shiftDate(today,-1);
  const current=sleepSessions.find(s=>s.sleep_date===today||s.sleep_date===yesterday);
  const status=$("sleep-status");
@@ -1050,7 +1053,7 @@ function renderSleep(){
  }).join(""):'<p class="muted">Здесь появится история сна.</p>';
 }
 async function loadSleep(){
- const data=await api("/api/sleep?limit=14");sleepSessions=data.sessions||[];renderSleep();
+ const data=await api("/api/sleep?limit=90");sleepSessions=data.sessions||[];renderSleep();
 }
 async function markSleep(action){
  const button=action==="bed"?$("sleep-bed"):action==="asleep"?$("sleep-asleep"):$("sleep-wake");
