@@ -74,7 +74,7 @@ export async function onRequestGet({request,env}){
  week.daily_block_plans=buildTaskWindowRecommendations(annotatedDailyPlans.map(plan=>({...plan,tasks:week.days.find(day=>day.date===plan.date)?.tasks||[]})),week.daily_execution_patterns);
  week.today_remaining_plan=configured?buildRemainingDailyPlan({days:week.days,calendarEvents:events,logs:blockLogRows.results,now:new Date().toISOString(),timeZone:timezone,startTime:dailyBlockOptions.startTime,focusMinutes,breakMinutes,prepBeforeMinutes,bufferAfterMinutes}):null;
  if(week.today_remaining_plan)week.today_remaining_plan=annotateDailyWindowRecommendations([week.today_remaining_plan],week.daily_execution_patterns)[0];
- week.daily_block_scenarios=buildDailyBlockScenarios(week.days,dailyBlockOptions);
+ week.daily_block_scenarios=buildDailyBlockScenarios(week.days,dailyBlockOptions).map(scenario=>({...scenario,plans:buildTaskWindowRecommendations(annotateDailyWindowRecommendations(scenario.plans,week.daily_execution_patterns).map(plan=>({...plan,tasks:week.days.find(day=>day.date===plan.date)?.tasks||[]})),week.daily_execution_patterns)}));
  week.daily_reallocation_proposals=buildDailyReallocationProposals(week.days,dailyBlockOptions);
  return json({week});
 }
