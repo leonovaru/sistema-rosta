@@ -4,7 +4,7 @@ const round=value=>Math.round((Number(value)||0)*100)/100;
 export function buildRiskSalesPlan({risk,directions=[],today}={}){
  if(!risk)return {available:false,directions:[],weekly_target:0,days_until:null};
  const daysUntil=today&&risk.from?Math.max(0,Math.round((Date.parse(risk.from+"T12:00:00Z")-Date.parse(today+"T12:00:00Z"))/86400000)):null;
- const weeks=daysUntil===null?1:Math.max(1,Math.ceil((daysUntil+1)/7));
+ const weeks=daysUntil===null?1:Math.max(1,Math.ceil(daysUntil/7));
  const total=amount(risk.required_additional_income),allZero=directions.length>0&&directions.every(d=>Number(d.share_percent)===0);
  const weighted=directions.map(d=>({...d,share:Math.max(0,Number(allZero?1/directions.length:d.share_percent/100)||0)}));
  const totalShare=weighted.reduce((s,d)=>s+d.share,0)||1;
