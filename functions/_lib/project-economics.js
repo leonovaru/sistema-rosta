@@ -8,6 +8,6 @@ export function calculateProjectEconomics({plannedRevenue=0,plannedCosts=0,recei
   revenue_per_hour:time>0?Math.round(income/(time/60)*100)/100:null,
   contribution_per_hour:time>0?Math.round(contribution/(time/60)*100)/100:null,
   planned_cost_budget:costPlan,budget_usage_percent:costPlan>0?Math.round(costs/costPlan*10000)/100:null,
-  status:costs>0&&contribution<0?"loss":planned>0&&costPlan>0&&costs>costPlan?"over_budget":planned>0&&income<planned?"awaiting_payment":"on_track"
+  status:costs>0&&contribution<0?"loss":costPlan>0&&costs>costPlan?"over_budget":planned>0&&income<planned?"awaiting_payment":"on_track"
  };
 }
