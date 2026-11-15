@@ -1,4 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
+import { resolveSleepWallTime } from "../_lib/sleep.js";
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const LOCAL_DATE_TIME=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
@@ -49,13 +50,25 @@ export async function onRequestPost({request,env}){
     const value=body?.at?String(body.at):parts.year+"-"+parts.month+"-"+parts.day+"T"+parts.hour+":"+parts.minute;
     if(!validateTime(value)||value.slice(0,10)!==today)return json({error:"Укажите корректное время сегодняшнего дня"},400);
     const row=await ensureSession(env,user.id,today,timezone);
-    if(action==="bed"&&row.fell_asleep_at&&value>=row.fell_asleep_at)return json({error:"Отход ко сну должен быть раньше времени засыпания"},400);
-    if(action==="asleep"&&row.went_to_bed_at&&value<=row.went_to_bed_at)return json({error:"Время засыпания должно быть позже отхода ко сну"},400);
-    if(action==="asleep"&&row.woke_at&&value>=row.woke_at)return json({error:"Время засыпания должно быть раньше пробуждения"},400);
+    const bedTimezone=row.bed_timezone||row.timezone||timezone;
+    const asleepTimezone=row.asleep_timezone||row.timezone||timezone;
+    if(action==="bed"&&row.fell_asleep_at){
+      const a=resolveSleepWallTime(value,timezone),b=resolveSleepWallTime(row.fell_asleep_at,asleepTimezone);
+      if(a===null||b===null||a>=b)return json({error:"Не удалось однозначно проверить порядок времени. Уточните часовой пояс или время засыпания"},400);
+    }
+    if(action==="asleep"&&row.went_to_bed_at){
+      const a=resolveSleepWallTime(row.went_to_bed_at,bedTimezone),b=resolveSleepWallTime(value,timezone);
+      if(a===null||b===null||b<=a)return json({error:"Время засыпания должно быть позже отхода ко сну"},400);
+    }
+    if(action==="asleep"&&row.woke_at){
+      const a=resolveSleepWallTime(value,timezone),b=resolveSleepWallTime(row.woke_at,row.wake_timezone||row.timezone||timezone);
+      if(a===null||b===null||a>=b)return json({error:"Время засыпания должно быть раньше пробуждения"},400);
+    }
     const field=action==="bed"?"went_to_bed_at":"fell_asleep_at";
     const source=action==="bed"?"bed_source":"asleep_source";
     const confidence=action==="bed"?"bed_confidence":"asleep_confidence";
-    await env.DB.prepare(`UPDATE sleep_sessions SET ${field}=?,${source}='app',${confidence}='exact',timezone=?,updated_at=datetime('now') WHERE id=? AND user_id=?`).bind(value,timezone,row.id,user.id).run();
+    const timezoneField=action==="bed"?"bed_timezone":"asleep_timezone";
+    await env.DB.prepare(`UPDATE sleep_sessions SET ${field}=?,${timezoneField}=?,${source}='app',${confidence}='exact',updated_at=datetime('now') WHERE id=? AND user_id=?`).bind(value,timezone,row.id,user.id).run();
     return json({ok:true,session:await env.DB.prepare("SELECT * FROM sleep_sessions WHERE id=? AND user_id=?").bind(row.id,user.id).first()});
   }
   if(action==="wake"){
@@ -67,8 +80,12 @@ export async function onRequestPost({request,env}){
     if(!row)row=await ensureSession(env,user.id,shiftDate(today,-1),timezone);
     if(row.woke_at)return json({ok:true,duplicate:true,session:row});
     const lastSleepTime=row.fell_asleep_at||row.went_to_bed_at;
-    if(lastSleepTime&&wakeAt<=lastSleepTime)return json({error:"Время пробуждения должно быть позже времени отхода ко сну"},400);
-    const saved=await env.DB.prepare("UPDATE sleep_sessions SET woke_at=?,wake_date=?,wake_source=?,wake_confidence='exact',timezone=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND woke_at IS NULL").bind(wakeAt,today,body?.source==="push"?"push":"app",timezone,row.id,user.id).run();
+    const lastSleepTimezone=row.fell_asleep_at?(row.asleep_timezone||row.timezone||timezone):(row.bed_timezone||row.timezone||timezone);
+    if(lastSleepTime){
+      const a=resolveSleepWallTime(lastSleepTime,lastSleepTimezone),b=resolveSleepWallTime(wakeAt,timezone);
+      if(a===null||b===null||b<=a)return json({error:"Время пробуждения должно быть позже времени отхода ко сну. Проверьте часовой пояс и время"},400);
+    }
+    const saved=await env.DB.prepare("UPDATE sleep_sessions SET woke_at=?,wake_date=?,wake_source=?,wake_confidence='exact',wake_timezone=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND woke_at IS NULL").bind(wakeAt,today,body?.source==="push"?"push":"app",timezone,row.id,user.id).run();
     if(!saved.meta.changes)return json({ok:true,duplicate:true,session:await env.DB.prepare("SELECT * FROM sleep_sessions WHERE id=? AND user_id=?").bind(row.id,user.id).first()});
     return json({ok:true,session:await env.DB.prepare("SELECT * FROM sleep_sessions WHERE id=? AND user_id=?").bind(row.id,user.id).first()});
   }
@@ -76,13 +93,21 @@ export async function onRequestPost({request,env}){
     const id=String(body?.id||"");
     if(!id)return json({error:"Запись не выбрана"},400);
     for(const key of ["went_to_bed_at","fell_asleep_at","woke_at"])if(!validateTime(body[key]))return json({error:"Проверь дату и время"},400);
+    const existing=await env.DB.prepare("SELECT * FROM sleep_sessions WHERE id=? AND user_id=?").bind(id,user.id).first();
+    if(!existing)return json({error:"Запись не найдена"},404);
     const bed=body.went_to_bed_at||null,asleep=body.fell_asleep_at||null,wake=body.woke_at||null;
-    if((bed&&asleep&&asleep<bed)||(asleep&&wake&&wake<=asleep)||(bed&&wake&&wake<=bed))return json({error:"Проверь последовательность времени: отход ко сну, засыпание, пробуждение"},400);
+    const bedTimezone=String(body.bed_timezone||existing.bed_timezone||existing.timezone||timezone);
+    const asleepTimezone=String(body.asleep_timezone||existing.asleep_timezone||existing.timezone||timezone);
+    const wakeTimezone=String(body.wake_timezone||existing.wake_timezone||existing.timezone||timezone);
+    if(!validTimezone(bedTimezone)||!validTimezone(asleepTimezone)||!validTimezone(wakeTimezone))return json({error:"Проверьте часовой пояс. Нужен формат IANA, например Europe/Amsterdam"},400);
+    const ordered=[[bed,bedTimezone],[asleep,asleepTimezone],[wake,wakeTimezone]].filter(([value])=>value);
+    const instants=ordered.map(([value,tz])=>resolveSleepWallTime(value,tz));
+    if(instants.some(value=>value===null)||instants.some((value,index)=>index>0&&value<=instants[index-1]))return json({error:"Проверьте последовательность времени и часовые пояса: отход ко сну, засыпание, пробуждение"},400);
     const source=(v)=>SOURCES.includes(v)?v:"manual";
     const confidence=(v)=>CONFIDENCE.includes(v)?v:"approximate";
     const note=String(body?.note||"").trim().slice(0,1000);
-    const result=await env.DB.prepare(`UPDATE sleep_sessions SET went_to_bed_at=?,fell_asleep_at=?,woke_at=?,wake_date=?,bed_source=?,asleep_source=?,wake_source=?,bed_confidence=?,asleep_confidence=?,wake_confidence=?,note=?,updated_at=datetime('now') WHERE id=? AND user_id=?`)
-      .bind(body.went_to_bed_at||null,body.fell_asleep_at||null,body.woke_at||null,body.woke_at?String(body.woke_at).slice(0,10):null,source(body.bed_source),source(body.asleep_source),source(body.wake_source),confidence(body.bed_confidence),confidence(body.asleep_confidence),confidence(body.wake_confidence),note,id,user.id).run();
+    const result=await env.DB.prepare(`UPDATE sleep_sessions SET went_to_bed_at=?,fell_asleep_at=?,woke_at=?,wake_date=?,bed_timezone=?,asleep_timezone=?,wake_timezone=?,bed_source=?,asleep_source=?,wake_source=?,bed_confidence=?,asleep_confidence=?,wake_confidence=?,note=?,updated_at=datetime('now') WHERE id=? AND user_id=?`)
+      .bind(bed,asleep,wake,wake?wake.slice(0,10):null,bedTimezone,asleepTimezone,wakeTimezone,source(body.bed_source),source(body.asleep_source),source(body.wake_source),confidence(body.bed_confidence),confidence(body.asleep_confidence),confidence(body.wake_confidence),note,id,user.id).run();
     if(!result.meta.changes)return json({error:"Запись не найдена"},404);
     return json({ok:true});
   }
