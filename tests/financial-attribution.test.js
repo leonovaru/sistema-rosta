@@ -42,3 +42,14 @@ test("archived workspace entities remain historical but cannot receive new links
  assert.equal(isDirectionSelectable({id:"d",active:0}),false);
  assert.equal(isDirectionSelectable(null),false);
 });
+
+import { restoredClientStatus, restoredProjectStatus } from "../functions/_lib/workspace-entity-restore.js";
+test("restores archived clients and projects to their prior active workflow status",()=>{
+ assert.equal(restoredClientStatus("paused"),"paused");
+ assert.equal(restoredClientStatus("lead"),"lead");
+ assert.equal(restoredClientStatus(null),"active");
+ assert.equal(restoredProjectStatus("waiting"),"waiting");
+ assert.equal(restoredProjectStatus("draft"),"draft");
+ assert.equal(restoredProjectStatus("done"),"done");
+ assert.equal(restoredProjectStatus("archived"),"active");
+});
