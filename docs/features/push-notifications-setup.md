@@ -10,9 +10,17 @@
 1. Применить миграцию `0035_push_notifications.sql` к той же D1 базе, которая используется Pages-приложением.
 2. Локально выполнить `npm run push:keys` (Node.js). Скрипт сгенерирует пару VAPID P-256 и выведет `PUSH_VAPID_PUBLIC_KEY`, `VAPID_PUBLIC_KEY` и `VAPID_PRIVATE_KEY`. Публичный ключ нужен Pages и Worker; приватный — только как Worker Secret. Не публиковать приватный ключ и не добавлять его в репозиторий.
 3. В Pages project variables добавить `PUSH_VAPID_PUBLIC_KEY`.
-4. Для отдельного Worker указать тот же D1 database ID в `wrangler.push.toml`, добавить секреты `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, переменную `VAPID_SUBJECT` (валидный mailto или https URL), затем развернуть Worker с cron trigger.
-5. В `wrangler.push.toml` заменить placeholder database ID на фактический ID D1. ID намеренно не придумывается и не извлекается из репозитория.
-6. Проверить подписку на HTTPS-адресе приложения. После этого проверить доставку в тестовом окружении; в первой версии cron отправляет уведомление в 06:00 и повторяет неудачную отправку в течение следующих 10 минут, не создавая второе уведомление за день.
+4. В `wrangler.push.toml` заменить placeholder database ID на фактический ID D1. Убедиться, что `database_name` и `database_id` указывают на ту же базу, что подключена к Pages. ID намеренно не придумывается и не извлекается из репозитория.
+5. Создать отдельный Worker и добавить в него секреты. Команды выполняются из корня репозитория:
+   - `npx wrangler secret put VAPID_PUBLIC_KEY --config wrangler.push.toml`
+   - `npx wrangler secret put VAPID_PRIVATE_KEY --config wrangler.push.toml`
+   - `npx wrangler secret put VAPID_SUBJECT --config wrangler.push.toml`
+
+   Для `VAPID_SUBJECT` использовать валидный `mailto:` или `https:` адрес. Не передавать приватный ключ через обычные переменные и не сохранять его в Git.
+6. Только после проверки D1 и секретов развернуть Worker командой `npx wrangler deploy --config wrangler.push.toml`. Конфигурация уже задаёт cron `* * * * *`.
+7. Проверить подписку на HTTPS-адресе приложения. После этого проверить доставку в тестовом окружении; cron отправляет уведомление в 06:00 и повторяет неудачную отправку в течение следующих 10 минут, не создавая второе уведомление за день.
+
+**Важно о миграциях:** команда `npx wrangler d1 migrations apply sistema-rosta-db --remote --directory=./migrations` применяет все миграции, которые Cloudflare считает ещё не применёнными, а не только `0035`. Перед её запуском нужно проверить историю миграций и состояние production D1. Не запускать её вслепую.
 
 ## Важные ограничения
 - Само наличие Service Worker не означает, что push уже отправляется. Пока миграция, VAPID-переменные и отдельный Worker не настроены и не развернуты, кнопка подписки должна сообщать о недоступности.
