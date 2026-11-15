@@ -139,10 +139,19 @@ async function loadIncomeBuckets(){
  $("income-bucket-summary").innerHTML=[["Распределено",money(totalAllocated)],["Потрачено из корзин",money(totalSpent)],["Остаток корзин",money(totalBalance)],["Сумма процентов",incomeBucketsData.percentage_total+"%"]].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
  $("income-bucket-list").innerHTML=rows.map(b=>{const pct=b.allocated>0?Math.max(0,Math.min(100,b.spent/b.allocated*100)):0;return '<article class="finance-row"><div class="bucket-main"><b>'+escapeHtml(b.title)+(b.bucket_type==="capital"?' · капитал':'')+'</b><small>Распределено '+money(b.allocated)+' · потрачено '+money(b.spent)+' · доступно '+money(b.balance)+'</small><div class="progress"><span style="width:'+pct+'%"></span></div></div><label class="bucket-percent">Доля, %<input type="number" min="0" max="100" step="0.5" data-bucket-percent="'+escapeHtml(b.id)+'" value="'+Number(b.percentage)+'"></label></article>';}).join("");
  $("income-bucket-note").textContent=incomeBucketsData.allocation_ready?"Проценты составляют 100%. Новые поступления будут распределяться автоматически.":"Сейчас доли составляют "+incomeBucketsData.percentage_total+"%. Измени значения до 100%, чтобы включить распределение.";
+ const recommendation=incomeBucketsData.recommendation;
+ $("income-bucket-recommendations").innerHTML=recommendation?.ready?'<h4>Рекомендация по фактическим расходам</h4><p class="fine">Средний доход за три завершённых месяца: '+money(recommendation.average_monthly_income)+'. Предлагаемые доли учитывают фактические траты из корзин. Капитал сохраняется не ниже 10%. Это предложение, а не автоматическое изменение.</p>'+recommendation.buckets.map(b=>'<article class="finance-row"><div><b>'+escapeHtml(b.title)+'</b><small>Средние траты: '+money(b.average_monthly_spending)+'/мес. · сейчас '+b.current_percentage+'% · предлагается '+b.recommended_percentage+'%</small></div><strong>'+(b.recommended_percentage>b.current_percentage?"+":"")+Math.round((b.recommended_percentage-b.current_percentage)*10)/10+' п.п.</strong></article>').join(""):'<p class="fine">Рекомендации появятся после того, как будут внесены доходы минимум за два месяца. Для расчёта используются три последних завершённых месяца и только расходы, отнесённые к корзинам.</p>';
+ $("apply-bucket-recommendations").disabled=!recommendation?.ready;
  $("save-income-buckets").disabled=!rows.length;
  $("expense-bucket").innerHTML='<option value="">Выбери корзину или вне корзин</option><option value="none">Вне корзин</option>'+rows.map(b=>'<option value="'+escapeHtml(b.id)+'">'+escapeHtml(b.title)+' · доступно '+money(b.balance)+'</option>').join("");
 }
 $("refresh-income-buckets").addEventListener("click",async()=>{try{await loadIncomeBuckets();}catch(err){alert(err.message);}});
+$("apply-bucket-recommendations").addEventListener("click",()=>{
+ const recommendations=incomeBucketsData?.recommendation?.buckets||[];
+ if(!recommendations.length)return;
+ if(!confirm("Подставить рекомендованные проценты? Уже распределённые деньги не изменятся, новые доли начнут действовать только для будущих поступлений."))return;
+ recommendations.forEach(row=>{const input=document.querySelector('[data-bucket-percent="'+row.id+'"]');if(input)input.value=row.recommended_percentage;});
+});
 $("save-income-buckets").addEventListener("click",async()=>{
  const inputs=[...document.querySelectorAll("[data-bucket-percent]")];
  const buckets=inputs.map(input=>({id:input.dataset.bucketPercent,percentage:Number(input.value)}));
