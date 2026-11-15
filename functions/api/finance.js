@@ -61,15 +61,18 @@ export async function onRequestPost({request,env}) {
     const amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.spent_on||"");
     if(!amount||!title||title.length>180||!validDate(date))return json({error:"Проверь название, сумму и дату расхода"},400);
     const directionId=body.direction_id?String(body.direction_id):null;
-    if(directionId&&!await env.DB.prepare("SELECT id FROM directions WHERE id=? AND user_id=?").bind(directionId,user.id).first())return json({error:"Направление дохода не найдено"},404);
     const clientId=body.client_id?String(body.client_id):null,projectId=body.project_id?String(body.project_id):null;
-    if(clientId&&!await env.DB.prepare("SELECT id FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first())return json({error:"Клиент не найден"},404);
-    if(projectId){
-      const project=await env.DB.prepare("SELECT id,client_id FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first();
-      if(!project)return json({error:"Проект не найден"},404);
-      if(clientId&&project.client_id!==clientId)return json({error:"Проект не относится к выбранному клиенту"},400);
-      if(!clientId&&project.client_id)return json({error:"Выбери клиента, связанного с проектом"},400);
-    }
+    const client=clientId?await env.DB.prepare("SELECT id,name,direction_id FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first():null;
+    if(clientId&&!client)return json({error:"Клиент не найден"},404);
+    const project=projectId?await env.DB.prepare("SELECT id,client_id,direction_id,title FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first():null;
+    if(projectId&&!project)return json({error:"Проект не найден"},404);
+    if(project&&clientId&&project.client_id!==clientId)return json({error:"Проект не относится к выбранному клиенту"},400);
+    if(project&&!clientId&&project.client_id)return json({error:"Выбери клиента, связанного с проектом"},400);
+    if(project&&directionId&&project.direction_id&&directionId!==project.direction_id)return json({error:"Направление должно соответствовать выбранному проекту"},400);
+    if(!project&&client?.direction_id&&directionId&&directionId!==client.direction_id)return json({error:"Направление должно соответствовать выбранному клиенту"},400);
+    const effectiveDirectionId=directionId||project?.direction_id||client?.direction_id||null;
+    const direction=effectiveDirectionId?await env.DB.prepare("SELECT id,title FROM directions WHERE id=? AND user_id=?").bind(effectiveDirectionId,user.id).first():null;
+    if(effectiveDirectionId&&!direction)return json({error:"Направление не найдено"},404);
     const bucketId=body.bucket_id?String(body.bucket_id):null;
     if(bucketId){
       const bucket=await env.DB.prepare("SELECT id,title FROM income_buckets WHERE id=? AND user_id=? AND active=1").bind(bucketId,user.id).first();
@@ -77,7 +80,7 @@ export async function onRequestPost({request,env}) {
       const available=await bucketAvailable(env,user.id,bucketId);
       if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     }
-    await env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id,client_id,project_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,directionId,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500),bucketId,clientId,projectId).run();
+    await env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id,client_id,project_id,direction_id_snapshot,direction_title_snapshot,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,effectiveDirectionId,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500),bucketId,clientId,projectId,effectiveDirectionId,direction?.title||null,clientId,client?.name||null,projectId,project?.title||null).run();
     return json({ok:true,id},201);
   }
   if(action==="debt"){
