@@ -77,7 +77,7 @@ export async function onRequestGet({request,env}) {
   activitySummary.week.total=activitySummary.week.interactions+activitySummary.week.meetings+activitySummary.week.tasks_completed;
   activitySummary.month.total=activitySummary.month.interactions+activitySummary.month.meetings+activitySummary.month.tasks_completed;
   const workload=calculateProjectWorkload(projects.results,today);
-  return json({today,client_activity_summary:activitySummary,client_portfolio:clients.results,clients:clients.results,project_workload_summary:workload.horizons,projects:workload.projects.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
+  return json({today,client_activity_summary:activitySummary,clients:clients.results,project_workload_summary:workload.horizons,projects:workload.projects.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
 }
 
 export async function onRequestPost({request,env}) {
