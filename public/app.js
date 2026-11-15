@@ -33,8 +33,8 @@ function renderDailyBlockCards(plans) {
 function renderDailyReallocationProposals(data){
  const proposals=data?.proposals||[];
  if(!proposals.length)return '<section class="weekly-balance"><h5>Переносы между днями</h5><p class="muted">Нет переносов, которые одновременно укладываются в сроки и свободные окна календаря.</p></section>';
- const rows=proposals.map((move,index)=>'<label class="balance-row"><div><b>'+escapeHtml(move.title)+'</b><small>'+escapeHtml(move.from)+' → '+escapeHtml(move.to)+' · '+duration(move.minutes)+' · '+escapeHtml(move.reason)+'</small></div><input type="checkbox" data-reallocation-choice="'+index+'" data-reallocation-id="'+escapeHtml(move.task_id)+'" data-reallocation-to="'+escapeHtml(move.to)+'" checked aria-label="Выбрать перенос '+escapeHtml(move.title)+'"></label>').join("");
- return '<section class="weekly-balance daily-reallocation"><h5>Предлагаемые переносы между днями</h5><p class="fine">Система проверила дедлайн, рабочие дни, календарные занятости и то, чтобы перенос не вытеснял уже помещающиеся задачи. Это предложения: сроки изменятся только после вашего подтверждения.</p>'+rows+'<p class="fine">Предложено: '+proposals.length+' · останется нераспределённым после этих переносов: '+duration(data.summary?.remaining_unallocated_minutes||0)+'</p><button type="button" class="button" data-apply-reallocations>Применить выбранные переносы</button><small class="fine" data-reallocation-status></small></section>';
+ const rows=proposals.map(move=>'<div class="balance-row"><div><b>'+escapeHtml(move.title)+'</b><small>'+escapeHtml(move.from)+' → '+escapeHtml(move.to)+' · '+duration(move.minutes)+' · '+escapeHtml(move.reason)+'</small></div><strong>'+escapeHtml(move.priority==="high"?"Высокий":move.priority==="low"?"Низкий":"Обычный")+'</strong></div>').join("");
+ return '<section class="weekly-balance daily-reallocation"><h5>Возможное перераспределение по дням</h5><p class="fine">Система проверила дедлайны, рабочие дни, календарную занятость и отсутствие вытеснения уже помещающихся задач. Это предварительный сценарий: сроки и задачи не меняются.</p>'+rows+'<p class="fine">Для фактического применения потребуется отдельное сохранение дневных назначений: сейчас задача распределяется алгоритмом по всем рабочим дням до дедлайна.</p><p class="fine">Предложено переносов: '+proposals.length+' · нераспределённый остаток после сценария: '+duration(data.summary?.remaining_unallocated_minutes||0)+'</p></section>';
 }
 
 function renderDailyBlockScenarios(scenarios,selected="priority") {
@@ -161,28 +161,6 @@ $("estimate-task").addEventListener("click", async () => {
 });
 ["task-title","task-description"].forEach(id => $(id).addEventListener("input", () => { taskEstimate = null; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; }));
 
-document.addEventListener("click",async event=>{
- const button=event.target.closest("[data-apply-reallocations]");
- if(!button)return;
- const panel=button.closest(".daily-reallocation");
- const selected=[...(panel?.querySelectorAll("[data-reallocation-choice]:checked")||[])].map(input=>({id:input.dataset.reallocationId,to:input.dataset.reallocationTo}));
- const status=panel?.querySelector("[data-reallocation-status]");
- if(!selected.length){if(status)status.textContent="Выберите хотя бы один перенос.";return;}
- if(!confirm("Изменить сроки у "+selected.length+" задач согласно выбранным предложениям?"))return;
- button.disabled=true;
- let applied=0;
- try{
-  for(const move of selected){
-   await api("/api/tasks",{method:"PATCH",body:JSON.stringify({id:move.id,due_date:move.to})});
-   applied++;
-  }
-  if(status)status.textContent="Перенесено задач: "+applied+". Обновляю недельный план…";
-  await loadTasks();
- }catch(error){
-  if(status)status.textContent="Успешно применено: "+applied+". Остальные не применены: "+error.message+". Обновите план и проверьте сроки.";
-  button.disabled=false;
- }
-});
 document.addEventListener("click",event=>{
  const button=event.target.closest("[data-daily-block-scenario]");
  if(!button||!event.target.closest("#weekly-workload"))return;
