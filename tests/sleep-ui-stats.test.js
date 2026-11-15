@@ -160,6 +160,7 @@ test("sleep goal comparison is opt-in and ignores incomplete nights", () => {
   ];
   assert.deepEqual(runGoal(sessions, 7, null), { target: null, average: null, delta: null, count: 0, below: 0, atOrAbove: 0 });
   assert.deepEqual(runGoal(sessions, 7, 480), { target: 480, average: 465, delta: -15, count: 2, below: 1, atOrAbove: 1 });
+  assert.deepEqual(runGoal(sessions, 7, 485), { target: null, average: null, delta: null, count: 0, below: 0, atOrAbove: 0 });
 });
 test("sleep goal comparison does not invent an average without complete nights", () => {
   assert.deepEqual(runGoal([{ sleep_date: "2026-11-15", fell_asleep_at: null, woke_at: "yes" }], 7, 480), {
