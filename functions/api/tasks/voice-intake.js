@@ -75,7 +75,7 @@ export async function onRequestPost({request,env}){
   env.DB.prepare("SELECT id,title,description FROM life_areas WHERE user_id=? ORDER BY title").bind(user.id).all()
  ]);
  const today=localDate(settings?.timezone||"Europe/Moscow");
- const context={today,timezone:settings?.timezone||"Europe/Moscow",directions:dirs.results,clients:clients.results,projects:projects.results,life_areas:areas.results};
+ const context={today,timezone:settings?.timezone||"Europe/Moscow",directions:dirs.results,clients:clients.results,projects:projects.results,life_areas:areas.results,existing_open_tasks:existingTasks.results};
  if(!env.AI)return json({error:"Разбор голосовых задач требует подключения Workers AI. Текст распознан, но автоматическое распределение пока недоступно.",transcript,source:"unavailable"},503);
  try{
   const response=await env.AI.run("@cf/google/gemma-4-26b-a4b-it",{
@@ -99,7 +99,8 @@ export async function onRequestPost({request,env}){
    client_id:allowed.client_id.has(t.client_id)?t.client_id:null,
    project_id:allowed.project_id.has(t.project_id)?t.project_id:null,
    life_area_id:allowed.life_area_id.has(t.life_area_id)?t.life_area_id:null,
-   parent_index:Number.isInteger(t.parent_index)&&t.parent_index>=0&&t.parent_index<i?t.parent_index:null
+   parent_index:Number.isInteger(t.parent_index)&&t.parent_index>=0&&t.parent_index<i?t.parent_index:null,
+   possible_duplicate_task_id:existingById.has(t.possible_duplicate_task_id)?t.possible_duplicate_task_id:null
   }));
   if(!tasks.length||tasks.some(task=>!task.title))throw new Error("Some tasks have no title");
   for(const task of tasks){
@@ -113,7 +114,7 @@ export async function onRequestPost({request,env}){
    }
    if(task.parent_index!==null&&task.parent_index>=tasks.length)task.parent_index=null;
   }
-  return json({ok:true,source:"ai",summary:String(parsed.summary||"Задачи разобраны").slice(0,500),tasks,clarifying_questions:clarifyingQuestions,existing_tasks:existingTasks.results,clarifying_questions:clarifyingQuestions});
+  return json({ok:true,source:"ai",summary:String(parsed.summary||"Задачи разобраны").slice(0,500),tasks,clarifying_questions:clarifyingQuestions,existing_tasks:existingTasks.results});
  }catch{
   return json({error:"Не удалось надёжно разобрать диктовку. Попробуй переформулировать её или добавь задачу вручную.",transcript},502);
  }
