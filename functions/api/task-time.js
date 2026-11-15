@@ -49,7 +49,7 @@ export async function onRequestPost({ request, env }) {
     await invalidateTodayPlan(env,user.id);
     return json({ ok:true,active_timer:{id,task_id:taskId,started_at:now} },201);
   }
-  if (action === "stop") {
+  if (action === "stop" || action === "pause") {
     const active = await env.DB.prepare("SELECT id,task_id,started_at FROM task_time_entries WHERE user_id=? AND ended_at IS NULL").bind(user.id).first();
     if (!active) return json({ error:"Активный таймер не найден" },404);
     const endedAt = new Date().toISOString();
