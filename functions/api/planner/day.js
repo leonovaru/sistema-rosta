@@ -127,6 +127,7 @@ export async function onRequestPost({ request, env }) {
   }
   plan.source = source;
   plan.daily_capacity_minutes = dailyCapacity;
+  plan.available_minutes = capacity;
   plan.work_already_done_minutes = workDoneMinutes;
   plan.calendar_busy_minutes_remaining = busyFutureMinutes;
   const id = newId();
