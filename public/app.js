@@ -112,6 +112,28 @@ async function loadProfitability(){
 $("refresh-profitability").addEventListener("click",async()=>{const b=$("refresh-profitability");b.disabled=true;try{await loadProfitability();}catch(err){alert(err.message);}finally{b.disabled=false;}});
 
 let financeData = null;
+
+let cashflowData=null;
+async function loadCashflowForecast(){
+ cashflowData=await api("/api/finance/forecast?days="+$("cashflow-days").value);
+ $("cashflow-opening-balance").value=String(cashflowData.starting_balance||0);
+ $("cashflow-date").min=cashflowData.period.from;
+ $("cashflow-date").value=cashflowData.period.from;
+ const s=cashflowData.summary;
+ $("cashflow-summary").innerHTML=[
+ ["Начальный остаток",money(s.starting_balance)],["Ожидаемые поступления",money(s.planned_income)],["Плановые расходы",money(s.planned_expenses)],["Изменение за период",(s.net>0?"+":"")+money(s.net)],["Остаток в конце",money(s.ending_balance)],["Минимальный остаток",money(s.lowest_balance)]
+ ].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
+ $("cashflow-events").innerHTML=cashflowData.events.length?cashflowData.events.map(x=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+x.date+' · '+(x.type==="income"?"Поступление":"Расход")+(x.direction_title?" · "+escapeHtml(x.direction_title):"")+(x.source==="obligation"?" · обязательство":x.source==="debt_minimum"?" · минимальный платёж":" · план")+'</small></div><strong class="'+(x.type==="income"?"cashflow-in":"cashflow-out")+'">'+(x.type==="income"?"+":"−")+money(x.amount)+'</strong>'+(x.source==="planned"?'<button class="button ghost" data-cashflow-delete="'+escapeHtml(x.id||"")+'">×</button>':"")+'</article>').join(""):'<p class="muted">На выбранный период пока нет запланированных движений.</p>';
+ $("cashflow-daily").innerHTML=cashflowData.days.filter((x,i)=>i===0||x.events.length||i===cashflowData.days.length-1||x.date.slice(8,10)==="01").map(x=>'<article class="finance-row"><div><b>'+x.date+'</b><small>+'+money(x.income)+' / −'+money(x.expenses)+'</small></div><strong>'+money(x.balance)+'</strong></article>').join("");
+ const risk=s.negative_days.length;
+ $("cashflow-daily").insertAdjacentHTML("beforebegin",risk?'<p class="cashflow-warning">Возможен кассовый разрыв: '+risk+' дней с отрицательным остатком. Первый — '+s.negative_days[0]+'.</p>':'<p class="cashflow-safe">По внесённым данным отрицательного остатка не прогнозируется.</p>');
+ $("cashflow-direction").innerHTML='<option value="">Без направления</option>'+directions.map(d=>'<option value="'+escapeHtml(d.id)+'">'+escapeHtml(d.title)+'</option>').join("");
+}
+$("refresh-cashflow").addEventListener("click",async()=>{try{await loadCashflowForecast();}catch(err){alert(err.message);}});
+$("cashflow-days").addEventListener("change",async()=>{try{await loadCashflowForecast();}catch(err){alert(err.message);}});
+$("save-opening-balance").addEventListener("click",async()=>{try{await api("/api/finance/forecast",{method:"POST",body:JSON.stringify({action:"starting_balance",amount:$("cashflow-opening-balance").value})});await loadCashflowForecast();}catch(err){alert(err.message);}});
+$("cashflow-form").addEventListener("submit",async e=>{e.preventDefault();try{await api("/api/finance/forecast",{method:"POST",body:JSON.stringify({title:$("cashflow-title").value,flow_type:$("cashflow-type").value,amount:$("cashflow-amount").value,expected_date:$("cashflow-date").value,direction_id:$("cashflow-direction").value||null})});$("cashflow-form").reset();await loadCashflowForecast();}catch(err){alert(err.message);}});
+$("cashflow-events").addEventListener("click",async e=>{const b=e.target.closest("[data-cashflow-delete]");if(!b)return;try{await api("/api/finance/forecast",{method:"DELETE",body:JSON.stringify({id:b.dataset.cashflowDelete})});await loadCashflowForecast();}catch(err){alert(err.message);}});
 async function loadFinance() {
   financeData = await api("/api/finance");
   const s=financeData.summary;
@@ -125,6 +147,7 @@ async function loadFinance() {
   $("finance-upcoming").textContent=money(s.upcoming_obligations);
   $("finance-after-upcoming").textContent=money(s.net-s.upcoming_obligations);
   $("expense-date").value=financeData.today;
+  $("cashflow-direction").innerHTML='<option value="">Без направления</option>'+directions.map(d=>'<option value="'+escapeHtml(d.id)+'">'+escapeHtml(d.title)+'</option>').join("");
   $("expense-direction").innerHTML='<option value="">Не распределять / личный расход</option>'+directions.map(d=>'<option value="'+escapeHtml(d.id)+'">'+escapeHtml(d.title)+'</option>').join("");
   $("obligation-date").value=financeData.today;
   $("debt-payment-date").value=financeData.today;
@@ -137,7 +160,7 @@ async function loadFinance() {
 }
 $("expense-form").addEventListener("submit",async e=>{
   e.preventDefault();
-  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"expense",title:$("expense-title").value,amount:$("expense-amount").value,category:$("expense-category").value,direction_id:$("expense-direction").value||null,spent_on:$("expense-date").value})});$("expense-form").reset();await loadFinance();}
+  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"expense",title:$("expense-title").value,amount:$("expense-amount").value,category:$("expense-category").value,direction_id:$("expense-direction").value||null,spent_on:$("expense-date").value})});$("expense-form").reset();await loadFinance();await loadCashflowForecast();}
   catch(err){alert(err.message);}
 });
 $("debt-form").addEventListener("submit",async e=>{
@@ -508,7 +531,7 @@ async function boot() {
   try {
     const { user } = await api("/api/auth/me");
     if (!user) return showAuth();
-    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadProfitability(); await loadAnalytics(); await loadWorkspace(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
+    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadCashflowForecast(); await loadProfitability(); await loadAnalytics(); await loadWorkspace(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
   } catch { showAuth(); }
 }
 boot();
