@@ -25,7 +25,7 @@ export async function onRequestGet({request,env}){
     .bind(id,user.id,template.direction_id,template.life_area_id,template.title,template.description,template.priority,dueDate,template.estimated_minutes,template.id));
   }
  }
- if(statements.length)await env.DB.batch(statements);
+ for(let i=0;i<statements.length;i+=80)await env.DB.batch(statements.slice(i,i+80));
  const {results:updated}=await env.DB.prepare("SELECT t.*,a.title AS life_area_title,d.title AS direction_title,(SELECT COUNT(*) FROM tasks x WHERE x.template_id=t.id AND x.user_id=t.user_id AND x.status!='done') AS open_instances FROM task_templates t LEFT JOIN life_areas a ON a.id=t.life_area_id AND a.user_id=t.user_id LEFT JOIN directions d ON d.id=t.direction_id AND d.user_id=t.user_id WHERE t.user_id=? ORDER BY t.active DESC,t.created_at DESC").bind(user.id).all();
  return json({templates:updated,generated_through:horizon});
 }
