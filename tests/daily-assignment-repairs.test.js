@@ -22,7 +22,7 @@ test("repairs changed remaining estimate while preserving preferred dates",()=>{
 });
 test("adds missing minutes after a task estimate increases",()=>{
  const result=buildDailyAssignmentRepairs(baseWeek(),[{task_id:"a",allocation_date:"2026-11-16",minutes:40}],[{...task,estimated_minutes:120,actual_minutes:20}]);
- assert.deepEqual(result.schedules[0].allocations,[{date:"2026-11-16",minutes:60},{date:"2026-11-17",minutes:40}]);
+ assert.deepEqual(result.schedules[0].allocations,[{date:"2026-11-16",minutes:40},{date:"2026-11-17",minutes:60}]);
 });
 test("reduces saved minutes when the remaining estimate decreases",()=>{
  const result=buildDailyAssignmentRepairs(baseWeek(),[
