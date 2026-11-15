@@ -24,7 +24,7 @@ export async function onRequestGet({request,env}){
  const variableExpenseForecast=buildVariableExpenseForecast(expenseHistory,{today});
  const variableExpensesByMonth=buildMonthlyVariableExpenseSchedule({historicalCategories:variableExpenseForecast.categories,budgets:budgets.results,today,horizonDays:horizon});
  const [planned,obligations,debts,reserves,irregularExpenses]=await Promise.all([
-  env.DB.prepare("SELECT p.*,d.title direction_title FROM planned_cashflows p LEFT JOIN directions d ON d.id=p.direction_id AND d.user_id=p.user_id WHERE p.user_id=? AND p.status='planned' AND p.expected_date>=? AND p.expected_date<=? ORDER BY p.expected_date").bind(user.id,today,end).all(),
+  env.DB.prepare("SELECT p.*,d.title direction_title,pr.title project_title,cl.name client_name FROM planned_cashflows p LEFT JOIN directions d ON d.id=p.direction_id AND d.user_id=p.user_id LEFT JOIN projects pr ON pr.id=p.project_id AND pr.user_id=p.user_id LEFT JOIN clients cl ON cl.id=p.client_id AND cl.user_id=p.user_id WHERE p.user_id=? AND p.status='planned' AND p.expected_date>=? AND p.expected_date<=? ORDER BY p.expected_date").bind(user.id,today,end).all(),
   env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 AND due_date<=? ORDER BY due_date").bind(user.id,end).all(),
   env.DB.prepare("SELECT title,balance,minimum_payment,due_day,status FROM debts WHERE user_id=? AND status='open'").bind(user.id).all(),
   env.DB.prepare("SELECT title,target_amount,current_amount,monthly_contribution,target_date,active FROM cash_reserves WHERE user_id=? AND active=1").bind(user.id).all(),
