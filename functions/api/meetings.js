@@ -21,13 +21,35 @@ export async function onRequestGet({request,env}){
  if(clientId){query+=" AND client_id=?";params.push(clientId);}
  query+=" ORDER BY meeting_date DESC,created_at DESC LIMIT 100";
  const result=await env.DB.prepare(query).bind(...params).all();
- return json({meetings:result.results.map(row=>({...row,decisions:parseModelJson(row.decisions_json)||[],agreements:parseModelJson(row.agreements_json)||[],open_questions:parseModelJson(row.open_questions_json)||[]}))});
+ const meetingIds=result.results.map(row=>row.id);
+ const links=meetingIds.length?await env.DB.prepare("SELECT l.meeting_id,l.agreement_index,l.task_id,t.title AS task_title,t.status AS task_status,t.due_date AS task_due_date FROM meeting_task_links l JOIN tasks t ON t.id=l.task_id AND t.user_id=l.user_id WHERE l.user_id=? AND l.meeting_id IN ("+meetingIds.map(()=>"?").join(",")+")").bind(user.id,...meetingIds).all():{results:[]};
+ const byMeeting=new Map();
+ for(const link of links.results){if(!byMeeting.has(link.meeting_id))byMeeting.set(link.meeting_id,[]);byMeeting.get(link.meeting_id).push(link);}
+ return json({meetings:result.results.map(row=>({...row,decisions:parseModelJson(row.decisions_json)||[],agreements:(parseModelJson(row.agreements_json)||[]).map((agreement,index)=>{const link=(byMeeting.get(row.id)||[]).find(x=>x.agreement_index===index);return link?{...agreement,task_id:link.task_id,task_title:link.task_title,task_status:link.task_status,task_due_date:link.task_due_date}:agreement;}),open_questions:parseModelJson(row.open_questions_json)||[]}))});
 }
 
 export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);
  if(!user)return json({error:"Необходим вход"},401);
  const body=await readJson(request)||{};
+ if(body.action==="link_tasks"){
+  const meetingId=String(body.meeting_id||"");
+  const meetingRow=await env.DB.prepare("SELECT id,agreements_json FROM meeting_notes WHERE id=? AND user_id=?").bind(meetingId,user.id).first();
+  if(!meetingRow)return json({error:"Протокол не найден"},404);
+  const agreements=parseModelJson(meetingRow.agreements_json)||[];
+  const links=Array.isArray(body.links)?body.links.slice(0,20):[];
+  if(!links.length)return json({error:"Нет задач для привязки"},400);
+  const statements=[];
+  for(const link of links){
+   const index=Number(link.agreement_index),taskId=String(link.task_id||"");
+   if(!Number.isInteger(index)||index<0||index>=agreements.length||!taskId)return json({error:"Некорректная связь поручения и задачи"},400);
+   const taskRow=await env.DB.prepare("SELECT id FROM tasks WHERE id=? AND user_id=?").bind(taskId,user.id).first();
+   if(!taskRow)return json({error:"Одна из задач не найдена"},404);
+   statements.push(env.DB.prepare("INSERT INTO meeting_task_links (user_id,meeting_id,agreement_index,task_id) VALUES (?,?,?,?) ON CONFLICT(meeting_id,agreement_index) DO UPDATE SET task_id=excluded.task_id,user_id=excluded.user_id").bind(user.id,meetingId,index,taskId));
+  }
+  await env.DB.batch(statements);
+  return json({ok:true,linked:statements.length});
+ }
  if(body.action==="save"){
   const title=String(body.title||"").trim().slice(0,180);
   const meetingDate=String(body.meeting_date||"");
