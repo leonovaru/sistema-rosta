@@ -182,3 +182,10 @@
 .project-workload-detail{display:flex;flex-wrap:wrap;gap:6px 14px;margin:7px 0;color:var(--muted,#687080);font-size:.8rem}
 .project-workload-detail b{color:var(--text,#222)}
 @media(max-width:560px){.project-workload-grid{grid-template-columns:1fr}}
+
+.work-capacity-settings{display:grid;gap:10px;margin:12px 0 16px;padding:12px;border:1px solid var(--line,#ddd);border-radius:10px;background:var(--surface-muted,#f8f9fb)}
+.work-capacity-settings h3{margin:0 0 4px}
+.capacity-weekdays{display:flex;flex-wrap:wrap;gap:8px 14px}
+.capacity-weekdays label{display:flex;align-items:center;gap:4px}
+#work-capacity-status{display:block}
+.work-capacity-settings>label{max-width:260px;display:grid;gap:5px}
