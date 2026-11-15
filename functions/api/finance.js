@@ -2,6 +2,11 @@ import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { addDays, addPeriod } from "../_lib/finance.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+function validDate(value) {
+  if(!DATE.test(value))return false;
+  const date=new Date(value+"T12:00:00Z");
+  return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value;
+}
 function dateInZone(timeZone) {
   const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
   const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));
@@ -38,7 +43,7 @@ export async function onRequestPost({request,env}) {
   const body=await readJson(request),action=String(body?.action||""),id=newId();
   if(action==="expense"){
     const amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.spent_on||"");
-    if(!amount||!title||title.length>180||!DATE.test(date))return json({error:"Проверь название, сумму и дату расхода"},400);
+    if(!amount||!title||title.length>180||!validDate(date))return json({error:"Проверь название, сумму и дату расхода"},400);
     await env.DB.prepare("INSERT INTO expenses (id,user_id,category,title,amount,spent_on,note) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500)).run();
     return json({ok:true,id},201);
   }
