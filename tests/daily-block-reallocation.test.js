@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildDailyReallocationProposals } from "../functions/_lib/daily-block-reallocation.js";
 
 const options={startTime:"09:00",focusMinutes:50,breakMinutes:10};
-test("proposes moving an overflow task to a later day with enough free capacity",()=>{
+test("proposes moving an unplaced daily allocation to a later day with enough free capacity",()=>{
  const days=[
   {date:"2026-11-16",working_day:true,gross_capacity_minutes:60,available_minutes:60,tasks:[{id:"a",title:"Подготовить отчёт",minutes:90,priority:"medium",due_date:"2026-11-18"}]},
   {date:"2026-11-17",working_day:true,gross_capacity_minutes:180,available_minutes:180,tasks:[]},
