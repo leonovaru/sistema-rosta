@@ -27,8 +27,7 @@ export function buildDailyRhythmInsights(timeEntries=[],sleepSessions=[],timezon
   const start=zonedParts(startEpoch,timezone),end=zonedParts(endEpoch,timezone);
   if(!start||!end)continue;
   const elapsed=Math.round((endEpoch-startEpoch)/60000);
-  if(elapsed>0&&elapsed<=960)sleepDurations.push(elapsed);
-  wakeTimes.push(Number(end.hour)*60+Number(end.minute));bedTimes.push(Number(start.hour)*60+Number(start.minute));
+  if(elapsed>0&&elapsed<=960){sleepDurations.push(elapsed);wakeTimes.push(Number(end.hour)*60+Number(end.minute));bedTimes.push(Number(start.hour)*60+Number(start.minute));}
  }
  const sufficientWork=hours.length>=5,sufficientSleep=sleepDurations.length>=3;
  const sortedHours=[...hours].sort((a,b)=>a-b);
