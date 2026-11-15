@@ -378,6 +378,19 @@ async function loadRevenueScenarios(){
 $("refresh-revenue-scenarios").addEventListener("click",async()=>{const b=$("refresh-revenue-scenarios");b.disabled=true;try{await loadRevenueScenarios();}catch(err){alert(err.message);}finally{b.disabled=false;}});
 
 let salesPlanData=null;
+const DEAL_STAGES={contact:"Первичный контакт",negotiation:"Переговоры",proposal:"Предложение отправлено",awaiting_payment:"Ожидает оплаты",won:"Выиграна",lost:"Проиграна"};
+let dealsData=[];
+async function loadDeals(){
+ const [data,workspace]=await Promise.all([api("/api/deals"),api("/api/workspace")]);dealsData=data.deals||[];
+ $("deal-client").innerHTML='<option value="">Без клиента</option>'+workspace.clients.map(c=>'<option value="'+escapeHtml(c.id)+'">'+escapeHtml(c.name)+'</option>').join("");
+ $("deal-direction").innerHTML=workspace.directions.map(d=>'<option value="'+escapeHtml(d.id)+'">'+escapeHtml(d.title)+'</option>').join("");
+ const s=data.summary;$("deals-summary").innerHTML=[["Открытые сделки",s.open_count],["Сумма открытых",money(s.open_amount)],["Взвешенный прогноз",money(s.weighted_amount)],["Выиграно",money(s.won_amount)]].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
+ $("deals-list").innerHTML=dealsData.length?dealsData.map(d=>'<article class="analytics-row"><div><b>'+escapeHtml(d.title)+'</b><small>'+escapeHtml(d.client_name||"Без клиента")+' · '+escapeHtml(d.direction_title||"Без направления")+' · '+DEAL_STAGES[d.stage]+' · '+d.probability_percent+'% · оплата '+(d.expected_close_date||"дата не задана")+'</small><small>'+escapeHtml(d.notes||"")+'</small></div><div><strong>'+money(d.amount)+'</strong><small>Прогноз '+money(d.weighted_amount)+'</small></div><button class="button ghost" type="button" data-deal-delete="'+escapeHtml(d.id)+'">Удалить</button></article>').join(""):'<p class="muted">Пока нет сделок. Добавь первую ожидаемую продажу.</p>';
+}
+$("deal-stage").addEventListener("change",()=>{const p={contact:10,negotiation:30,proposal:60,awaiting_payment:85,won:100,lost:0};$("deal-probability").value=p[$("deal-stage").value];});
+$("deal-form").addEventListener("submit",async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api("/api/deals",{method:"POST",body:JSON.stringify({action:"create",title:$("deal-title").value,client_id:$("deal-client").value||null,direction_id:$("deal-direction").value,amount:$("deal-amount").value,stage:$("deal-stage").value,probability_percent:$("deal-probability").value,expected_close_date:$("deal-date").value||null,notes:$("deal-notes").value})});e.target.reset();$("deal-probability").value=20;await loadDeals();}catch(err){alert(err.message);}finally{b.disabled=false;}});
+$("deals-list").addEventListener("click",async e=>{const b=e.target.closest("[data-deal-delete]");if(!b)return;if(!confirm("Удалить эту сделку?"))return;b.disabled=true;try{await api("/api/deals",{method:"POST",body:JSON.stringify({action:"delete",id:b.dataset.dealDelete})});await loadDeals();}catch(err){alert(err.message);b.disabled=false;}});
+$("refresh-deals").addEventListener("click",()=>loadDeals().catch(err=>alert(err.message)));
 async function loadSalesPlan(){
  salesPlanData=await api("/api/finance/sales-plan");
  const host=$("sales-plan-directions");
