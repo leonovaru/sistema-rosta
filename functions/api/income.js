@@ -14,7 +14,7 @@ export async function onRequestGet({ request, env }) {
   const settings = await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
   const today = dateInZone(settings?.timezone || "Europe/Moscow");
   const monthStart = today.slice(0,7) + "-01";
-  const { results } = await env.DB.prepare("SELECT i.*,COALESCE(i.direction_title_snapshot,d.title) AS direction_title FROM income_entries i LEFT JOIN directions d ON d.id=i.direction_id AND d.user_id=i.user_id WHERE i.user_id=? ORDER BY received_on DESC,created_at DESC LIMIT 200").bind(user.id).all();
+  const { results } = await env.DB.prepare("SELECT i.*,COALESCE(i.direction_title_snapshot,d.title) AS direction_title FROM income_entries i LEFT JOIN directions d ON d.id=COALESCE(i.direction_id_snapshot,i.direction_id) AND d.user_id=i.user_id WHERE i.user_id=? ORDER BY received_on DESC,created_at DESC LIMIT 200").bind(user.id).all();
   const total = await env.DB.prepare("SELECT COALESCE(SUM(amount),0) AS total FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=?").bind(user.id,monthStart,today).first();
   return json({ entries: results, month_total: total?.total || 0, today, month_start: monthStart });
 }
