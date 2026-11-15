@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
-import { buildMonthlyDealForecast } from "../_lib/deal-forecast.js";
+import { buildMonthlyDealForecast, isDealInActivePipeline } from "../_lib/deal-forecast.js";
 import { buildObservedSalesFunnel } from "../_lib/observed-sales-funnel.js";
 import { buildDealDateForecast } from "../_lib/deal-date-forecast.js";
 import { isClientSelectable, isDirectionSelectable } from "../_lib/workspace-entity-availability.js";
@@ -24,7 +24,7 @@ export async function onRequestGet({request,env}){
  const cycleByDirection=new Map(observed.map(x=>[x.direction_id,x]));
  const firstContactByClient=new Map(dealFirstContacts.results.map(x=>[x.direction_id+"::"+x.client_id,x.first_contact_on]));
  const deals=buildDealDateForecast(rows.results.map(x=>({...x,amount:Number(x.amount),weighted_amount:Number(x.weighted_amount),history:eventsByDeal.get(x.id)||[]})),{cycleByDirection,firstContactByClient});
- const open=deals.filter(x=>!["won","lost"].includes(x.stage)),won=deals.filter(x=>x.stage==="won"),lost=deals.filter(x=>x.stage==="lost");
+ const open=deals.filter(isDealInActivePipeline),won=deals.filter(x=>x.stage==="won"),lost=deals.filter(x=>x.stage==="lost");
  const lossReasons=Object.entries(LOSS_LABELS).map(([key,label])=>{const items=lost.filter(x=>x.loss_reason_category===key);return {key,label,count:items.length,amount:items.reduce((s,x)=>s+x.amount,0)};}).filter(x=>x.count).sort((a,b)=>b.count-a.count);
  const {monthly_forecast,undated_open}=buildMonthlyDealForecast({dealRows:monthlyDeals.results,incomeRows:monthlyIncome.results,undatedRow:undatedDeals});
  return json({deals,summary:{open_count:open.length,open_amount:open.reduce((s,x)=>s+x.amount,0),weighted_amount:open.reduce((s,x)=>s+x.weighted_amount,0),won_amount:won.reduce((s,x)=>s+x.amount,0),lost_count:lost.length,lost_amount:lost.reduce((s,x)=>s+x.amount,0)},loss_reasons:lossReasons,monthly_forecast,undated_open});
