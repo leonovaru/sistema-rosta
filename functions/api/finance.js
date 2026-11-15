@@ -2,6 +2,7 @@ import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { addDays, addPeriod } from "../_lib/finance.js";
 import { detectRecurringExpenses } from "../_lib/recurring-expense-detection.js";
 import { buildFinancialAttributionSnapshot } from "../_lib/financial-attribution.js";
+import { isClientSelectable, isProjectSelectable } from "../_lib/workspace-entity-availability.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 function validDate(value) {
@@ -63,10 +64,12 @@ export async function onRequestPost({request,env}) {
     if(!amount||!title||title.length>180||!validDate(date))return json({error:"Проверь название, сумму и дату расхода"},400);
     const directionId=body.direction_id?String(body.direction_id):null;
     const clientId=body.client_id?String(body.client_id):null,projectId=body.project_id?String(body.project_id):null;
-    const client=clientId?await env.DB.prepare("SELECT id,name,direction_id FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first():null;
+    const client=clientId?await env.DB.prepare("SELECT id,name,direction_id,status FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first():null;
     if(clientId&&!client)return json({error:"Клиент не найден"},404);
-    const project=projectId?await env.DB.prepare("SELECT id,client_id,direction_id,title FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first():null;
+    if(clientId&&!isClientSelectable(client))return json({error:"Нельзя привязать расход к закрытому клиенту"},409);
+    const project=projectId?await env.DB.prepare("SELECT id,client_id,direction_id,title,status FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first():null;
     if(projectId&&!project)return json({error:"Проект не найден"},404);
+    if(projectId&&!isProjectSelectable(project))return json({error:"Нельзя привязать расход к архивному проекту"},409);
     if(project&&clientId&&project.client_id!==clientId)return json({error:"Проект не относится к выбранному клиенту"},400);
     if(project&&!clientId&&project.client_id)return json({error:"Выбери клиента, связанного с проектом"},400);
     if(project&&directionId&&project.direction_id&&directionId!==project.direction_id)return json({error:"Направление должно соответствовать выбранному проекту"},400);
