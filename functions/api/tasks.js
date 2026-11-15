@@ -92,6 +92,14 @@ export async function onRequestPatch({ request, env }) {
     await invalidateTodayPlan(env, user.id);
     return json({ ok: true });
   }
+  if (body?.due_date !== undefined) {
+    const dueDate = body.due_date === null || body.due_date === "" ? null : String(body.due_date);
+    if (dueDate && !/^\\d{4}-\\d{2}-\\d{2}$/.test(dueDate)) return json({ error: "Проверьте срок задачи" }, 400);
+    const result = await env.DB.prepare("UPDATE tasks SET due_date=? WHERE id=? AND user_id=?").bind(dueDate,id,user.id).run();
+    if (!result.meta.changes) return json({ error: "Задача не найдена" }, 404);
+    await invalidateTodayPlan(env, user.id);
+    return json({ ok: true });
+  }
   const status = String(body?.status || "");
   if (!["todo","doing","waiting","done"].includes(status)) return json({ error: "Некорректные данные" }, 400);
   const result = await env.DB.prepare("UPDATE tasks SET status=?,completed_at=CASE WHEN ?='done' THEN datetime('now') ELSE NULL END WHERE id=? AND user_id=?").bind(status,status,id,user.id).run();
