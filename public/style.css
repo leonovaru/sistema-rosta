@@ -144,3 +144,10 @@
 .meeting-agreement span{display:grid;gap:4px;min-width:0}
 .meeting-agreement small{color:var(--muted,#687080);font-size:.82rem}
 .meeting-agreement input:disabled+span{opacity:.65}
+
+.client-meeting-details{margin-top:8px;padding:9px 10px;border:1px solid var(--line,#ddd);border-radius:8px;background:var(--surface-muted,#f8f9fb)}
+.client-meeting-details summary{cursor:pointer;font-weight:600}
+.client-meeting-details ul{margin:6px 0 10px;padding-left:20px}
+.client-meeting-details p{white-space:pre-wrap;overflow-wrap:anywhere}
+.project-meetings{margin:12px 0;padding:12px;border:1px solid var(--line,#ddd);border-radius:12px;background:var(--surface,#fff)}
+.project-meetings .client-history-entry+ .client-history-entry{margin-top:9px}
