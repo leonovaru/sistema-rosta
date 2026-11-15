@@ -166,6 +166,7 @@ export async function onRequestPost({ request, env }) {
     placed.push({...item,scheduled:true,start_at:localDateTime(today,start),end_at:localDateTime(today,end)});
     slot.start=end;
   }
+  placed.sort((a,b)=>a.start_at.localeCompare(b.start_at));
   plan.items=[...placed,...unplaced];
   plan.total_minutes=placed.reduce((sum,item)=>sum+item.minutes,0);
   plan.reserve_minutes=Math.max(0,capacity-plan.total_minutes);
