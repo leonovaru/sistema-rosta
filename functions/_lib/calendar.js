@@ -1,3 +1,17 @@
+export function isValidCalendarDate(value) {
+  if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+export function isValidCalendarDateTime(value) {
+  if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(value)) return false;
+  const [date, time] = value.split("T");
+  const [hour, minute] = time.split(":").map(Number);
+  return isValidCalendarDate(date) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
 function shiftDate(date, days) {
   const value = new Date(date + "T12:00:00Z");
   value.setUTCDate(value.getUTCDate() + days);
@@ -20,7 +34,7 @@ export function expandRecurringEvents(rows, from, to) {
       let offset = Math.max(0, daysBeforeRange - endOffsetDays);
       offset = Math.ceil(offset / step) * step;
       let date = shiftDate(baseStart, offset), guard = 0;
-      while (date <= until && date < toDate && guard++ < 500) {
+      while (date <= until && date <= toDate && guard++ < 500) {
         if (date >= fromDate || shiftDate(date, endOffsetDays) >= fromDate) dates.push(date);
         date = shiftDate(date, step);
       }
