@@ -16,7 +16,7 @@ export async function onRequestPost({ request, env }) {
   const task = await env.DB.prepare("SELECT id,title,description FROM tasks WHERE id=? AND user_id=?").bind(taskId,user.id).first();
   if (!task) return json({ error: "Задача не найдена" }, 404);
   try {
-    const response = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+    const response = await env.AI.run("@cf/google/gemma-4-26b-a4b-it", {
       messages: [
         { role: "system", content: "Разбей задачу на 2–8 конкретных выполнимых шагов. Каждый шаг должен начинаться с действия и иметь проверяемый результат. Не включай абстрактные советы. Оцени активное рабочее время в минутах. Верни только JSON вида {steps:[{title:string,minutes:integer}]}. Не придумывай, что уже выполнил шаги. Ответ на русском." },
         { role: "user", content: "Задача: " + task.title + (task.description ? "\nКонтекст: " + task.description : "") }
