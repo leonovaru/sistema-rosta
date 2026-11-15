@@ -21,7 +21,12 @@ export function buildTaskWindowRecommendations(plans=[],patterns=null){
  return (plans||[]).map(day=>{
   const windows=(day.free_windows||[]).filter(window=>Number(window.minutes)>0).map(window=>({...window,history:historyFor(window,patterns)}));
   const tasks=(day.tasks||[]).filter(task=>task.id&&Number(task.minutes)>0).map(task=>({...task,urgency_days:taskUrgency({...task,date:day.date})}));
-  tasks.sort((a,b)=>(Number(b.priority_score)||0)-(Number(a.priority_score)||0)||a.urgency_days-b.urgency_days||(a.cognitive_load==="high"?-1:0)-(b.cognitive_load==="high"?-1:0)||Number(b.minutes)-Number(a.minutes));
+  const plannedOrder=new Map();
+  (day.blocks||[]).filter(block=>block.type==="focus"&&block.task_id!=null).forEach((block,index)=>{const key=String(block.task_id);if(!plannedOrder.has(key))plannedOrder.set(key,index);});
+  tasks.sort((a,b)=>{
+   const ai=plannedOrder.has(String(a.id))?plannedOrder.get(String(a.id)):Infinity,bi=plannedOrder.has(String(b.id))?plannedOrder.get(String(b.id)):Infinity;
+   return ai-bi||(Number(b.priority_score)||0)-(Number(a.priority_score)||0)||a.urgency_days-b.urgency_days||(a.cognitive_load==="high"?-1:0)-(b.cognitive_load==="high"?-1:0)||Number(b.minutes)-Number(a.minutes);
+  });
   const used=new Set(),recommendations=[],unmatched=[];
   for(const task of tasks){
    const candidates=windows.map((window,index)=>({window,index,history:window.history,waste:Number(window.minutes)-Number(task.minutes)}))
