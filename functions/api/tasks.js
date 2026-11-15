@@ -94,6 +94,10 @@ export async function onRequestPatch({ request, env }) {
   }
   const status = String(body?.status || "");
   if (!["todo","doing","waiting","done"].includes(status)) return json({ error: "Некорректные данные" }, 400);
+  if(status==="done"){
+    const activeTimer=await env.DB.prepare("SELECT id FROM task_time_entries WHERE task_id=? AND user_id=? AND ended_at IS NULL LIMIT 1").bind(id,user.id).first();
+    if(activeTimer)return json({error:"Сначала остановите таймер задачи, затем завершите её"},409);
+  }
   const result = await env.DB.prepare("UPDATE tasks SET status=?,completed_at=CASE WHEN ?='done' THEN datetime('now') ELSE NULL END WHERE id=? AND user_id=?").bind(status,status,id,user.id).run();
   if (!result.meta.changes) return json({ error: "Задача не найдена" }, 404);
   await invalidateTodayPlan(env, user.id);
