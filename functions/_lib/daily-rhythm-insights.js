@@ -7,6 +7,7 @@ function zonedParts(value,timeZone){
 function band(hour){return hour<6?"Ночь":hour<12?"Утро":hour<18?"День":"Вечер";}
 function average(values){return values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length):null;}
 function formatHour(value){return value===null?"—":String(Math.floor(value/60)).padStart(2,"0")+":"+String(value%60).padStart(2,"0");}
+function averageClock(values){if(!values.length)return null;const angles=values.map(value=>value/1440*Math.PI*2),sin=angles.reduce((sum,value)=>sum+Math.sin(value),0),cos=angles.reduce((sum,value)=>sum+Math.cos(value),0);let angle=Math.atan2(sin,cos);if(angle<0)angle+=Math.PI*2;return Math.round(angle/(Math.PI*2)*1440)%1440;}
 export function buildDailyRhythmInsights(timeEntries=[],sleepSessions=[],timezone="Europe/Moscow"){
  const bands=new Map(),hours=[],durations=[];
  for(const entry of timeEntries||[]){
@@ -35,7 +36,7 @@ export function buildDailyRhythmInsights(timeEntries=[],sleepSessions=[],timezon
  return {
   timezone,period_days:90,
   work:{sample_sessions:hours.length,total_tracked_minutes:durations.reduce((a,b)=>a+b,0),average_session_minutes:average(durations),median_start_time:formatHour(medianHour),most_tracked_period:mostTracked?.period||null,by_period:periodRows,confidence:hours.length>=20?"higher":sufficientWork?"preliminary":"insufficient"},
-  sleep:{sample_sessions:sleepDurations.length,average_duration_minutes:sufficientSleep?average(sleepDurations):null,average_bedtime:sufficientSleep?formatHour(average(bedTimes)):null,average_wake_time:sufficientSleep?formatHour(average(wakeTimes)):null,confidence:sleepDurations.length>=14?"higher":sufficientSleep?"preliminary":"insufficient"},
+  sleep:{sample_sessions:sleepDurations.length,average_duration_minutes:sufficientSleep?average(sleepDurations):null,average_bedtime:sufficientSleep?formatHour(averageClock(bedTimes)):null,average_wake_time:sufficientSleep?formatHour(averageClock(wakeTimes)):null,confidence:sleepDurations.length>=14?"higher":sufficientSleep?"preliminary":"insufficient"},
   notes:["Учитываются только завершённые таймер-сессии задач и заполненные записи сна за последние 90 дней.","Время сессии относится к локальному часовому поясу; это распределение учёта времени, а не доказательство продуктивности.","При малом количестве наблюдений персональные выводы не формируются."]
  };
 }
