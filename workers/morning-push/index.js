@@ -18,16 +18,20 @@ async function hkdfExpand(prk,info,length){
   return out.slice(0,length);
 }
 async function hkdfExtract(salt,ikm){return hmac(salt,ikm);}
-function derPrivateKey(raw){
-  const prefix=Uint8Array.from([0x30,0x31,0x02,0x01,0x00,0x30,0x13,0x06,0x07,0x2a,0x86,0x48,0xce,0x3d,0x02,0x01,0x06,0x08,0x2a,0x86,0x48,0xce,0x3d,0x03,0x01,0x07,0x04,0x17,0x30,0x15,0x02,0x01,0x01,0x04,0x20]);
-  return concat(prefix,raw);
+async function importVapidPrivateKey(env){
+  const publicBytes=unb64u(env.VAPID_PUBLIC_KEY),privateBytes=unb64u(env.VAPID_PRIVATE_KEY);
+  if(publicBytes.length!==65||publicBytes[0]!==4||privateBytes.length!==32)throw new Error("Invalid VAPID key material");
+  return crypto.subtle.importKey("jwk",{
+    kty:"EC",crv:"P-256",x:b64u(publicBytes.slice(1,33)),y:b64u(publicBytes.slice(33,65)),
+    d:b64u(privateBytes),ext:true,key_ops:["sign"]
+  },{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
 }
 async function vapidToken(endpoint,env){
   const audience=new URL(endpoint).origin,now=Math.floor(Date.now()/1000);
   const header=b64u(enc.encode(JSON.stringify({typ:"JWT",alg:"ES256"})));
   const payload=b64u(enc.encode(JSON.stringify({aud:audience,exp:now+12*60*60,sub:env.VAPID_SUBJECT})));
   const unsigned=header+"."+payload;
-  const privateKey=await crypto.subtle.importKey("pkcs8",derPrivateKey(unb64u(env.VAPID_PRIVATE_KEY)),{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
+  const privateKey=await await importVapidPrivateKey(env);
   const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},privateKey,enc.encode(unsigned));
   return unsigned+"."+b64u(signature);
 }
