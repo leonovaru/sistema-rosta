@@ -230,7 +230,7 @@ async function loadProfitability(){
  const s=profitabilityData.summary;
  $("profitability-period").textContent=profitabilityData.period.from+" — "+profitabilityData.period.to;
  $("profitability-summary").innerHTML=[
- ["Поступления",money(s.revenue)],["Прямые расходы",money(s.direct_expenses)],["Вклад направлений",money(s.contribution)],["Фактическое время",duration(s.actual_minutes)],["Завершено задач",s.completed_tasks],["Вклад на час",s.contribution_per_hour===null?"Нет данных":money(s.contribution_per_hour)]
+ ["Поступления",money(s.revenue)],["Прямые расходы",money(s.direct_expenses)],["Вклад направлений",money(s.contribution)],["Фактическое время",duration(s.total_minutes)],["Завершено задач",s.completed_tasks],["Вклад на час",s.contribution_per_hour===null?"Нет данных":money(s.contribution_per_hour)]
  ].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
  $("profitability-directions").innerHTML=profitabilityData.directions.length?profitabilityData.directions.map(x=>'<article class="analytics-row"><div><b>'+escapeHtml(x.direction_title)+'</b><small>Доход '+money(x.revenue)+' · расходы '+money(x.direct_expenses)+' · маржа '+(x.margin_percent===null?"—":x.margin_percent+"%")+' · '+x.completed_tasks+' задач / '+duration(x.actual_minutes)+'</small></div><div><strong>'+money(x.contribution)+'</strong><small>вклад · '+(x.contribution_per_hour===null?"нет учёта времени":money(x.contribution_per_hour)+"/ч")+'</small></div></article>').join(""):'<p class="muted">Пока нет доходов, расходов или завершённых задач за период.</p>';
 }
