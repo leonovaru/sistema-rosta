@@ -75,3 +75,12 @@ test("suggests the next future date when the last expected payment date has pass
  const found=detectRecurringExpenses(rows,{today:"2026-11-20"});
  assert.equal(found[0].next_date,"2026-12-15");
 });
+
+test("does not merge different named services just because they share a generic word",()=>{
+ const rows=[
+  ...["2026-08-05","2026-09-05","2026-10-05"].map(spent_on=>({title:"Аренда квартиры",category:"Жильё",amount:20000,spent_on})),
+  ...["2026-08-06","2026-09-06","2026-10-06"].map(spent_on=>({title:"Аренда склада",category:"Жильё",amount:12000,spent_on}))
+ ];
+ const found=detectRecurringExpenses(rows,{today:"2026-11-10"});
+ assert.equal(found.length,2);
+});
