@@ -15,7 +15,7 @@ let calendarSelected = "";
 let calendarView = "month";
 let workspaceData = {clients:[],projects:[],life_areas:[],directions:[]};
 let pendingProjectPlan = null;
-let dailyBlockPreferences = { start: "09:00", focus: 50, rest: 10, prep: 0, after: 0 };
+let dailyBlockPreferences = { start: "09:00", focus: 50, rest: 10, prep: 0, after: 0, variant: "priority" };
 try { dailyBlockPreferences = { ...dailyBlockPreferences, ...JSON.parse(localStorage.getItem("dailyBlockPreferences") || "{}") }; } catch {}
 function renderDailyBlockCards(plans) {
  return (plans||[]).map(day=>{
@@ -28,6 +28,13 @@ function renderDailyBlockCards(plans) {
  }).join("");
 }
 
+
+
+function renderDailyBlockScenarios(scenarios,selected="priority") {
+ const valid=(scenarios||[]).some(item=>item.key===selected)?selected:"priority";
+ return '<div class="daily-block-variant-tabs">'+(scenarios||[]).map(item=>'<button type="button" class="button '+(item.key===valid?'':'ghost')+'" data-daily-block-scenario="'+escapeHtml(item.key)+'" aria-pressed="'+(item.key===valid?'true':'false')+'">'+escapeHtml(item.title)+'</button>').join("")+'</div>'+
+ (scenarios||[]).map(item=>'<section class="daily-block-variant" data-daily-block-panel="'+escapeHtml(item.key)+'" '+(item.key===valid?'':'hidden')+'><p class="fine">'+escapeHtml(item.description)+' · только черновик, задачи и календарь не меняются</p>'+renderDailyBlockCards(item.plans)+'</section>').join("");
+}
 
 const money = n => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(n || 0)) + " ₽";
 const duration = n => { const v = Number(n || 0); return v >= 60 ? (Math.floor(v/60) + " ч" + (v%60 ? " " + v%60 + " мин" : "")) : v + " мин"; };
@@ -137,6 +144,24 @@ $("estimate-task").addEventListener("click", async () => {
   finally { button.disabled = false; button.textContent = "Оценить время и делегирование с ИИ"; }
 });
 ["task-title","task-description"].forEach(id => $(id).addEventListener("input", () => { taskEstimate = null; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; }));
+
+document.addEventListener("click",event=>{
+ const button=event.target.closest("[data-daily-block-scenario]");
+ if(!button||!event.target.closest("#weekly-workload"))return;
+ const selected=button.dataset.dailyBlockScenario;
+ dailyBlockPreferences={...dailyBlockPreferences,variant:selected};
+ try{localStorage.setItem("dailyBlockPreferences",JSON.stringify(dailyBlockPreferences));}catch{}
+ const root=button.closest(".weekly-focus-scenarios");
+ root?.querySelectorAll("[data-daily-block-scenario]").forEach(item=>{
+  const active=item.dataset.dailyBlockScenario===selected;
+  item.classList.toggle("ghost",!active);
+  item.setAttribute("aria-pressed",active?"true":"false");
+ });
+ root?.querySelectorAll("[data-daily-block-panel]").forEach(panel=>{
+  panel.hidden=panel.dataset.dailyBlockPanel!==selected;
+ });
+});
+
 document.addEventListener("change",event=>{
  if(!event.target.closest("#weekly-workload"))return;
  if(!["daily-block-start","daily-block-focus","daily-block-rest","daily-block-prep","daily-block-after"].includes(event.target.id))return;
@@ -1115,8 +1140,8 @@ async function loadWeeklyWorkload(){
  const rhythmPanel='<section class="weekly-balance"><h4>Фактический ритм дня · последние 90 дней</h4><p class="fine">Это время, когда чаще запускались таймеры задач, а не измерение эффективности или качества работы.</p><div class="balance-row"><div><b>Рабочие сессии</b><small>'+workRhythm.sample_sessions+' наблюдений · '+(workRhythm.confidence==="higher"?"достаточно для предварительной картины":workRhythm.confidence==="preliminary"?"пока предварительные данные":"пока недостаточно данных")+'</small></div><strong>'+duration(workRhythm.total_tracked_minutes||0)+'</strong></div><div class="balance-row"><span>Чаще всего фиксировалась работа</span><strong>'+escapeHtml(workRhythm.most_tracked_period||"Нет данных")+'</strong></div><div class="balance-row"><span>Медианное время старта</span><strong>'+escapeHtml(workRhythm.median_start_time||"—")+'</strong></div><div class="balance-row"><span>Средняя длительность сессии</span><strong>'+duration(workRhythm.average_session_minutes||0)+'</strong></div>'+rhythmPeriods+'<h5>Сон</h5><div class="balance-row"><div><b>Заполненные ночи</b><small>'+(sleepRhythm.confidence==="higher"?"Устойчивая выборка":sleepRhythm.confidence==="preliminary"?"Предварительная выборка":"Недостаточно записей для вывода")+'</small></div><strong>'+sleepRhythm.sample_sessions+'</strong></div><div class="balance-row"><span>Средняя продолжительность</span><strong>'+(sleepRhythm.average_duration_minutes===null?"—":duration(sleepRhythm.average_duration_minutes))+'</strong></div><div class="balance-row"><span>Среднее время засыпания</span><strong>'+escapeHtml(sleepRhythm.average_bedtime||"—")+'</strong></div><div class="balance-row"><span>Среднее время пробуждения</span><strong>'+escapeHtml(sleepRhythm.average_wake_time||"—")+'</strong></div><p class="fine">Данные не меняют расписание автоматически. Часовой пояс: '+escapeHtml(rhythm.timezone||"Europe/Moscow")+'.</p></section>';
  const recovery=week.recovery_insights||{},breakRule=recovery.break_rule||{};
  const recoveryPanel='<section class="weekly-balance"><h4>Перерывы и восстановление</h4><p class="fine">Анализ длительности завершённых таймер-сессий. Таймер может оставаться включённым во время отдыха, поэтому это ориентир, а не точное измерение непрерывной концентрации.</p><div class="balance-row"><div><b>Наблюдений</b><small>'+recovery.sample_sessions+' завершённых сессий · '+(recovery.confidence==="higher"?"более устойчивая выборка":recovery.confidence==="preliminary"?"предварительная выборка":"недостаточно данных")+'</small></div><strong>'+Number(recovery.long_session_share_percent||0)+'%</strong></div><div class="balance-row"><span>Медианная длительность</span><strong>'+duration(recovery.median_session_minutes||0)+'</strong></div><div class="balance-row"><span>Самая длинная сессия</span><strong>'+duration(recovery.longest_session_minutes||0)+'</strong></div><div class="balance-row"><span>Сессий от 90 минут</span><strong>'+Number(recovery.sessions_over_90_minutes||0)+'</strong></div><div class="balance-row"><span>Сессий от 2 часов</span><strong>'+Number(recovery.sessions_over_120_minutes||0)+'</strong></div><p>'+escapeHtml(recovery.guidance||"Пока нет данных для рекомендации.")+'</p><h5>Мягкая стартовая настройка перерывов</h5><p>После '+(breakRule.focus_minutes||50)+' минут фокус-блока — около '+(breakRule.break_minutes||10)+' минут отдыха. Можно начать с короткой паузы '+(breakRule.optional_short_break_minutes||5)+' минут.</p><p class="fine">Это необязательная подсказка. Система не создаёт события и не переставляет календарь. '+escapeHtml(recovery.timezone||"")+'</p></section>';
- const dailyBlockPlans=week.daily_block_plans||[];
- const blockPlanCards=renderDailyBlockCards(dailyBlockPlans);
+ const dailyBlockScenarios=week.daily_block_scenarios||[];
+ const blockPlanCards=renderDailyBlockScenarios(dailyBlockScenarios,dailyBlockPreferences.variant);
  const blockPlanPanel='<section class="weekly-focus-scenarios"><h4>Рабочие блоки и перерывы по времени</h4><div class="voice-task-fields"><label>Начало рабочего дня<input type="time" id="daily-block-start" value="'+escapeHtml(dailyBlockPreferences.start)+'"></label><label>Фокус, минут<input type="number" id="daily-block-focus" min="15" max="120" step="5" value="'+dailyBlockPreferences.focus+'"></label><label>Перерыв, минут<input type="number" id="daily-block-rest" min="3" max="30" step="1" value="'+dailyBlockPreferences.rest+'"></label><label>Подготовка до встреч, минут<input type="number" id="daily-block-prep" min="0" max="120" step="5" value="'+dailyBlockPreferences.prep+'"></label><label>Буфер после встреч, минут<input type="number" id="daily-block-after" min="0" max="120" step="5" value="'+dailyBlockPreferences.after+'"></label></div><p class="fine">Настройки сохраняются в этом браузере. Буфер подготовки расширяет занятое время до встречи, буфер после — после её окончания. Они применяются к встречам, поездкам и другим занятым событиям, кроме сна и событий типа «Работа». Это резерв времени, а не расчёт маршрута. Система ничего не добавляет и не переносит в календаре.</p>'+(blockPlanCards||'<p class="muted">Нет задач с оценкой времени для черновика блоков.</p>')+'</section>';
  const accuracy=week.estimate_accuracy||{},overall=accuracy.overall||{},accuracyRows=(accuracy.by_area||[]).map(row=>'<div class="balance-row"><div><b>'+escapeHtml(row.title)+'</b><small>'+row.sample_count+' завершённых задач · медианная ошибка '+(row.median_error_percent===null?'нет данных':row.median_error_percent+'%')+'</small></div><strong>'+(row.recommended_estimate_multiplier===null?'Пока мало данных':'×'+row.recommended_estimate_multiplier)+'</strong></div>').join("");
  const accuracyPanel='<section class="weekly-balance"><h4>Точность оценок задач</h4><p class="fine">История завершённых задач за последние 90 дней. Множитель — подсказка для будущих оценок, существующие оценки не меняются.</p><div class="weekly-metrics"><article><span>Завершённых задач в выборке</span><b>'+overall.sample_count+'</b></article><article><span>Медианная ошибка оценки</span><b>'+(overall.median_error_percent===null?'—':overall.median_error_percent+'%')+'</b></article><article><span>Поправка к будущим оценкам</span><b>'+(overall.recommended_estimate_multiplier===null?'Недостаточно данных':'×'+overall.recommended_estimate_multiplier)+'</b></article></div>'+(accuracyRows||'<p class="muted">Пока недостаточно завершённых задач с оценкой и фактическим временем. Нужно не менее трёх наблюдений для рекомендации.</p>')+'</section>';
