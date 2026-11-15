@@ -10,3 +10,12 @@ test("ignores malformed month keys and negative amounts",()=>{
  const result=buildMonthlyDealForecast({dealRows:[{month:"bad",planned_amount:20},{month:"2026-11",planned_amount:-10,weighted_amount:4,deal_count:1}],incomeRows:[{month:"2026-11",actual_amount:-5}]});
  assert.deepEqual(result.monthly_forecast,[{month:"2026-11",planned_amount:0,weighted_amount:4,deal_count:1,actual_amount:0}]);
 });
+
+test("closed-client deals stay in history but are excluded from the active pipeline",async()=>{
+ const {isDealInActivePipeline}=await import("../functions/_lib/deal-forecast.js");
+ assert.equal(isDealInActivePipeline({stage:"proposal",client_status:"active"}),true);
+ assert.equal(isDealInActivePipeline({stage:"proposal",client_status:"closed"}),false);
+ assert.equal(isDealInActivePipeline({stage:"proposal",client_status:null}),true);
+ assert.equal(isDealInActivePipeline({stage:"won",client_status:"active"}),false);
+ assert.equal(isDealInActivePipeline({stage:"lost",client_status:"closed"}),false);
+});
