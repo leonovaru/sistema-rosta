@@ -31,13 +31,21 @@ export async function onRequestPost({ request, env }) {
     const owns = await env.DB.prepare("SELECT id FROM directions WHERE id=? AND user_id=?").bind(directionId,user.id).first();
     if (!owns) return json({ error: "Направление не найдено" }, 404);
   }
+  const clientId=body?.client_id?String(body.client_id):null,projectId=body?.project_id?String(body.project_id):null;
+  if(clientId&&!await env.DB.prepare("SELECT id FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first())return json({error:"Клиент не найден"},404);
+  if(projectId){
+    const project=await env.DB.prepare("SELECT id,client_id,direction_id FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first();
+    if(!project)return json({error:"Проект не найден"},404);
+    if(clientId&&project.client_id!==clientId)return json({error:"Проект не относится к выбранному клиенту"},400);
+    if(!clientId&&project.client_id) return json({error:"Выбери клиента, связанного с проектом"},400);
+  }
   const buckets = await env.DB.prepare("SELECT id,percentage,active FROM income_buckets WHERE user_id=? AND active=1 ORDER BY sort_order").bind(user.id).all();
   let allocations;
   try { allocations = allocateIncome(amount, buckets.results); }
   catch { return json({ error: "Сначала настрой корзины так, чтобы распределение составляло 100%" }, 409); }
   const id = newId();
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO income_entries (id,user_id,direction_id,amount,received_on,note) VALUES (?,?,?,?,?,?)").bind(id,user.id,directionId,amount,date,String(body?.note || "").slice(0,500)),
+    env.DB.prepare("INSERT INTO income_entries (id,user_id,direction_id,amount,received_on,note,client_id,project_id) VALUES (?,?,?,?,?,?,?,?)").bind(id,user.id,directionId,amount,date,String(body?.note || "").slice(0,500),clientId,projectId),
     ...allocations.map(row => env.DB.prepare("INSERT INTO income_bucket_allocations (id,user_id,income_id,bucket_id,percentage,amount) VALUES (?,?,?,?,?,?)").bind(newId(),user.id,id,row.bucket_id,row.percentage,row.amount))
   ]);
   return json({ ok: true, id, allocations }, 201);
