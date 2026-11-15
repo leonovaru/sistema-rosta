@@ -29,7 +29,7 @@ function createEnv(existing = []) {
         async first() {
           if (sql.includes("FROM sessions s JOIN users")) return { id: "user-1", email: "user@example.test" };
           if (sql.includes("SELECT id FROM push_subscriptions")) {
-            return rows.find(row => row.user_id === values[0] && row.endpoint === values[1]) || null;
+            return rows.find(row => row.user_id === values[0] && (!sql.includes("endpoint=?") || row.endpoint === values[1])) || null;
           }
           return null;
         },
@@ -105,4 +105,55 @@ test("push subscription status checks the exact device endpoint", async () => {
   const data = await response.json();
   assert.equal(data.subscribed, true);
   assert.equal(data.supported, true);
+});
+
+
+test("registering the same device again refreshes its keys without creating a duplicate", async () => {
+  const first = await validSubscription();
+  const env = createEnv([{ id: "sub-existing", user_id: "user-1", endpoint: first.endpoint, p256dh: first.keys.p256dh, auth: first.keys.auth }]);
+  const refreshed = await validSubscription(first.endpoint);
+  const response = await onRequestPost({ request: request("POST", { subscription: refreshed }), env });
+  assert.equal(response.status, 200);
+  assert.equal(env.rows.length, 1);
+  assert.equal(env.rows[0].p256dh, refreshed.keys.p256dh);
+  assert.equal(env.rows[0].auth, refreshed.keys.auth);
+});
+
+test("deleting an already removed device is idempotent", async () => {
+  const subscription = await validSubscription();
+  const env = createEnv([{ id: "sub-existing", user_id: "user-1", endpoint: subscription.endpoint }]);
+  const first = await onRequestDelete({ request: request("DELETE", { endpoint: subscription.endpoint }), env });
+  const second = await onRequestDelete({ request: request("DELETE", { endpoint: subscription.endpoint }), env });
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.equal(env.rows.length, 0);
+});
+
+test("device status lookup never exposes another account's subscription", async () => {
+  const subscription = await validSubscription();
+  const env = createEnv([{ id: "sub-existing", user_id: "user-2", endpoint: subscription.endpoint }]);
+  const response = await onRequestGet({
+    request: new Request("https://app.example.test/api/push-subscriptions?endpoint=" + encodeURIComponent(subscription.endpoint), {
+      headers: { Cookie: "sr_session=test-session" }
+    }),
+    env
+  });
+  const data = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(data.subscribed, false);
+});
+
+test("push registration rejects non-HTTPS and untrusted endpoints", async () => {
+  const env = createEnv();
+  for (const endpoint of [
+    "http://fcm.googleapis.com/fcm/send/device",
+    "https://evil.example/fcm/send/device",
+    "https://fcm.googleapis.com.evil.example/fcm/send/device",
+    "https://user:pass@fcm.googleapis.com/fcm/send/device"
+  ]) {
+    const subscription = await validSubscription(endpoint);
+    const response = await onRequestPost({ request: request("POST", { subscription }), env });
+    assert.equal(response.status, 400, endpoint);
+  }
+  assert.equal(env.rows.length, 0);
 });
