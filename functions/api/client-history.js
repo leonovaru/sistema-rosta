@@ -13,10 +13,11 @@ export async function onRequestGet({request,env}){
   env.DB.prepare("SELECT id,title,meeting_date,summary,decisions_json,agreements_json,open_questions_json,project_id FROM meeting_notes WHERE user_id=? AND client_id=? ORDER BY meeting_date DESC,created_at DESC LIMIT 100").bind(user.id,clientId).all(),
   env.DB.prepare("SELECT id,interaction_type,title,body,occurred_on,project_id,created_at FROM client_interactions WHERE user_id=? AND client_id=? ORDER BY occurred_on DESC,created_at DESC LIMIT 150").bind(user.id,clientId).all()
  ]);
+ const projectNames=new Map(projects.results.map(project=>[project.id,project.title]));
  const timeline=[
-  ...meetings.results.map(x=>({kind:"meeting",date:x.meeting_date,title:x.title,body:x.summary,details:{decisions:parseArray(x.decisions_json),agreements:parseArray(x.agreements_json),open_questions:parseArray(x.open_questions_json)},project_id:x.project_id,id:x.id})),
-  ...interactions.results.map(x=>({kind:x.interaction_type,date:x.occurred_on,title:x.title,body:x.body,project_id:x.project_id,id:x.id})),
-  ...tasks.results.map(x=>({kind:"task",date:x.completed_at||x.due_date||x.created_at?.slice(0,10),title:x.title,body:x.description,project_title:x.project_title,status:x.status,priority:x.priority,id:x.id})),
+  ...meetings.results.map(x=>({kind:"meeting",date:x.meeting_date,title:x.title,body:x.summary,details:{decisions:parseArray(x.decisions_json),agreements:parseArray(x.agreements_json),open_questions:parseArray(x.open_questions_json)},project_id:x.project_id,project_title:projectNames.get(x.project_id)||"",id:x.id})),
+  ...interactions.results.map(x=>({kind:x.interaction_type,date:x.occurred_on,title:x.title,body:x.body,project_id:x.project_id,project_title:projectNames.get(x.project_id)||"",id:x.id})),
+  ...tasks.results.map(x=>({kind:"task",date:String(x.completed_at||x.due_date||x.created_at||"").slice(0,10),title:x.title,body:x.description,project_title:x.project_title,status:x.status,priority:x.priority,id:x.id})),
   ...projects.results.map(x=>({kind:"project",date:x.updated_at?.slice(0,10),title:x.title,body:x.expected_result,status:x.status,deadline:x.deadline,id:x.id}))
  ].filter(x=>x.date).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,250);
  return json({client,projects:projects.results,tasks:tasks.results,meetings:meetings.results.length,interactions:interactions.results.length,timeline});
