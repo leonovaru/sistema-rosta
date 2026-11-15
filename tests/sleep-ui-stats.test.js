@@ -101,3 +101,39 @@ test("sleep duration variability is standard deviation and requires at least two
     { sleep_date: "2026-11-15", fell_asleep_at: "400", woke_at: "yes" }
   ], 7), { minutes: null, count: 1 });
 });
+
+const chartMatch = app.match(/function renderSleepDurationChart\(sessions,days=30\)\{([\s\S]*?)\n\}/);
+assert.ok(chartMatch, "renderSleepDurationChart must remain available for the sleep UI");
+function runChart(sessions, days = 30, today = "2026-11-15") {
+  const sleepLocalDate = () => today;
+  const shiftDate = (date, offset) => {
+    const value = new Date(date + "T12:00:00Z");
+    value.setUTCDate(value.getUTCDate() + offset);
+    return value.toISOString().slice(0, 10);
+  };
+  const sleepDuration = (start, end) => start && end ? Number(start) : null;
+  const sleepDurationLabel = minutes => minutes + " мин";
+  const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+  return new Function("sessions", "days", "sleepLocalDate", "shiftDate", "sleepDuration", "sleepDurationLabel", "escapeHtml", chartMatch[1])(
+    sessions, days, sleepLocalDate, shiftDate, sleepDuration, sleepDurationLabel, escapeHtml
+  );
+}
+test("30-day sleep chart renders one bar per local date and leaves missing nights blank", () => {
+  const html = runChart([
+    { sleep_date: "2026-11-14", fell_asleep_at: "480", woke_at: "yes" },
+    { sleep_date: "2026-11-15", fell_asleep_at: null, woke_at: "yes" }
+  ]);
+  assert.equal((html.match(/class="sleep-chart-day"/g) || []).length, 30);
+  assert.equal((html.match(/class="sleep-chart-bar"/g) || []).length, 1);
+  assert.equal((html.match(/class="sleep-chart-missing"/g) || []).length, 29);
+  assert.match(html, /1 полных ночей из 30 календарных дней/);
+});
+test("sleep chart excludes dates outside its selected window", () => {
+  const html = runChart([
+    { sleep_date: "2026-10-16", fell_asleep_at: "480", woke_at: "yes" },
+    { sleep_date: "2026-11-15", fell_asleep_at: "420", woke_at: "yes" }
+  ]);
+  assert.equal((html.match(/class="sleep-chart-bar"/g) || []).length, 1);
+  assert.match(html, /420 мин/);
+  assert.doesNotMatch(html, /480 мин/);
+});
