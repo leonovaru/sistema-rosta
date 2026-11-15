@@ -7,6 +7,10 @@ let taskFilter = "today";
 let localToday = "";
 let taskEstimate = null;
 let currentDayPlan = null;
+let calendarEvents = [];
+let calendarAnchor = new Date();
+let calendarSelected = "";
+let calendarView = "month";
 
 const money = n => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(n || 0)) + " ₽";
 const duration = n => { const v = Number(n || 0); return v >= 60 ? (Math.floor(v/60) + " ч" + (v%60 ? " " + v%60 + " мин" : "")) : v + " мин"; };
@@ -174,6 +178,94 @@ async function loadDashboardData() {
   await Promise.all([loadDirections(),loadSettings(income.month_total)]);
 }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+const pad2 = n => String(n).padStart(2,"0");
+const dateKey = d => d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());
+const shiftDate = (key,days) => { const d=new Date(key+"T12:00:00"); d.setDate(d.getDate()+days); return dateKey(d); };
+const eventTypes = {meeting:"Встреча",travel:"Дорога",hobby:"Хобби",sleep:"Сон",work:"Работа",personal:"Личное",other:"Другое"};
+const eventColors = {meeting:"meeting",travel:"travel",hobby:"hobby",sleep:"sleep",work:"work",personal:"personal",other:"other"};
+function eventTime(value) { return value ? value.slice(11,16) : ""; }
+function eventDuration(event) {
+  const start=new Date(event.start_at),end=new Date(event.end_at);
+  const mins=Math.max(0,Math.round((end-start)/60000));
+  return duration(mins);
+}
+function calendarRange() {
+  if(calendarView==="month"){
+    const first=new Date(calendarAnchor.getFullYear(),calendarAnchor.getMonth(),1);
+    const offset=(first.getDay()+6)%7;
+    const start=new Date(first); start.setDate(1-offset);
+    const end=new Date(start); end.setDate(start.getDate()+42);
+    return {from:dateKey(start)+"T00:00",to:dateKey(end)+"T00:00"};
+  }
+  const day=new Date(calendarSelected+"T12:00:00");
+  const monday=new Date(day); monday.setDate(day.getDate()-((day.getDay()+6)%7));
+  const end=new Date(monday); end.setDate(monday.getDate()+7);
+  return {from:dateKey(monday)+"T00:00",to:dateKey(end)+"T00:00"};
+}
+async function loadCalendar() {
+  const range=calendarRange();
+  const data=await api("/api/calendar/events?from="+encodeURIComponent(range.from)+"&to="+encodeURIComponent(range.to));
+  calendarEvents=data.events||[];
+  renderCalendar();
+}
+function renderCalendar() {
+  const monthName=new Intl.DateTimeFormat("ru-RU",{month:"long",year:"numeric"}).format(calendarAnchor);
+  const weekStart=new Date(calendarSelected+"T12:00:00");
+  weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
+  const weekEnd=new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
+  $("calendar-caption").textContent=calendarView==="month"?monthName:new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short"}).format(weekStart)+" — "+new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short",year:"numeric"}).format(weekEnd);
+  document.querySelector(".calendar-weekdays").classList.toggle("hidden",calendarView==="week");
+  const start=calendarView==="month"?new Date(calendarAnchor.getFullYear(),calendarAnchor.getMonth(),1):weekStart;
+  if(calendarView==="month") start.setDate(1-((start.getDay()+6)%7));
+  const count=calendarView==="month"?42:7;
+  const cells=[];
+  for(let i=0;i<count;i++){
+    const d=new Date(start);d.setDate(start.getDate()+i);
+    const key=dateKey(d);
+    const items=calendarEvents.filter(e=>e.start_at.slice(0,10)===key);
+    cells.push('<button type="button" class="calendar-day '+(key===calendarSelected?"selected ":"")+(d.getMonth()!==calendarAnchor.getMonth()&&calendarView==="month"?"outside ":"")+(key===localToday?"today":"")+'" data-calendar-date="'+key+'"><span class="calendar-day-number">'+d.getDate()+'</span><span class="calendar-day-events">'+items.slice(0,3).map(e=>'<small class="event-dot '+eventColors[e.event_type]+'">'+escapeHtml(eventTime(e.start_at))+' '+escapeHtml(e.title)+'</small>').join("")+(items.length>3?'<small class="event-more">+'+(items.length-3)+'</small>':"")+'</span></button>');
+  }
+  $("calendar-grid").className="calendar-grid "+(calendarView==="week"?"week-view":"month-view");
+  $("calendar-grid").innerHTML=cells.join("");
+  document.querySelectorAll("[data-calendar-view]").forEach(b=>b.classList.toggle("active",b.dataset.calendarView===calendarView));
+  $("calendar-selected-date").textContent=new Intl.DateTimeFormat("ru-RU",{weekday:"long",day:"numeric",month:"long"}).format(new Date(calendarSelected+"T12:00:00"));
+  const dayEvents=calendarEvents.filter(e=>e.start_at.slice(0,10)===calendarSelected).sort((a,b)=>a.start_at.localeCompare(b.start_at));
+  $("calendar-events").innerHTML=dayEvents.length?dayEvents.map(e=>'<article class="calendar-event"><div class="calendar-event-time">'+eventTime(e.start_at)+'–'+eventTime(e.end_at)+'</div><div class="calendar-event-main"><b>'+escapeHtml(e.title)+'</b><small>'+eventTypes[e.event_type]+' · '+eventDuration(e)+(e.mode!=="none"?" · "+(e.mode==="online"?"онлайн":"офлайн"):"")+'</small>'+(e.location?'<small>'+escapeHtml(e.location)+'</small>':"")+(e.actual_start_at||e.actual_end_at?'<small>Факт: '+(eventTime(e.actual_start_at)||"—")+'–'+(eventTime(e.actual_end_at)||"—")+'</small>':"")+'</div><div class="calendar-event-actions"><button type="button" class="button ghost" data-edit-event="'+e.id+'">Изменить</button><button type="button" class="button ghost" data-delete-event="'+e.id+'">Удалить</button></div></article>').join(""):'<p class="muted">На этот день событий пока нет. Добавь встречи, дорогу, хобби или сон.</p>';
+  document.querySelectorAll("[data-calendar-date]").forEach(b=>b.addEventListener("click",async()=>{calendarSelected=b.dataset.calendarDate;const d=new Date(calendarSelected+"T12:00:00");calendarAnchor=new Date(d.getFullYear(),d.getMonth(),1);if(calendarView==="week")await loadCalendar();else renderCalendar();}));
+  document.querySelectorAll("[data-edit-event]").forEach(b=>b.addEventListener("click",()=>editCalendarEvent(calendarEvents.find(e=>e.id===b.dataset.editEvent))));
+  document.querySelectorAll("[data-delete-event]").forEach(b=>b.addEventListener("click",async()=>{if(!confirm("Удалить это событие?"))return;try{await api("/api/calendar/events",{method:"DELETE",body:JSON.stringify({id:b.dataset.deleteEvent})});await loadCalendar();}catch(err){alert(err.message);}}));
+}
+function openCalendarForm(event=null) {
+  $("calendar-form").classList.remove("hidden");
+  $("calendar-form-title").textContent=event?"Изменить событие":"Новое событие";
+  $("event-id").value=event?.id||"";
+  $("event-title").value=event?.title||"";
+  $("event-type").value=event?.event_type||"meeting";
+  $("event-mode").value=event?.mode||"none";
+  $("event-start").value=event?.start_at||calendarSelected+"T09:00";
+  $("event-end").value=event?.end_at||calendarSelected+"T10:00";
+  $("event-actual-start").value=event?.actual_start_at||"";
+  $("event-actual-end").value=event?.actual_end_at||"";
+  $("event-status").value=event?.status||"planned";
+  $("event-location").value=event?.location||"";
+  $("event-notes").value=event?.notes||"";
+  $("calendar-form").scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+function editCalendarEvent(event){if(event)openCalendarForm(event);}
+$("calendar-new").addEventListener("click",()=>openCalendarForm());
+$("calendar-cancel").addEventListener("click",()=>$("calendar-form").classList.add("hidden"));
+$("calendar-form").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const id=$("event-id").value;
+  const payload={id,title:$("event-title").value,event_type:$("event-type").value,mode:$("event-mode").value,start_at:$("event-start").value,end_at:$("event-end").value,actual_start_at:$("event-actual-start").value||null,actual_end_at:$("event-actual-end").value||null,status:$("event-status").value,location:$("event-location").value,notes:$("event-notes").value};
+  try{await api("/api/calendar/events",{method:id?"PATCH":"POST",body:JSON.stringify(payload)});$("calendar-form").classList.add("hidden");await loadCalendar();if(currentDayPlan)currentDayPlan=null;renderDayPlan();}
+  catch(err){alert(err.message);}
+});
+$("calendar-prev").addEventListener("click",async()=>{if(calendarView==="month")calendarAnchor=new Date(calendarAnchor.getFullYear(),calendarAnchor.getMonth()-1,1);else calendarSelected=shiftDate(calendarSelected,-7);await loadCalendar();});
+$("calendar-next").addEventListener("click",async()=>{if(calendarView==="month")calendarAnchor=new Date(calendarAnchor.getFullYear(),calendarAnchor.getMonth()+1,1);else calendarSelected=shiftDate(calendarSelected,7);await loadCalendar();});
+$("calendar-today").addEventListener("click",async()=>{calendarSelected=localToday;calendarAnchor=new Date();await loadCalendar();});
+document.querySelectorAll("[data-calendar-view]").forEach(b=>b.addEventListener("click",async()=>{calendarView=b.dataset.calendarView;await loadCalendar();}));
+
 async function loadPlanner() {
   try {
     const [data, settings] = await Promise.all([api("/api/planner/day"), api("/api/settings")]);
@@ -210,7 +302,7 @@ async function boot() {
   try {
     const { user } = await api("/api/auth/me");
     if (!user) return showAuth();
-    showApp(user.email); await loadDashboardData(); await loadTasks(); await loadPlanner();
+    showApp(user.email); await loadDashboardData(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
   } catch { showAuth(); }
 }
 boot();
