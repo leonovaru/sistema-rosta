@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
-import { isProjectSelectable } from "../_lib/workspace-entity-availability.js";
+import { isClientSelectable, isProjectSelectable, isDirectionSelectable } from "../_lib/workspace-entity-availability.js";
 
 async function invalidateTodayPlan(env, userId) {
   const settings = await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(userId).first();
@@ -73,6 +73,9 @@ export async function onRequestPost({ request, env }) {
   const finalClientId=clientId || inherited?.client_id || null;
   const finalProjectId=projectId || inherited?.project_id || null;
   const finalLifeAreaId=lifeAreaId || inherited?.life_area_id || null;
+  if(finalProjectId){const project=await env.DB.prepare("SELECT id,status FROM projects WHERE id=? AND user_id=?").bind(finalProjectId,user.id).first();if(!isProjectSelectable(project))return json({error:"Нельзя создавать задачи в архивном проекте"},409);}
+  if(finalClientId){const client=await env.DB.prepare("SELECT id,status FROM clients WHERE id=? AND user_id=?").bind(finalClientId,user.id).first();if(!isClientSelectable(client))return json({error:"Нельзя создавать задачи для закрытого клиента"},409);}
+  if(finalDirectionId){const direction=await env.DB.prepare("SELECT id,active FROM directions WHERE id=? AND user_id=?").bind(finalDirectionId,user.id).first();if(!isDirectionSelectable(direction))return json({error:"Нельзя создавать задачи в отключённом направлении"},409);}
   const id = newId();
   await env.DB.prepare("INSERT INTO tasks (id,user_id,direction_id,client_id,project_id,life_area_id,parent_task_id,title,description,due_date,priority,estimated_minutes,ai_plan) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
     .bind(id,user.id,finalDirectionId,finalClientId,finalProjectId,finalLifeAreaId,parentTaskId,title,description,dueDate,["low","medium","high"].includes(body?.priority)?body.priority:"medium",estimated,String(body?.ai_plan||"").slice(0,3000)).run();
