@@ -20,3 +20,7 @@ test("end date is inclusive",()=>{
 test("daily task starting in future is not generated early",()=>{
  assert.deepEqual(recurringTaskDates({start_date:"2026-12-01",recurrence:"daily"}, "2026-11-15","2026-11-30"),[]);
 });
+
+test("monthly task is not generated for a date that has already passed this month",()=>{
+ assert.deepEqual(recurringTaskDates({start_date:"2026-01-10",recurrence:"monthly"}, "2026-11-15","2026-12-15"),["2026-12-10"]);
+});
