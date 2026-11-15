@@ -79,7 +79,8 @@ export default {
       FROM push_subscriptions s LEFT JOIN settings st ON st.user_id=s.user_id`).all();
     const now=new Date();
     for(const row of results||[]){
-      const local=localClock(now,row.timezone);
+      let local;
+      try{local=localClock(now,row.timezone);}catch{continue;}
       if(!isMorningDeliveryWindow(now,row.timezone))continue;
       const localDate=local.year+"-"+local.month+"-"+local.day;
       const id=crypto.randomUUID();
