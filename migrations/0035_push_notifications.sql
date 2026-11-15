@@ -13,6 +13,7 @@ CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(use
 CREATE TABLE IF NOT EXISTS push_deliveries (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  subscription_id TEXT NOT NULL REFERENCES push_subscriptions(id) ON DELETE CASCADE,
   local_date TEXT NOT NULL,
   timezone TEXT NOT NULL,
   scheduled_at TEXT NOT NULL,
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS push_deliveries (
   status TEXT NOT NULL DEFAULT 'pending',
   error TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(user_id, local_date)
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(subscription_id, local_date)
 );
 CREATE INDEX IF NOT EXISTS idx_push_deliveries_date ON push_deliveries(local_date, status);
