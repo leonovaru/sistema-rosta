@@ -9,7 +9,7 @@ export function buildBudgetInsights(historyRows=[],budgetRows=[],{month,historyM
   const history=months.map(m=>({month:m,actual:historyRows.filter(x=>String(x.category)===category&&String(x.month)===m).reduce((s,x)=>s+Number(x.actual ?? x.total ?? 0),0),budget:plans.has(category+"|"+m)?plans.get(category+"|"+m):null}));
   const compared=history.filter(x=>x.budget!==null),overruns=compared.filter(x=>x.actual>x.budget);
   const hasHistory=historyRows.some(x=>String(x.category)===category);
-  const observedMonths=hasHistory?historyMonths.length:0;
+  const observedMonths=hasHistory?historyMonths:0;
   const avg=observedMonths?history.reduce((s,x)=>s+x.actual,0)/observedMonths:0;
   const repeated=overruns.length>=2;
   const suggested=repeated?Math.ceil(avg):null;
