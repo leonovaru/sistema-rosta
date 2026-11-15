@@ -40,16 +40,20 @@ export function buildDailyAssignmentRepairs(week,allocations=[],tasks=[]){
   const candidates=[...preferred,...days.map(day=>day.date).filter(date=>!oldByDate.has(date)).sort()];
   let left=need;
   const next=[];
-  for(const date of candidates){
-   if(left<=0)break;
+  const allocated=new Map();
+  const place=(date,wanted)=>{
+   if(left<=0||wanted<=0)return;
    const day=dayMap.get(date);
-   if(!day?.working_day||(task.due_date&&date>String(task.due_date).slice(0,10)))continue;
+   if(!day?.working_day||(task.due_date&&date>String(task.due_date).slice(0,10)))return;
    const otherMinutes=(day.tasks||[]).filter(item=>String(item.id)!==taskId).reduce((sum,item)=>sum+Math.max(0,Number(item.minutes)||0),0);
-   const capacity=Math.max(0,Number(day.available_minutes||0)-otherMinutes-(reserved.get(date)||0));
-   if(!capacity)continue;
-   const minutes=Math.min(left,capacity);
-   if(minutes>0){next.push({date,minutes});reserved.set(date,(reserved.get(date)||0)+minutes);left-=minutes;}
-  }
+   const capacity=Math.max(0,Number(day.available_minutes||0)-otherMinutes-(reserved.get(date)||0)-(allocated.get(date)||0));
+   const minutes=Math.min(left,wanted,capacity);
+   if(minutes>0){allocated.set(date,(allocated.get(date)||0)+minutes);left-=minutes;}
+  };
+  // Keep the original daily amounts wherever possible; only then place any increase.
+  for(const date of preferred)place(date,oldByDate.get(date)||0);
+  for(const date of candidates)place(date,left);
+  for(const [date,minutes] of allocated){next.push({date,minutes});reserved.set(date,(reserved.get(date)||0)+minutes);}
   if(left>0){
    unresolved.push({task_id:taskId,title:task.title||"Задача",minutes:left,reason:"Не найдено достаточно свободного времени до дедлайна без перегрузки других задач."});
    continue;
