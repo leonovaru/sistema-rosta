@@ -3,7 +3,7 @@ import { json, requireUser, readJson } from "../_lib/auth.js";
 function monthContext(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
-  return { start: `${values.year}-${values.month}-01`, day: Number(values.day), days: new Date(Number(values.year), Number(values.month), 0).getDate() };
+  return { start: `${values.year}-${values.month}-01`, today: `${values.year}-${values.month}-${values.day}`, day: Number(values.day), days: new Date(Number(values.year), Number(values.month), 0).getDate() };
 }
 
 export async function onRequestGet({ request, env }) {
@@ -14,18 +14,18 @@ export async function onRequestGet({ request, env }) {
   const month = monthContext(timeZone);
   const { results } = await env.DB.prepare(`
     SELECT d.*,
-      COALESCE(SUM(CASE WHEN i.received_on >= ? THEN i.amount ELSE 0 END),0) AS actual_month
+      COALESCE(SUM(CASE WHEN i.received_on >= ? AND i.received_on <= ? THEN i.amount ELSE 0 END),0) AS actual_month
     FROM directions d
     LEFT JOIN income_entries i ON i.direction_id=d.id AND i.user_id=d.user_id
     WHERE d.user_id=?
     GROUP BY d.id
     ORDER BY d.sort_order,d.id
-  `).bind(month.start,user.id).all();
+  `).bind(month.start,month.today,user.id).all();
   const directions = results.map(item => ({
     ...item,
     forecast_month: month.day ? Number(item.actual_month || 0) / month.day * month.days : 0
   }));
-  return json({ directions, month: { start: month.start, day: month.day, days: month.days, timezone: timeZone } });
+  return json({ directions, month: { start: month.start, today: month.today, day: month.day, days: month.days, timezone: timeZone } });
 }
 
 export async function onRequestPut({ request, env }) {
