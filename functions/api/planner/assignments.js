@@ -3,6 +3,7 @@ import { applySavedDailyTaskAllocations } from "../../_lib/daily-task-assignment
 import { expandRecurringEvents } from "../../_lib/calendar.js";
 import { calculateCalendarBusyByDay } from "../../_lib/calendar-capacity.js";
 import { buildWeeklyWorkload } from "../../_lib/weekly-workload.js";
+import { validateDailyTaskMove } from "../../_lib/daily-task-move-validation.js";
 function addDays(date,days){const value=new Date(date+"T12:00:00Z");value.setUTCDate(value.getUTCDate()+days);return value.toISOString().slice(0,10);}
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));return values.year+"-"+values.month+"-"+values.day;}
 export async function onRequestGet({request,env}){
@@ -52,25 +53,8 @@ export async function onRequestPut({request,env}){
   const baseWeek=buildWeeklyWorkload({today,workingDays,dailyCapacityMinutes:settings?.daily_capacity_minutes,configured:true,calendarDays,calendarEvents:events,tasks:allTasks.results,targets:[]});
   const existingRows=await env.DB.prepare("SELECT task_id,allocation_date,minutes FROM daily_task_allocations WHERE user_id=? AND allocation_date>=? AND allocation_date<=?").bind(user.id,today,weekEnd).all();
   applySavedDailyTaskAllocations(baseWeek,existingRows.results,allTasks.results);
-  const baseByDate=new Map();
-  for(const day of baseWeek.days)for(const row of day.tasks||[])if(String(row.id)===taskId)baseByDate.set(day.date,(baseByDate.get(day.date)||0)+Number(row.minutes||0));
-  const sourceCurrent=baseByDate.get(fromDate)||0,targetCurrent=baseByDate.get(toDate)||0;
-  const newByDate=new Map(schedule.rows.map(row=>[row.date,row.minutes]));
-  if(sourceCurrent<moveMinutes||newByDate.get(fromDate)!==sourceCurrent-moveMinutes||newByDate.get(toDate)!==targetCurrent+moveMinutes)return json({error:"Распределение задачи изменилось. Пересчитайте недельный план и подтвердите перенос заново."},409);
-  const dates=new Set([...baseByDate.keys(),...newByDate.keys()]);
-  for(const date of dates)if(date!==fromDate&&date!==toDate&&(baseByDate.get(date)||0)!==(newByDate.get(date)||0))return json({error:"Перенос изменяет дополнительные даты. Обновите предложение."},409);
-  if(!baseWeek.days.some(day=>day.date===fromDate&&day.working_day)||!baseWeek.days.some(day=>day.date===toDate&&day.working_day))return json({error:"Исходная или целевая дата больше не является рабочим днём"},409);
-  const adjusted=new Map(baseWeek.days.map(day=>[day.date,{...day,tasks:[...(day.tasks||[])],planned_task_minutes:Number(day.planned_task_minutes)||0}]));
-  for(const day of adjusted.values()){
-   const removed=day.tasks.filter(row=>String(row.id)===taskId);
-   day.tasks=day.tasks.filter(row=>String(row.id)!==taskId);
-   day.planned_task_minutes-=removed.reduce((sum,row)=>sum+Number(row.minutes||0),0);
-  }
-  for(const row of schedule.rows){const day=adjusted.get(row.date);day.planned_task_minutes+=row.minutes;day.tasks.push({id:taskId,minutes:row.minutes});}
-  const target=adjusted.get(toDate);
-  if(!target||target.planned_task_minutes>target.available_minutes)return json({error:"На целевой день больше не хватает свободной дневной ёмкости с учётом календаря и остальных задач"},409);
-  const toMinutes=value=>Number(value.slice(0,2))*60+Number(value.slice(3,5));
-  if(toMinutes(move.end_time)-toMinutes(move.start_time)<moveMinutes)return json({error:"Предложенное временное окно больше не подходит по длительности"},409);
+  const validation=validateDailyTaskMove({week:baseWeek,taskId,fromDate,toDate,minutes:moveMinutes,rows:schedule.rows,startTime:move.start_time,endTime:move.end_time});
+  if(!validation.ok)return json({error:validation.error},409);
  }
  const statements=[];
  for(const schedule of normalized){
