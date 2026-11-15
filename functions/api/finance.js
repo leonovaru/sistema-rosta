@@ -62,6 +62,14 @@ export async function onRequestPost({request,env}) {
     if(!amount||!title||title.length>180||!validDate(date))return json({error:"Проверь название, сумму и дату расхода"},400);
     const directionId=body.direction_id?String(body.direction_id):null;
     if(directionId&&!await env.DB.prepare("SELECT id FROM directions WHERE id=? AND user_id=?").bind(directionId,user.id).first())return json({error:"Направление дохода не найдено"},404);
+    const clientId=body.client_id?String(body.client_id):null,projectId=body.project_id?String(body.project_id):null;
+    if(clientId&&!await env.DB.prepare("SELECT id FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first())return json({error:"Клиент не найден"},404);
+    if(projectId){
+      const project=await env.DB.prepare("SELECT id,client_id FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first();
+      if(!project)return json({error:"Проект не найден"},404);
+      if(clientId&&project.client_id!==clientId)return json({error:"Проект не относится к выбранному клиенту"},400);
+      if(!clientId&&project.client_id)return json({error:"Выбери клиента, связанного с проектом"},400);
+    }
     const bucketId=body.bucket_id?String(body.bucket_id):null;
     if(bucketId){
       const bucket=await env.DB.prepare("SELECT id,title FROM income_buckets WHERE id=? AND user_id=? AND active=1").bind(bucketId,user.id).first();
@@ -69,7 +77,7 @@ export async function onRequestPost({request,env}) {
       const available=await bucketAvailable(env,user.id,bucketId);
       if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     }
-    await env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id) VALUES (?,?,?,?,?,?,?,?,?)").bind(id,user.id,directionId,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500),bucketId).run();
+    await env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id,client_id,project_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,directionId,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500),bucketId,clientId,projectId).run();
     return json({ok:true,id},201);
   }
   if(action==="debt"){
