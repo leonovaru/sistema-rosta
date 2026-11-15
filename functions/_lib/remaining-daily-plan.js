@@ -1,4 +1,5 @@
 import { buildDailyBlockPlans } from "./daily-block-plans.js";
+import { remainingMinutesAfterBlockLogs } from "./daily-block-execution.js";
 
 function partsAt(value,timeZone){
  const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(value));
@@ -29,13 +30,7 @@ export function buildRemainingDailyPlan({days=[],calendarEvents=[],logs=[],now=n
  if(pointer<windowEnd)gaps.push({start:pointer,end:windowEnd});
  const available=gaps.reduce((sum,gap)=>sum+gap.end-gap.start,0);
  if(!available)return {date:today,available_minutes:0,focus_minutes:0,break_minutes:0,blocks:[],unallocated:(day.tasks||[]).filter(task=>Number(task.minutes)>0).map(task=>({task_id:task.id,title:task.title,minutes:Number(task.minutes)})),overloaded:true,remaining_plan:true};
- const completedByTask=new Map();
- for(const log of logs||[]){
-  if(log.block_date!==today||!["done","interrupted"].includes(log.status))continue;
-  const id=String(log.task_id),minutes=Math.max(0,Number(log.actual_minutes)||0);
-  completedByTask.set(id,(completedByTask.get(id)||0)+minutes);
- }
- const remainingTasks=(day.tasks||[]).map(task=>({...task,minutes:Math.max(0,Math.max(0,Number(task.minutes)||0)-(completedByTask.get(String(task.id))||0))})).filter(task=>task.minutes>0);
+ const remainingTasks=remainingMinutesAfterBlockLogs(day.tasks||[],logs,today);
  const adjustedDay={...day,gross_capacity_minutes:windowEnd-cursor,available_minutes:available,planned_task_minutes:remainingTasks.reduce((sum,task)=>sum+task.minutes,0),tasks:remainingTasks};
  const [plan]=buildDailyBlockPlans([adjustedDay],{focusMinutes,breakMinutes,startTime:local.hour+":"+local.minute,prepBeforeMinutes:prep,bufferAfterMinutes:after,calendarEvents});
  return plan?{...plan,remaining_plan:true,as_of:local.hour+":"+local.minute}:null;
