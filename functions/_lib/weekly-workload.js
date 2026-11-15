@@ -49,7 +49,7 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
   const deadline=task.due_date<today?today:task.due_date;
   const eligible=days.filter(d=>d.working_day&&d.date<=deadline);
   const estimate=Math.max(0,Number(task.estimated_minutes)||0);
-  const remaining=task.status==="doing"?Math.max(0,estimate-Math.max(0,Number(task.actual_minutes)||0)):estimate;
+  const remaining=Math.max(0,estimate-Math.max(0,Number(task.actual_minutes)||0));
   if(!eligible.length||!remaining)continue;
   const base=Math.floor(remaining/eligible.length),remainder=remaining%eligible.length;
   const area=taskArea(task,projectTargets),areaRow=areaGroups.get(area.key);if(areaRow)areaRow.weekly_estimated_minutes+=remaining;
