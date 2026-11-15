@@ -14,17 +14,17 @@ function businessDaysInclusive(from, to) {
   return count;
 }
 
-export function calculateProjectWorkload(projects = [], today) {
+export function calculateProjectWorkload(projects = [], today, capacity = null) {
   const active = projects.filter(project => ["active", "waiting"].includes(project.status));
+  const workingDays = Array.isArray(capacity?.working_days) ? capacity.working_days : [];
+  const configured = capacity?.configured === true && workingDays.length > 0 && Number(capacity.daily_capacity_minutes) > 0;
+  const countWorkingDays = days => { let count=0; for(let i=0;i<days;i++){ const day=new Date(addDays(today,i)+"T12:00:00Z").getUTCDay(); const iso=day===0?7:day; if(workingDays.includes(iso)) count++; } return count; };
   const horizons = [7, 14, 30].map(days => {
     const limit = addDays(today, days);
     const due = active.filter(project => project.deadline && project.deadline >= today && project.deadline <= limit);
-    return {
-      days,
-      projects: due.length,
-      estimated_minutes: due.reduce((sum, project) => sum + Math.max(0, Number(project.open_estimated_minutes) || 0), 0),
-      unestimated_tasks: due.reduce((sum, project) => sum + Math.max(0, Number(project.unestimated_open_tasks) || 0), 0)
-    };
+    const estimated_minutes=due.reduce((sum, project) => sum + Math.max(0, Number(project.open_estimated_minutes) || 0), 0);
+    const capacity_minutes=configured?countWorkingDays(days)*Number(capacity.daily_capacity_minutes):null;
+    return { days, projects: due.length, estimated_minutes, unestimated_tasks: due.reduce((sum, project) => sum + Math.max(0, Number(project.unestimated_open_tasks) || 0), 0), capacity_minutes, load_percent:capacity_minutes>0?Math.round(estimated_minutes/capacity_minutes*100):null, over_capacity:capacity_minutes!==null&&estimated_minutes>capacity_minutes };
   });
   const enriched = projects.map(project => {
     const deadline = project.deadline || null;
@@ -44,5 +44,5 @@ export function calculateProjectWorkload(projects = [], today) {
       }
     };
   });
-  return { projects: enriched, horizons };
+  return { projects: enriched, horizons, capacity_configured:configured, working_days:workingDays, daily_capacity_minutes:configured?Number(capacity.daily_capacity_minutes):null };
 }
