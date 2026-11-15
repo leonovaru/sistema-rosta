@@ -26,7 +26,7 @@ export async function onRequestGet({request,env}) {
       "INSERT OR IGNORE INTO life_areas (id,user_id,title,description,sort_order) VALUES (?,?,?,?,?)"
     ).bind(newId(),user.id,title,description,i)));
   }
-  const [clients,projects,areas,directions]=await Promise.all([
+  const [clients,projects,areas,directions,activityEvents]=await Promise.all([
     env.DB.prepare(`SELECT c.*,d.title AS direction_title,
       (SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id) AS project_count,
       (SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id AND p.status IN ('active','waiting')) AS active_projects,
