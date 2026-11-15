@@ -36,7 +36,12 @@ export async function onRequestGet({request,env}) {
       (SELECT MIN(p.deadline) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id AND p.status IN ('active','waiting') AND p.deadline>=?) AS next_deadline,
       (SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id AND p.status IN ('active','waiting') AND p.deadline<?) AS overdue_project_deadlines,
       (SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id AND p.status IN ('active','waiting') AND p.deadline>=? AND p.deadline<=date(?,'+7 days')) AS upcoming_project_deadlines,
-      (SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id AND p.status IN ('active','waiting') AND COALESCE((SELECT MAX(t.updated_at) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id),p.updated_at)<datetime('now','-14 days')) AS stale_projects,
+      (SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id AND p.status IN ('active','waiting') AND datetime((SELECT MAX(activity_at) FROM (
+        SELECT p.updated_at AS activity_at
+        UNION ALL SELECT MAX(COALESCE(t.completed_at,t.created_at)) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id
+        UNION ALL SELECT MAX(m.meeting_date) FROM meeting_notes m WHERE m.project_id=p.id AND m.user_id=p.user_id
+        UNION ALL SELECT MAX(ci.occurred_on) FROM client_interactions ci WHERE ci.project_id=p.id AND ci.user_id=p.user_id
+      )))<datetime('now','-14 days')) AS stale_projects,
       (SELECT MAX(activity_date) FROM (
         SELECT ci.occurred_on AS activity_date FROM client_interactions ci WHERE ci.user_id=c.user_id AND ci.client_id=c.id
         UNION ALL SELECT mn.meeting_date FROM meeting_notes mn WHERE mn.user_id=c.user_id AND mn.client_id=c.id
@@ -46,7 +51,7 @@ export async function onRequestGet({request,env}) {
     env.DB.prepare(`SELECT p.*,c.name AS client_name,d.title AS direction_title,
       (SELECT MAX(activity_at) FROM (
         SELECT p.updated_at AS activity_at
-        UNION ALL SELECT MAX(t.updated_at) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id
+        UNION ALL SELECT MAX(COALESCE(t.completed_at,t.created_at)) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id
         UNION ALL SELECT MAX(m.meeting_date) FROM meeting_notes m WHERE m.project_id=p.id AND m.user_id=p.user_id
         UNION ALL SELECT MAX(ci.occurred_on) FROM client_interactions ci WHERE ci.project_id=p.id AND ci.user_id=p.user_id
       )) AS last_activity_at,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status!='done') AS open_tasks,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id) AS total_tasks,(SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.user_id=p.user_id AND t.status='done') AS done_tasks,(SELECT COALESCE(SUM(i.amount),0) FROM income_entries i WHERE i.user_id=p.user_id AND i.project_id=p.id) AS received_total,(SELECT COALESCE(SUM(e.amount),0) FROM expenses e WHERE e.user_id=p.user_id AND e.project_id=p.id) AS direct_expenses,(SELECT COALESCE(SUM(COALESCE(te.duration_minutes,CAST((julianday(te.ended_at)-julianday(te.started_at))*1440 AS INTEGER))),0) FROM task_time_entries te JOIN tasks tt ON tt.id=te.task_id AND tt.user_id=te.user_id WHERE te.user_id=p.user_id AND tt.project_id=p.id AND te.ended_at IS NOT NULL) AS tracked_minutes FROM projects p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN directions d ON d.id=p.direction_id WHERE p.user_id=? ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'waiting' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END,p.deadline`).bind(user.id).all(),
