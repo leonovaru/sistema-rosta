@@ -36,3 +36,22 @@ test("does not exceed available capacity and ignores unknown task ids", () => {
   const items = normalizePlannerItems([{ task_id: "missing", minutes: 20 }, { task_id: "a", minutes: 60 }, { task_id: "b", minutes: 60 }], tasks, 60);
   assert.deepEqual(items.map(item => item.task_id), ["a"]);
 });
+
+test("excludes waiting tasks from the daily plan", () => {
+  const tasks = [
+    { id: "todo", title: "Можно делать", status: "todo", priority: "medium" },
+    { id: "doing", title: "Уже начата", status: "doing", priority: "low" },
+    { id: "waiting", title: "Ждём клиента", status: "waiting", priority: "high" }
+  ];
+  assert.deepEqual(orderPlannerTasks(tasks, "2026-11-15").map(task => task.id), ["doing", "todo"]);
+  const normalized = normalizePlannerItems([
+    { task_id: "waiting", minutes: 30 },
+    { task_id: "todo", minutes: 30 }
+  ], tasks, 90);
+  assert.deepEqual(normalized.map(item => item.task_id), ["todo"]);
+});
+
+test("does not force a task marked waiting into the plan", () => {
+  const tasks = [{ id: "waiting", title: "Ожидает ответа", status: "waiting", estimated_minutes: 45 }];
+  assert.deepEqual(normalizePlannerItems([], tasks, 120), []);
+});
