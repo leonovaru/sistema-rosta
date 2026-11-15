@@ -1,4 +1,5 @@
 import {json,requireUser,readJson,newId} from "../_lib/auth.js";
+import {summarizeProjectCashflow} from "../_lib/project-cashflow.js";
 const DATE=/^\\d{4}-\\d{2}-\\d{2}$/;
 function validDate(v){if(!DATE.test(v))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
 async function projectForUser(env,userId,projectId){return env.DB.prepare("SELECT id,client_id FROM projects WHERE id=? AND user_id=?").bind(projectId,userId).first();}
@@ -9,12 +10,9 @@ export async function onRequestGet({request,env}){
  const project=await projectForUser(env,user.id,projectId);if(!project)return json({error:"Проект не найден"},404);
  const rows=await env.DB.prepare("SELECT id,flow_type,title,amount,expected_date,note,status,created_at FROM planned_cashflows WHERE user_id=? AND project_id=? ORDER BY expected_date,id").bind(user.id,projectId).all();
  const items=rows.results.map(x=>({...x,amount:Number(x.amount)}));
- const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Moscow"}).format(new Date());
- let balance=0,minBalance=0,firstNegative=null;
- const future=items.filter(x=>x.status==="planned"&&x.expected_date>=today);
- const byDate=new Map();for(const x of future)byDate.set(x.expected_date,(byDate.get(x.expected_date)||0)+(x.flow_type==="income"?x.amount:-x.amount));
- for(const [date,delta] of [...byDate.entries()].sort((a,b)=>a[0].localeCompare(b[0]))){balance+=delta;if(balance<minBalance){minBalance=balance;if(!firstNegative)firstNegative=date;}}
- return json({project_id:projectId,items,forecast:{planned_incoming:future.filter(x=>x.flow_type==="income").reduce((s,x)=>s+x.amount,0),planned_outgoing:future.filter(x=>x.flow_type==="expense").reduce((s,x)=>s+x.amount,0),net:balance,minimum_cumulative: minBalance,first_negative_date:firstNegative}});
+ const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+ const today=new Intl.DateTimeFormat("en-CA",{timeZone:settings?.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+ return json({project_id:projectId,items,forecast:summarizeProjectCashflow(items,{today})});
 }
 export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
