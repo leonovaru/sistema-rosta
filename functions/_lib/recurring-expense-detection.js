@@ -1,5 +1,5 @@
 const MONTHS=new Set(["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь","января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"]);
-const NOISE=new Set(["оплата","платеж","платёж","перевод","покупка","списание","за","по","услуга","услуги","счет","счёт","абонентская","коммунальные"]);
+const NOISE=new Set(["оплата","платеж","платёж","перевод","покупка","списание","за","по","услуга","услуги","счет","счёт","абонентская","коммунальные","аренда","абонемент","тариф"]);
 function normalize(value){return String(value||"").trim().toLocaleLowerCase("ru-RU").replace(/ё/g,"е").replace(/\s+/g," ");}
 function stem(word){
  let w=word.replace(/[^а-яa-z0-9]/g,"");
@@ -18,7 +18,7 @@ function titleSimilarity(a,b){
  if(!aa.length||!bb.length)return normalize(a)===normalize(b)?1:0;
  let matches=0;const used=new Set();
  for(const x of aa){const index=bb.findIndex((y,i)=>!used.has(i)&&tokenSimilar(x,y));if(index>=0){used.add(index);matches++;}}
- return matches/Math.max(aa.length,bb.length);
+ if(aa.length>1&&bb.length>1&&matches<2)return 0;\n return matches/Math.min(aa.length,bb.length);
 }
 function sameTitle(a,b){return titleSimilarity(a,b)>=0.5;}
 function dayNumber(date){return Math.floor(Date.parse(date+"T12:00:00Z")/86400000);}
