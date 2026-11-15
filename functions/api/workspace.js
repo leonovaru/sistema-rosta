@@ -107,8 +107,9 @@ export async function onRequestPost({request,env}) {
       if(!client)return json({error:"Клиент не найден"},404);if(client.status!=="closed")return json({error:"Клиент уже не находится в архиве"},409);
       await env.DB.prepare("UPDATE clients SET status=?,closed_previous_status=NULL,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(restoredClientStatus(client.closed_previous_status),id,user.id).run();
     }else{
-      const project=await env.DB.prepare("SELECT status,archived_previous_status FROM projects WHERE id=? AND user_id=?").bind(id,user.id).first();
+      const project=await env.DB.prepare("SELECT status,archived_previous_status,client_id FROM projects WHERE id=? AND user_id=?").bind(id,user.id).first();
       if(!project)return json({error:"Проект не найден"},404);if(project.status!=="archived")return json({error:"Проект уже не находится в архиве"},409);
+      if(project.client_id){const client=await env.DB.prepare("SELECT status FROM clients WHERE id=? AND user_id=?").bind(project.client_id,user.id).first();if(!isClientSelectable(client))return json({error:"Сначала восстанови клиента, к которому относится проект"},409);}
       await env.DB.prepare("UPDATE projects SET status=?,archived_previous_status=NULL,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(restoredProjectStatus(project.archived_previous_status),id,user.id).run();
     }
     return json({ok:true,restored:true});
