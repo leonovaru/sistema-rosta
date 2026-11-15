@@ -73,6 +73,20 @@
               <div id="cash-reserves" class="finance-list"></div>
             </section>
             <section class="category-budget-section">
+              <div class="section-head"><div><p class="eyebrow">НЕРЕГУЛЯРНЫЕ ТРАТЫ</p><h3>Сезонные и крупные расходы</h3></div></div>
+              <p class="fine">Добавляй расходы, которые повторяются раз в год или квартал, а также разовые траты с известной датой. Они попадут в прогноз отдельными событиями и не смешаются со средними повседневными расходами.</p>
+              <form id="irregular-expense-form" class="finance-form">
+                <label>Название<input id="irregular-title" maxlength="180" required placeholder="Страховка, обслуживание, сезонная одежда"></label>
+                <label>Категория<input id="irregular-category" maxlength="80" placeholder="Дом, здоровье, транспорт"></label>
+                <label>Сумма, ₽<input id="irregular-amount" type="number" min="0.01" step="0.01" required></label>
+                <label>Ближайшая дата<input id="irregular-date" type="date" required></label>
+                <label>Повторение<select id="irregular-frequency"><option value="once">Один раз</option><option value="yearly">Каждый год</option><option value="quarterly">Каждый квартал</option></select></label>
+                <label>Комментарий<input id="irregular-notes" maxlength="500" placeholder="Дополнительные сведения"></label>
+                <button class="button primary">Добавить расход</button>
+              </form>
+              <div id="irregular-expense-list" class="finance-list"></div>
+            </section>
+            <section class="category-budget-section">
               <div class="section-head"><div><p class="eyebrow">БЮДЖЕТ И КОНТРОЛЬ</p><h3>План и факт расходов по категориям</h3></div><label>Месяц<input id="budget-month" type="month"></label></div>
               <form id="budget-form" class="finance-form">
                 <label>Категория<input id="budget-category" list="budget-category-options" maxlength="80" required placeholder="Продукты, транспорт, связь"></label>
