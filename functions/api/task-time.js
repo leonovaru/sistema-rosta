@@ -26,6 +26,7 @@ export async function onRequestPost({ request, env }) {
     if (!taskId) return json({ error:"Выберите задачу" },400);
     const task = await env.DB.prepare("SELECT id,status FROM tasks WHERE id=? AND user_id=?").bind(taskId,user.id).first();
     if (!task) return json({ error:"Задача не найдена" },404);
+    if (task.status==="done") return json({ error:"Нельзя запустить таймер завершённой задачи" },400);
     const active = await env.DB.prepare("SELECT id,task_id FROM task_time_entries WHERE user_id=? AND ended_at IS NULL").bind(user.id).first();
     if (active) return json({ error:active.task_id===taskId?"Таймер этой задачи уже запущен":"Сначала остановите таймер другой задачи" },409);
     const id = newId();
