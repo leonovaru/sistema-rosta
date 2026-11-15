@@ -128,7 +128,7 @@ export async function onRequestPost({ request, env }) {
   const remaining = Math.max(0,monthlyTarget-actual);
   const dailyPace = remaining / Math.max(1,daysInMonth-day+1);
   const directionRows = await env.DB.prepare("SELECT title,target_month FROM directions WHERE user_id=? AND active=1 ORDER BY sort_order").bind(user.id).all();
-  const context = { date, available_minutes:capacity, daily_capacity_minutes:dailyCapacity, work_already_done_minutes:workDoneMinutes, current_local_time:clock.hour+":"+clock.minute, calendar_events:calendarEvents, monthly_target:monthlyTarget, actual_month:actual, remaining_to_target:remaining, required_daily_income_pace:Math.round(dailyPace), days_left_including_today:daysInMonth-day+1, directions:directionRows.results, tasks };
+  const context = { date, available_minutes:capacity, daily_capacity_minutes:dailyCapacity, work_already_done_minutes:workDoneMinutes, current_local_time:clock.hour+":"+clock.minute, available_intervals:schedulingIntervals.map(interval=>({start:localDateTime(today,interval.start),end:localDateTime(today,interval.end)})), calendar_events:calendarEvents, monthly_target:monthlyTarget, actual_month:actual, remaining_to_target:remaining, required_daily_income_pace:Math.round(dailyPace), days_left_including_today:daysInMonth-day+1, directions:directionRows.results, tasks };
   let plan = fallbackPlan(tasks,capacity);
   let source = "algorithm";
   if (env.AI) {
