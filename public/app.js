@@ -1063,6 +1063,22 @@ function sleepDurationLabel(minutes){
  if(minutes===null)return "Недостаточно данных";
  const h=Math.floor(minutes/60),m=minutes%60;return h+" ч"+(m?" "+m+" мин":"");
 }
+function renderSleepDurationChart(sessions,days=30){
+ const today=sleepLocalDate(),start=shiftDate(today,-(days-1));
+ const byDate=new Map();
+ sessions.filter(s=>s.sleep_date>=start&&s.sleep_date<=today).forEach(s=>{
+  const minutes=sleepDuration(s.fell_asleep_at,s.woke_at,s.asleep_timezone||s.timezone,s.wake_timezone||s.timezone);
+  if(minutes!==null)byDate.set(s.sleep_date,minutes);
+ });
+ const entries=Array.from({length:days},(_,i)=>{
+  const date=shiftDate(start,i),minutes=byDate.has(date)?byDate.get(date):null;
+  const height=minutes===null?0:Math.max(2,Math.min(720,minutes)/720*100);
+  const label=minutes===null?"Нет полной записи":sleepDurationLabel(minutes);
+  return '<div class="sleep-chart-day" title="'+escapeHtml(date+' · '+label)+'"><div class="sleep-chart-track">'+(minutes===null?'<span class="sleep-chart-missing"></span>':'<span class="sleep-chart-bar" style="height:'+height.toFixed(1)+'%"></span>')+'</div><small>'+escapeHtml(date.slice(8,10))+'</small></div>';
+ }).join("");
+ const count=byDate.size;
+ return '<section class="sleep-chart-card"><div class="sleep-chart-heading"><div><strong>Продолжительность сна · 30 дней</strong><p class="fine">'+count+' полных ночей из '+days+' календарных дней</p></div></div><div class="sleep-chart-wrap"><div class="sleep-chart-axis"><span>12 ч</span><span>6 ч</span><span>0</span></div><div class="sleep-chart-grid">'+entries+'</div></div><p class="fine">Каждый столбец — отдельная ночь. Пустое место означает, что нет полной записи; это не нулевой сон. Столбцы выше 12 часов визуально ограничены, точное значение видно при наведении.</p></section>';
+}
 function renderSleep(){
  const periods=[{label:"7 дней",days:7},{label:"30 дней",days:30}];
  const cards=periods.map(({label,days})=>{
@@ -1077,6 +1093,7 @@ function renderSleep(){
    +metric("Разброс времени засыпания · "+label,asleep.variation===null?"Недостаточно данных":sleepDurationLabel(asleep.variation),asleep.count+" отметок · среднее отклонение по кругу суток")
    +metric("Разброс длительности · "+label,durationSpread.minutes===null?"Недостаточно данных":sleepDurationLabel(durationSpread.minutes),durationSpread.count+" полных ночей · стандартное отклонение");
  }).join("");
+ $("sleep-chart").innerHTML=renderSleepDurationChart(sleepSessions,30);
  $("sleep-summary").innerHTML=cards+'<p class="fine">В расчётах используются только фактические отметки. Время засыпания и пробуждения сравнивается по местным часам каждой записи; разброс продолжительности считается только для полных ночей. Для оценки регулярности нужно хотя бы две отметки. Пропущенные дни не считаются нулевым сном.</p>';
  const today=sleepLocalDate(),yesterday=shiftDate(today,-1);
  const current=sleepSessions.find(s=>s.sleep_date===today||s.sleep_date===yesterday);
