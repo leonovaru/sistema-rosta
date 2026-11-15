@@ -109,3 +109,12 @@
 .client-finance-summary small{color:var(--muted,#687080)}
 .client-finance-summary b{font-size:1.05rem}
 @media(max-width:560px){.client-finance-summary{grid-template-columns:1fr}}
+
+
+.project-economics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0 7px}
+.project-economics>div{display:grid;gap:4px;padding:9px;border:1px solid var(--line,#ddd);border-radius:9px;background:var(--surface,#fff);min-width:0}
+.project-economics small{color:var(--muted,#687080);font-size:.78rem}
+.project-economics b{font-size:.94rem;overflow-wrap:anywhere}
+.project-economics-status{display:block;margin:5px 0 10px;color:var(--muted,#687080)}
+.project-economics-status.warning{color:var(--danger,#b54747);font-weight:600}
+@media(max-width:560px){.project-economics{grid-template-columns:repeat(2,minmax(0,1fr))}}
