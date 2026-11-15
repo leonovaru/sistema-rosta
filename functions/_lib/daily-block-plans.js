@@ -82,7 +82,7 @@ export function buildDailyBlockScenarios(days=[],options={}){
    if(variant.key==="focus")return load(b)-load(a)||score(b)-score(a)||minutes(b)-minutes(a);
    return load(a)-load(b)||(load(a)===1?minutes(a)-minutes(b):minutes(b)-minutes(a))||score(b)-score(a);
   })}));
-  const plans=buildDailyBlockPlans(ordered,options);
+  const plans=buildDailyBlockPlans(ordered.map(day=>({...day,tasks:day.tasks.length?day.tasks:[{id:null,title:"",minutes:0}]})),options);
   return {...variant,plans,summary:summarizeDailyBlockScenario(ordered,plans)};
  });
  return scenarios;
