@@ -26,7 +26,7 @@ test("rejects a move that would overload the target workday",()=>{
 test("rejects changes to unrelated task dates",()=>{
  const week=fixture();
  week.days.push({date:"2026-11-18",working_day:true,available_minutes:120,planned_task_minutes:30,tasks:[{id:"a",minutes:30}]});
- const rows=[{date:"2026-11-16",minutes:30},{date:"2026-11-17",minutes:60}];
+ const rows=[{date:"2026-11-16",minutes:30},{date:"2026-11-17",minutes:30},{date:"2026-11-18",minutes:15}];
  const result=validateDailyTaskMove({week,...common,rows});
  assert.equal(result.ok,false);
  assert.match(result.error,/дополнительные даты/);
