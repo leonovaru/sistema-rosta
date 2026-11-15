@@ -151,3 +151,9 @@
 .client-meeting-details p{white-space:pre-wrap;overflow-wrap:anywhere}
 .project-meetings{margin:12px 0;padding:12px;border:1px solid var(--line,#ddd);border-radius:12px;background:var(--surface,#fff)}
 .project-meetings .client-history-entry+ .client-history-entry{margin-top:9px}
+
+.meeting-followup-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px;margin:10px 0 14px}
+.meeting-followup-summary>div{display:flex;flex-direction:column;gap:4px;padding:10px;border:1px solid var(--line,#ddd);border-radius:9px;background:var(--surface-muted,#f8f9fb)}
+.meeting-followup-summary small{color:var(--muted,#687080);font-size:12px}
+.meeting-followup-summary b{font-size:20px;font-variant-numeric:tabular-nums}
+.meeting-followup-summary .is-overdue{border-color:var(--danger,#c44)}
