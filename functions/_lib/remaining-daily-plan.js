@@ -11,7 +11,7 @@ function minute(value){const [h,m]=String(value||"").split(":").map(Number);retu
  * It treats task minutes as current remaining estimates (already reduced by
  * recorded actual time in weekly workload), and never writes to the calendar.
  */
-export function buildRemainingDailyPlan({days=[],calendarEvents=[],now=new Date().toISOString(),timeZone="Europe/Moscow",startTime="09:00",focusMinutes=50,breakMinutes=10,prepBeforeMinutes=0,bufferAfterMinutes=0}={}){
+export function buildRemainingDailyPlan({days=[],calendarEvents=[],logs=[],now=new Date().toISOString(),timeZone="Europe/Moscow",startTime="09:00",focusMinutes=50,breakMinutes=10,prepBeforeMinutes=0,bufferAfterMinutes=0}={}){
  const local=partsAt(now,timeZone),today=local.year+"-"+local.month+"-"+local.day;
  const nowMinute=Number(local.hour)*60+Number(local.minute),start=minute(startTime);
  const day=(days||[]).find(item=>item.date===today);
@@ -29,7 +29,14 @@ export function buildRemainingDailyPlan({days=[],calendarEvents=[],now=new Date(
  if(pointer<windowEnd)gaps.push({start:pointer,end:windowEnd});
  const available=gaps.reduce((sum,gap)=>sum+gap.end-gap.start,0);
  if(!available)return {date:today,available_minutes:0,focus_minutes:0,break_minutes:0,blocks:[],unallocated:(day.tasks||[]).filter(task=>Number(task.minutes)>0).map(task=>({task_id:task.id,title:task.title,minutes:Number(task.minutes)})),overloaded:true,remaining_plan:true};
- const adjustedDay={...day,gross_capacity_minutes:windowEnd-cursor,available_minutes:available,planned_task_minutes:(day.tasks||[]).reduce((sum,task)=>sum+Math.max(0,Number(task.minutes)||0),0),tasks:(day.tasks||[]).map(task=>({...task,minutes:Math.max(0,Number(task.minutes)||0)}))};
+ const completedByTask=new Map();
+ for(const log of logs||[]){
+  if(log.block_date!==today||!["done","interrupted"].includes(log.status))continue;
+  const id=String(log.task_id),minutes=Math.max(0,Number(log.actual_minutes)||0);
+  completedByTask.set(id,(completedByTask.get(id)||0)+minutes);
+ }
+ const remainingTasks=(day.tasks||[]).map(task=>({...task,minutes:Math.max(0,Math.max(0,Number(task.minutes)||0)-(completedByTask.get(String(task.id))||0))})).filter(task=>task.minutes>0);
+ const adjustedDay={...day,gross_capacity_minutes:windowEnd-cursor,available_minutes:available,planned_task_minutes:remainingTasks.reduce((sum,task)=>sum+task.minutes,0),tasks:remainingTasks};
  const [plan]=buildDailyBlockPlans([adjustedDay],{focusMinutes,breakMinutes,startTime:local.hour+":"+local.minute,prepBeforeMinutes:prep,bufferAfterMinutes:after,calendarEvents});
  return plan?{...plan,remaining_plan:true,as_of:local.hour+":"+local.minute}:null;
 }
