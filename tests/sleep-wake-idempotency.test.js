@@ -31,9 +31,9 @@ function createEnv() {
         },
         async run() {
           if (sql.includes("UPDATE sleep_sessions SET woke_at=")) {
-            const row = sessions.find(item => item.id === values[4] && item.user_id === values[5]);
+            const row = sessions.find(item => item.id === values[5] && item.user_id === values[6]);
             if (!row || row.woke_at) return { meta: { changes: 0 } };
-            row.woke_at = values[0]; row.wake_date = values[1]; row.wake_source = values[2];
+            row.woke_at = values[0]; row.wake_date = values[1]; row.wake_source = values[2]; row.wake_timezone = values[4];
             wakeUpdates++;
             return { meta: { changes: 1 } };
           }
@@ -120,6 +120,38 @@ test("rejects a wake time earlier than the recorded sleep time", async () => {
     });
     assert.equal(response.status, 400);
     assert.equal(env.wakeUpdates, 0);
+  } finally {
+    globalThis.Date = RealDate;
+  }
+});
+
+test("wake confirmation keeps the timezone of the sleep event when the user has travelled", async () => {
+  const env = createEnv();
+  env.sessions[0].timezone = "Europe/Moscow";
+  env.sessions[0].asleep_timezone = "Europe/Amsterdam";
+  env.sessions[0].fell_asleep_at = "2026-11-14T23:30";
+  const RealDate = globalThis.Date;
+  const fixedNow = new RealDate("2026-11-15T05:15:00.000Z").getTime();
+  globalThis.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [fixedNow])); }
+    static now() { return fixedNow; }
+  };
+  try {
+    const response = await onRequestPost({
+      request: new Request("https://app.example.test/api/sleep", {
+        method: "POST",
+        headers: { "Cookie": "sr_session=test-session", "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "wake", source: "app", at: "2026-11-15T08:15" })
+      }),
+      env
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.ok, true);
+    assert.equal(body.session.woke_at, "2026-11-15T08:15");
+    assert.equal(body.session.wake_timezone, "Europe/Moscow");
+    assert.equal(body.session.asleep_timezone, "Europe/Amsterdam");
+    assert.equal(env.wakeUpdates, 1);
   } finally {
     globalThis.Date = RealDate;
   }
