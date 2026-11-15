@@ -41,3 +41,30 @@ test("does not invent weekly capacity when schedule is not configured",()=>{
  assert.equal(result.configured,false);
  assert.equal(result.summary.estimated_task_minutes,120);
 });
+
+test("summarizes task load by personal areas, income directions and unassigned work",()=>{
+ const result=buildWeeklyWorkload({...base,tasks:[
+  {id:"a",status:"todo",life_area_id:"home",life_area_title:"Дом",estimated_minutes:120},
+  {id:"b",status:"doing",life_area_id:"cats",life_area_title:"Коты",estimated_minutes:90,actual_minutes:30},
+  {id:"c",status:"todo",direction_id:"d1",direction_title:"Автоматизация",estimated_minutes:180},
+  {id:"d",status:"todo",project_id:"p1",project_title:"Личный проект",estimated_minutes:60},
+  {id:"e",status:"todo",estimated_minutes:null}
+ ]});
+ const areas=Object.fromEntries(result.area_balance.map(x=>[x.title,x]));
+ assert.equal(areas.Дом.estimated_minutes,120);
+ assert.equal(areas.Коты.estimated_minutes,60);
+ assert.equal(areas.Автоматизация.type,"income");
+ assert.equal(areas["Личный проект"].type,"project");
+ assert.equal(areas["Не распределено"].unestimated_count,1);
+});
+test("summarizes calendar commitments by event type and duration",()=>{
+ const result=buildWeeklyWorkload({...base,tasks:[],calendarEvents:[
+  {event_type:"meeting",start_at:"2026-11-16T10:00",end_at:"2026-11-16T11:30"},
+  {event_type:"hobby",start_at:"2026-11-17T18:00",end_at:"2026-11-17T20:00"},
+  {event_type:"sleep",start_at:"2026-11-17T23:00",end_at:"2026-11-18T07:00"}
+ ]});
+ const events=Object.fromEntries(result.calendar_balance.map(x=>[x.type,x]));
+ assert.equal(events.meeting.minutes,90);
+ assert.equal(events.hobby.minutes,120);
+ assert.equal(events.sleep.minutes,480);
+});
