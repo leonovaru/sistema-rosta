@@ -1039,6 +1039,64 @@ async function markSleep(action){
  catch(err){alert(err.message);}
  finally{button.disabled=false;}
 }
+
+function decodePushKey(value){
+ const normalized=String(value).replace(/-/g,"+").replace(/_/g,"/");
+ const raw=atob(normalized+"=".repeat((4-normalized.length%4)%4));
+ return Uint8Array.from(raw,c=>c.charCodeAt(0));
+}
+async function refreshWakeNotificationStatus(){
+ const button=$("wake-notifications-toggle"),status=$("wake-notifications-status");
+ if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window)){
+  status.textContent="Этот браузер не поддерживает push-уведомления. Подтверждение пробуждения доступно в приложении.";
+  button.disabled=true;return;
+ }
+ try{
+  const data=await api("/api/push-subscriptions");
+  if(!data.supported){
+   status.textContent="Отправка уведомлений ещё не настроена на сервере. Кнопка пробуждения в приложении уже доступна.";
+   button.disabled=true;return;
+  }
+  const registration=await navigator.serviceWorker.register("/sw.js");
+  const local=await registration.pushManager.getSubscription();
+  if(data.subscribed&&local){
+   button.textContent="Отключить уведомления";
+   status.textContent="Уведомления включены: каждый день в 06:00 по часовому поясу настроек.";
+  }else{
+   button.textContent="Включить уведомление в 06:00";
+   status.textContent=Notification.permission==="denied"?"Разрешение на уведомления запрещено в настройках браузера.":"Можно включить ежедневное уведомление. Время пробуждения сохранится при нажатии.";
+  }
+  button.disabled=false;
+ }catch(error){
+  status.textContent="Не удалось проверить уведомления: "+error.message;
+  button.disabled=true;
+ }
+}
+$("wake-notifications-toggle").addEventListener("click",async()=>{
+ const button=$("wake-notifications-toggle"),status=$("wake-notifications-status");
+ button.disabled=true;
+ try{
+  const registration=await navigator.serviceWorker.register("/sw.js");
+  const current=await registration.pushManager.getSubscription();
+  if(current){
+   await api("/api/push-subscriptions",{method:"DELETE",body:JSON.stringify({endpoint:current.endpoint})});
+   await current.unsubscribe();
+   status.textContent="Уведомления отключены.";
+  }else{
+   let permission=Notification.permission;
+   if(permission==="default")permission=await Notification.requestPermission();
+   if(permission!=="granted")throw new Error("Разрешите уведомления в настройках браузера.");
+   const config=await api("/api/push-subscriptions");
+   if(!config.public_key)throw new Error("На сервере пока не настроена отправка уведомлений.");
+   const subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decodePushKey(config.public_key)});
+   await api("/api/push-subscriptions",{method:"POST",body:JSON.stringify({subscription:subscription.toJSON()})});
+   status.textContent="Уведомления включены: ежедневно в 06:00 по часовому поясу настроек.";
+  }
+  await refreshWakeNotificationStatus();
+ }catch(error){status.textContent=error.message;}
+ finally{button.disabled=false;}
+});
+
 $("sleep-bed").addEventListener("click",()=>markSleep("bed"));
 $("sleep-asleep").addEventListener("click",()=>markSleep("asleep"));
 $("sleep-wake").addEventListener("click",()=>markSleep("wake"));
@@ -1062,7 +1120,7 @@ async function boot() {
   try {
     const { user } = await api("/api/auth/me");
     if (!user) return showAuth();
-    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadProfitability(); await loadRevenuePlan(); await loadRevenueScenarios(); await loadSalesPlan(); await loadAnalytics(); await loadWorkspace(); await loadCharity(); await loadDreams(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadSleep().catch(err=>{ $("sleep-status").textContent="Не удалось загрузить записи сна: "+err.message; }); await loadPlanner();
+    showApp(user.email); await refreshWakeNotificationStatus().catch(()=>{}); await loadDashboardData(); await loadFinance(); await loadProfitability(); await loadRevenuePlan(); await loadRevenueScenarios(); await loadSalesPlan(); await loadAnalytics(); await loadWorkspace(); await loadCharity(); await loadDreams(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadSleep().catch(err=>{ $("sleep-status").textContent="Не удалось загрузить записи сна: "+err.message; }); await loadPlanner();
   } catch { showAuth(); }
 }
 boot();
