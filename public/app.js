@@ -210,15 +210,22 @@ function renderTasks() {
   const monday = new Date(now); monday.setUTCDate(now.getUTCDate() - day + 1);
   const sunday = new Date(monday); sunday.setUTCDate(monday.getUTCDate() + 6);
   const mondayKey = monday.toISOString().slice(0,10), sundayKey = sunday.toISOString().slice(0,10);
-  const visible = allTasks.filter(task => {
+  const filteredTasks = allTasks.filter(task => {
     if (taskFilter === "all") return true;
     if (taskFilter === "today") return !task.due_date || task.due_date <= localToday;
     return task.due_date && task.due_date >= mondayKey && task.due_date <= sundayKey;
   });
+  const visible = [];
+  for (const task of filteredTasks) {
+    if (task.parent_task_id) continue;
+    visible.push(task);
+    visible.push(...filteredTasks.filter(child => child.parent_task_id === task.id));
+  }
+  visible.push(...filteredTasks.filter(task => task.parent_task_id && !visible.some(item => item.id === task.id)));
   $("tasks").innerHTML = visible.length ? visible.map(t => {
     const dateText = t.due_date ? (t.due_date < localToday ? "Просрочено · " : "") + t.due_date : "Без срока";
     const priorityText = ({high:"Высокий",medium:"Обычный",low:"Низкий"})[t.priority] || "Обычный";
-    return '<article class="task-card ' + (t.status === "done" ? "done" : "") + '">' +
+    return '<article class="task-card ' + (t.status === "done" ? "done " : "") + (t.parent_task_id ? "subtask-card" : "") + '">' +
       '<label class="task"><input type="checkbox" data-task="' + t.id + '" ' + (t.status === "done" ? "checked" : "") + '><span class="task-body"><b>' + escapeHtml(t.title) + '</b><small>' + escapeHtml(dateText) + " · " + escapeHtml(t.project_title || t.life_area_title || t.direction_title || "Без привязки") + (t.client_name ? " · " + escapeHtml(t.client_name) : "") + (t.parent_task_title ? " · Подзадача: " + escapeHtml(t.parent_task_title) : "") + (t.template_id ? " · Повторяется" : "") + ' · ' + priorityText + '</small></span></label>' +
       '<div class="task-time"><span>План: <b>' + (t.estimated_minutes ? duration(t.estimated_minutes) : "не задан") + '</b></span><label>Факт, мин<input type="number" min="0" max="10000" step="5" placeholder="—" value="' + (t.actual_minutes ?? "") + '" data-actual-time="' + t.id + '"></label><button type="button" class="button ghost" data-save-time="' + t.id + '">Сохранить</button></div>' +
       '<div class="task-ai"><button type="button" class="button ghost" data-delegate-task="' + t.id + '">' + (t.delegated_result ? "Подготовить заново с ИИ" : "Поручить ИИ") + '</button>' +
