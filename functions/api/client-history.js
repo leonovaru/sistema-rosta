@@ -1,6 +1,6 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { isValidHistoryDate, normalizeInteraction } from "../_lib/client-history.js";
-import { summarizeMeetingFollowup, listMeetingFollowups } from "../_lib/meeting-followup.js";
+import { summarizeMeetingFollowup, listMeetingFollowups, listMeetingOpenQuestions } from "../_lib/meeting-followup.js";
 
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);
@@ -32,7 +32,7 @@ export async function onRequestGet({request,env}){
  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
  const today=new Intl.DateTimeFormat("en-CA",{timeZone:settings?.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
  const followup_summary=summarizeMeetingFollowup(followupMeetings,today);
- return json({client,projects:projects.results,tasks:tasks.results,meetings:meetings.results.length,interactions:interactions.results.length,followup_summary,followups:listMeetingFollowups(followupMeetings.map((item,index)=>({...item,id:meetings.results[index].id,title:meetings.results[index].title,meeting_date:meetings.results[index].meeting_date})),today),today,financial:{income:income.results.reduce((s,x)=>s+Number(x.amount||0),0),expenses:expenses.results.reduce((s,x)=>s+Number(x.amount||0),0),income_entries:income.results,expense_entries:expenses.results},timeline});
+ return json({client,projects:projects.results,tasks:tasks.results,meetings:meetings.results.length,interactions:interactions.results.length,followup_summary,followups:listMeetingFollowups(followupMeetings.map((item,index)=>({...item,id:meetings.results[index].id,title:meetings.results[index].title,meeting_date:meetings.results[index].meeting_date})),today),open_question_items:listMeetingOpenQuestions(followupMeetings.map((item,index)=>({...item,id:meetings.results[index].id,title:meetings.results[index].title,meeting_date:meetings.results[index].meeting_date}))),today,financial:{income:income.results.reduce((s,x)=>s+Number(x.amount||0),0),expenses:expenses.results.reduce((s,x)=>s+Number(x.amount||0),0),income_entries:income.results,expense_entries:expenses.results},timeline});
 }
 function parseArray(value){try{const x=JSON.parse(value||"[]");return Array.isArray(x)?x:[]}catch{return[]}}
 
