@@ -25,7 +25,7 @@ export function detectVariableRecurringExpenses(rows,{today,horizonDays=90}={}){
   const projected=[];while(due<=end&&projected.length<4){projected.push({date:due,type:"expense",title:group.title+" (оценка)",amount:Math.round(typical*100)/100,source:"variable_recurring",category:group.category});due=nextMonth(due);}
   if(!projected.length)continue;
   entries.forEach(x=>matchedIds.push(...x.ids));
-  suggestions.push({title:group.title,category:group.category,average_amount:Math.round(typical*100)/100,amount_min:Math.min(...amounts),amount_max:Math.max(...amounts),last_paid_on:last.date,occurrences:entries.length,projected});
+  suggestions.push({title:group.title,category:group.category,estimated_amount:Math.round(typical*100)/100,amount_min:Math.min(...amounts),amount_max:Math.max(...amounts),last_paid_on:last.date,occurrences:entries.length,projected});
  }
  return {suggestions,matched_expense_ids:matchedIds,events:suggestions.flatMap(x=>x.projected)};
 }
