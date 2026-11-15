@@ -134,6 +134,32 @@ $("cashflow-days").addEventListener("change",async()=>{try{await loadCashflowFor
 $("save-opening-balance").addEventListener("click",async()=>{try{await api("/api/finance/forecast",{method:"POST",body:JSON.stringify({action:"starting_balance",amount:$("cashflow-opening-balance").value})});await loadCashflowForecast();}catch(err){alert(err.message);}});
 $("cashflow-form").addEventListener("submit",async e=>{e.preventDefault();try{await api("/api/finance/forecast",{method:"POST",body:JSON.stringify({title:$("cashflow-title").value,flow_type:$("cashflow-type").value,amount:$("cashflow-amount").value,expected_date:$("cashflow-date").value,direction_id:$("cashflow-direction").value||null})});$("cashflow-form").reset();await loadCashflowForecast();}catch(err){alert(err.message);}});
 $("cashflow-events").addEventListener("click",async e=>{const b=e.target.closest("[data-cashflow-delete]");if(!b)return;try{await api("/api/finance/forecast",{method:"DELETE",body:JSON.stringify({id:b.dataset.cashflowDelete})});await loadCashflowForecast();}catch(err){alert(err.message);}});
+let revenuePlanData=null;
+async function loadRevenuePlan(){
+ revenuePlanData=await api("/api/finance/revenue-plan");
+ const p=revenuePlanData,s=p;
+ $("revenue-plan-summary").innerHTML=[
+  ["Месячная цель",money(p.monthly_target)],
+  ["Уже получено",money(p.actual_total)],
+  ["Осталось получить",money(p.remaining_total)],
+  ["Нужный темп в день",money(p.required_daily_total)],
+  ["Нужный темп в неделю",money(p.required_weekly_total)],
+  ["Не распределено",money(p.unallocated_target)]
+ ].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
+ $("revenue-plan-directions").innerHTML=p.directions.map(d=>'<article class="revenue-plan-row"><div class="revenue-plan-main"><b>'+escapeHtml(d.title)+'</b><small>Цель '+money(d.monthly_target)+' · факт '+money(d.actual)+' · осталось '+money(d.remaining)+'</small><div class="progress"><span style="width:'+Math.min(100,d.monthly_target?d.actual/d.monthly_target*100:0)+'%"></span></div><small>В неделю: '+money(d.weekly_target)+' · в день: '+money(d.daily_target)+(d.required_sales===null?'':' · продаж: '+d.required_sales+' по среднему чеку')+'</small></div><div class="revenue-plan-inputs"><label>Доля, %<input type="number" min="0" max="100" step="0.5" data-revenue-share="'+escapeHtml(d.direction_id)+'" value="'+(p.suggested_allocation?Number(d.share_percent).toFixed(2):d.share_percent)+'"></label><label>Средний чек, ₽<input type="number" min="0" max="100000000" step="100" data-revenue-ticket="'+escapeHtml(d.direction_id)+'" value="'+(d.average_sale_amount||"")+'" placeholder="Не задан"></label></div></article>').join("");
+ $("revenue-plan-share-note").textContent=p.suggested_allocation?"Предварительно предложено равное распределение. Сохрани его или измени доли.":"Распределено: "+p.share_total+"% · можно оставить часть цели без распределения.";
+}
+$("refresh-revenue-plan").addEventListener("click",async()=>{try{await loadRevenuePlan();}catch(err){alert(err.message);}});
+$("save-revenue-plan").addEventListener("click",async()=>{
+ const b=$("save-revenue-plan");b.disabled=true;
+ try{
+  const rows=revenuePlanData.directions.map(d=>({direction_id:d.direction_id,share_percent:document.querySelector('[data-revenue-share="'+d.direction_id+'"]').value,average_sale_amount:document.querySelector('[data-revenue-ticket="'+d.direction_id+'"]').value||0}));
+  const total=rows.reduce((sum,row)=>sum+Number(row.share_percent||0),0);
+  if(total>100.0001)throw new Error("Сумма долей превышает 100%. Уменьши распределение.");
+  await api("/api/finance/revenue-plan",{method:"POST",body:JSON.stringify({directions:rows})});
+  await loadRevenuePlan();
+ }catch(err){alert(err.message);}finally{b.disabled=false;}
+});
 async function loadFinance() {
   financeData = await api("/api/finance");
   const s=financeData.summary;
@@ -158,6 +184,7 @@ async function loadFinance() {
   $("finance-obligations").innerHTML=financeData.obligations.length?financeData.obligations.map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.due_date+' · '+(item.frequency==="monthly"?"ежемесячно":item.frequency==="weekly"?"еженедельно":"один раз")+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-obligation-paid="'+escapeHtml(item.id)+'">Оплачено</button></article>').join(""):'<p class="muted">Предстоящих платежей пока нет.</p>';
   $("finance-expense-list").innerHTML=financeData.expenses.length?financeData.expenses.slice(0,12).map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.spent_on+' · '+escapeHtml(item.category)+(item.direction_title?' · '+escapeHtml(item.direction_title):' · не распределён')+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-expense-delete="'+escapeHtml(item.id)+'">×</button></article>').join(""):'<p class="muted">Расходов пока нет.</p>';
   await loadCashflowForecast();
+  await loadRevenuePlan();
 }
 $("expense-form").addEventListener("submit",async e=>{
   e.preventDefault();
