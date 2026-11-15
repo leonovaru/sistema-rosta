@@ -72,7 +72,7 @@ export function buildTaskWindowRecommendations(plans=[],patterns=null,days=[]){
   for(const item of plan.unmatched_window_tasks||[]){
    const task=plan._remaining_tasks.find(row=>String(row.id)===String(item.task_id));
    if(!task){stillUnmatched.push(item);continue;}
-   const candidates=annotated.filter(target=>target.date>plan.date&&(!task.due_date||target.date<=String(task.due_date).slice(0,10))&&dayMap.get(target.date)?.working_day&&!((dayMap.get(target.date)?.tasks||[]).some(row=>String(row.id)===String(task.id))));
+   const candidates=annotated.filter(target=>target.date>plan.date&&(!task.due_date||target.date<=String(task.due_date).slice(0,10))&&dayMap.get(target.date)?.working_day&&!(target.unmatched_window_tasks||[]).length&&!((dayMap.get(target.date)?.tasks||[]).some(row=>String(row.id)===String(task.id))));
    let selected=null;
    for(const target of candidates){
     const slots=(target._available_slots||[]).filter(slot=>!reserved.has(target.date+":"+slot.start_time+":"+slot.end_time));
