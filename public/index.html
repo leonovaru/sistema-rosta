@@ -78,6 +78,13 @@
             <section class="sales-plan-section"><div class="section-head"><div><p class="eyebrow">ВОРОНКА КЛИЕНТОВ</p><h3>План продаж и действий на неделю</h3></div><button type="button" class="button ghost" id="refresh-sales-plan">Пересчитать</button></div><p class="fine">Настрой конверсии для каждого направления. Первоначальные 40% и 20% — только стартовые допущения, не фактическая статистика.</p><div id="sales-plan-directions" class="sales-plan-grid"></div><div class="revenue-plan-actions"><span id="sales-plan-note" class="fine"></span><button type="button" class="button primary" id="save-sales-plan">Сохранить конверсии</button></div></section>
           </section>
           <p class="fine">Погашение долгов и оплата обязательных платежей учитываются отдельно. Не записывай их повторно как обычные расходы. Проценты по долгам пока фиксируются справочно и не начисляются автоматически.</p>
+          <section class="debt-management-section">
+            <div class="section-head"><div><p class="eyebrow">ОТДЕЛЬНЫЙ РАЗДЕЛ</p><h3>Долги и график погашения</h3></div><button type="button" class="button ghost" id="refresh-debt-forecast">Пересчитать</button></div>
+            <p class="fine">Показывает прогноз процентов, платежей и срока закрытия. Дополнительная сумма применяется ежемесячно к каждому открытому долгу. Фактический договор может считать проценты иначе — это расчётный ориентир, не банковский график.</p>
+            <div class="debt-forecast-controls"><label>Дополнительно в месяц на каждый долг, ₽<input id="debt-extra-payment" type="number" min="0" step="100" value="0"></label><label>Горизонт<select id="debt-forecast-months"><option value="12">12 месяцев</option><option value="24">24 месяца</option><option value="36">36 месяцев</option><option value="60" selected>60 месяцев</option></select></label></div>
+            <div id="debt-forecast-summary" class="analytics-metrics"></div><div id="debt-forecast-list" class="analytics-list"></div>
+            <h4>График по месяцам</h4><div id="debt-forecast-months-list" class="finance-list"></div>
+          </section>
           <div class="finance-forms">
             <form id="expense-form" class="finance-form"><h3>Записать расход</h3>
               <label>На что<input id="expense-title" required maxlength="180" placeholder="Продукты, аренда, сервис"></label>
