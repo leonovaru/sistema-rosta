@@ -2,8 +2,8 @@ function addDays(date,days){const value=new Date(date+"T12:00:00Z");value.setUTC
 function weekday(date){const day=new Date(date+"T12:00:00Z").getUTCDay();return day||7;}
 function eventMinutes(event){const start=new Date(event.actual_start_at||event.start_at),end=new Date(event.actual_end_at||event.end_at);return Number.isFinite(start.getTime())&&Number.isFinite(end.getTime())?Math.max(0,Math.round((end-start)/60000)):0;}
 function taskArea(task,projectTargets=new Set()){
- if(task.life_area_id)return {key:"life:"+task.life_area_id,title:task.life_area_title||"Личная сфера",type:"personal"};
  if(task.project_id&&projectTargets.has(task.project_id))return {key:"project:"+task.project_id,title:task.project_title||"Собственный проект",type:"project"};
+ if(task.life_area_id)return {key:"life:"+task.life_area_id,title:task.life_area_title||"Личная сфера",type:"personal"};
  if(task.direction_id)return {key:"direction:"+task.direction_id,title:task.direction_title||"Доходное направление",type:"income"};
  if(task.project_id)return {key:"project:"+task.project_id,title:task.project_title||"Собственный проект",type:"project"};
  if(task.client_id)return {key:"client:"+task.client_id,title:task.client_name||"Клиент без направления",type:"income"};
