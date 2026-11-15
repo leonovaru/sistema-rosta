@@ -1,6 +1,6 @@
 import { addDays, addPeriod } from "./finance.js";
 const positive=value=>{const n=Number(value);return Number.isFinite(n)&&n>0?n:0;};
-function dateValid(value){return /^\\d{4}-\\d{2}-\\d{2}$/.test(value)&&new Date(value+"T12:00:00Z").toISOString().slice(0,10)===value;}
+function dateValid(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const d=new Date(value+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}
 export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,planned=[],obligations=[],debts=[]}){
  if(!dateValid(today))throw new Error("Invalid forecast date");
  const end=addDays(today,horizonDays),events=[];
@@ -26,7 +26,7 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
    cursor=addPeriod(cursor,"monthly",1);
   }
  }
- events.sort((a,b)=>a.date.localeCompare(b.date)||(a.type==="income"?-1:1)||a.title.localeCompare(b.title));
+ events.sort((a,b)=>a.date.localeCompare(b.date)||(a.type===b.type?a.title.localeCompare(b.title):a.type==="income"?-1:1));
  const days=[];let balance=Number(startingBalance)||0;
  for(let date=today;date<=end;date=addDays(date,1)){
   const dayEvents=events.filter(e=>e.date===date),income=dayEvents.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0),expense=dayEvents.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0);
