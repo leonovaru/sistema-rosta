@@ -92,7 +92,7 @@ export default {
       const claimed=await env.DB.prepare("UPDATE push_deliveries SET status='sending',error=NULL,updated_at=datetime('now') WHERE id=? AND (status IN ('pending','failed') OR (status='sending' AND updated_at<=datetime('now','-2 minutes')))").bind(deliveryId).run();
       if(!claimed.meta.changes)continue;
       try{
-        await sendPush(row,env,{title:"Система роста",body:"Доброе утро! Ты уже проснулась?",tag:"morning-wake-"+localDate,url:"/?wake=1"});
+        await sendPush(row,env,{title:"Система роста",body:"Доброе утро! Ты уже проснулась?",tag:"morning-wake-"+localDate,url:"/",wakeUrl:"/?wake=1"});
         await env.DB.prepare("UPDATE push_deliveries SET status='sent',sent_at=?,updated_at=datetime('now') WHERE id=?").bind(new Date().toISOString(),deliveryId).run();
       }catch(error){
         const message=String(error?.message||error).slice(0,500);
