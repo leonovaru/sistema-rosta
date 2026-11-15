@@ -190,6 +190,7 @@ function eventDuration(event) {
   return duration(mins);
 }
 function calendarRange() {
+  if(calendarView==="day") return {from:calendarSelected+"T00:00",to:shiftDate(calendarSelected,1)+"T00:00"};
   if(calendarView==="month"){
     const first=new Date(calendarAnchor.getFullYear(),calendarAnchor.getMonth(),1);
     const offset=(first.getDay()+6)%7;
@@ -210,10 +211,11 @@ async function loadCalendar() {
 }
 function renderCalendar() {
   const monthName=new Intl.DateTimeFormat("ru-RU",{month:"long",year:"numeric"}).format(calendarAnchor);
+  const selectedLabel=new Intl.DateTimeFormat("ru-RU",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(new Date(calendarSelected+"T12:00:00"));
   const weekStart=new Date(calendarSelected+"T12:00:00");
   weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
   const weekEnd=new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
-  $("calendar-caption").textContent=calendarView==="month"?monthName:new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short"}).format(weekStart)+" — "+new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short",year:"numeric"}).format(weekEnd);
+  $("calendar-caption").textContent=calendarView==="month"?monthName:calendarView==="day"?selectedLabel:new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short"}).format(weekStart)+" — "+new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short",year:"numeric"}).format(weekEnd);
   document.querySelector(".calendar-weekdays").classList.toggle("hidden",calendarView==="week");
   const start=calendarView==="month"?new Date(calendarAnchor.getFullYear(),calendarAnchor.getMonth(),1):weekStart;
   if(calendarView==="month") start.setDate(1-((start.getDay()+6)%7));
@@ -225,7 +227,7 @@ function renderCalendar() {
     const items=calendarEvents.filter(e=>e.start_at.slice(0,10)<=key&&(e.end_at.slice(0,10)>key||(e.end_at.slice(0,10)===key&&e.end_at.slice(11,16)!=="00:00")));
     cells.push('<button type="button" class="calendar-day '+(key===calendarSelected?"selected ":"")+(d.getMonth()!==calendarAnchor.getMonth()&&calendarView==="month"?"outside ":"")+(key===localToday?"today":"")+'" data-calendar-date="'+key+'"><span class="calendar-day-number">'+d.getDate()+'</span><span class="calendar-day-events">'+items.slice(0,3).map(e=>'<small class="event-dot '+eventColors[e.event_type]+'">'+escapeHtml(e.start_at.slice(0,10)<key?'↳':eventTime(e.start_at))+' '+escapeHtml(e.title)+'</small>').join("")+(items.length>3?'<small class="event-more">+'+(items.length-3)+'</small>':"")+'</span></button>');
   }
-  $("calendar-grid").className="calendar-grid "+(calendarView==="week"?"week-view":"month-view");
+  $("calendar-grid").className="calendar-grid "+(calendarView==="week"?"week-view":calendarView==="day"?"day-view":"month-view");
   $("calendar-grid").innerHTML=cells.join("");
   document.querySelectorAll("[data-calendar-view]").forEach(b=>b.classList.toggle("active",b.dataset.calendarView===calendarView));
   $("calendar-selected-date").textContent=new Intl.DateTimeFormat("ru-RU",{weekday:"long",day:"numeric",month:"long"}).format(new Date(calendarSelected+"T12:00:00"));
@@ -284,7 +286,7 @@ function renderDayPlan() {
   const items = Array.isArray(plan.items) ? plan.items : [];
   $("day-plan").innerHTML = '<h3>' + escapeHtml(plan.headline || "План на сегодня") + '</h3><p class="planner-focus">' + escapeHtml(plan.focus || "") + '</p>' +
     (items.length ? '<ol class="planner-items">' + items.map(item => '<li><div><b>' + escapeHtml(item.title) + '</b><small>' + escapeHtml(item.reason || "") + '</small></div><span>' + duration(item.minutes) + '</span></li>').join("") + '</ol>' : '<p class="muted">Пока нет подходящих незавершённых задач. Добавь конкретные следующие шаги в список задач.</p>') +
-    '<div class="planner-summary"><span>Работа доступна: <b>' + duration(plan.daily_capacity_minutes || 0) + '</b></span><span>Уже отработано: <b>' + duration(plan.work_already_done_minutes || 0) + '</b></span><span>Календарь занят: <b>' + duration(plan.calendar_busy_minutes_remaining || 0) + '</b></span><span>Запланировано: <b>' + duration(plan.total_minutes || 0) + '</b></span><span>Резерв: <b>' + duration(plan.reserve_minutes || 0) + '</b></span><span>Источник: <b>' + (plan.source === "ai" ? "ИИ" : "алгоритм") + '</b></span></div>';
+    '<div class="planner-summary"><span>Свободно с учётом календаря: <b>' + duration(plan.available_minutes || 0) + '</b></span><span>Уже отработано: <b>' + duration(plan.work_already_done_minutes || 0) + '</b></span><span>Календарь занят: <b>' + duration(plan.calendar_busy_minutes_remaining || 0) + '</b></span><span>Запланировано: <b>' + duration(plan.total_minutes || 0) + '</b></span><span>Резерв: <b>' + duration(plan.reserve_minutes || 0) + '</b></span><span>Источник: <b>' + (plan.source === "ai" ? "ИИ" : "алгоритм") + '</b></span></div>';
 }
 $("make-day-plan").addEventListener("click", async () => {
   const button = $("make-day-plan");
