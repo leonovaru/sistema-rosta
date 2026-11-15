@@ -25,7 +25,7 @@ export async function onRequestPost({request,env}){
   const transcript=String(body.transcript||"").trim().slice(0,12000);
   if(!title||!isValidMeetingDate(meetingDate))return json({error:"Укажи название и корректную дату встречи"},400);
   const [projects,clients]=await Promise.all([
-   env.DB.prepare("SELECT id,client_id FROM projects WHERE user_id=? AND status NOT IN ('archived')").bind(user.id).all(),
+   env.DB.prepare("SELECT id,client_id FROM projects WHERE user_id=?").bind(user.id).all(),
    env.DB.prepare("SELECT id FROM clients WHERE user_id=?").bind(user.id).all()
   ]);
   const links=normalizeMeetingLinks(body.project_id,body.client_id,projects.results,clients.results);
