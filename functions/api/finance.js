@@ -25,13 +25,13 @@ export async function onRequestGet({request,env}) {
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM debt_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?").bind(user.id,monthStart,today).first(),
     env.DB.prepare("SELECT * FROM debts WHERE user_id=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, balance DESC").bind(user.id).all(),
     env.DB.prepare("SELECT * FROM expenses WHERE user_id=? ORDER BY spent_on DESC,created_at DESC LIMIT 100").bind(user.id).all(),
-    env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 AND due_date<=? ORDER BY due_date LIMIT 100").bind(user.id,next30).all(),
+    env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 ORDER BY due_date LIMIT 100").bind(user.id).all(),
     env.DB.prepare("SELECT p.*,d.title AS debt_title FROM debt_payments p JOIN debts d ON d.id=p.debt_id WHERE p.user_id=? ORDER BY p.paid_on DESC,p.created_at DESC LIMIT 30").bind(user.id).all()
   ]);
   const debtBalance=debtRows.results.filter(x=>x.status==="open").reduce((sum,x)=>sum+Number(x.balance),0);
-  const upcomingTotal=obligations.results.reduce((sum,x)=>sum+Number(x.amount),0);
+  const upcoming=obligations.results.filter(x=>x.due_date<=next30);\n  const upcomingTotal=upcoming.reduce((sum,x)=>sum+Number(x.amount),0);
   const incomeTotal=Number(income?.total||0),expenseTotal=Number(expenses?.total||0),debtPaid=Number(debtPayments?.total||0);
-  return json({today,month_start:monthStart,summary:{income:incomeTotal,expenses:expenseTotal,debt_payments:debtPaid,net:incomeTotal-expenseTotal-debtPaid,debt_balance:debtBalance,upcoming_obligations:upcomingTotal},debts:debtRows.results,expenses:expenseRows.results,obligations:obligations.results,debt_payments:paymentRows.results});
+  return json({today,month_start:monthStart,summary:{income:incomeTotal,expenses:expenseTotal,debt_payments:debtPaid,net:incomeTotal-expenseTotal-debtPaid,debt_balance:debtBalance,upcoming_obligations:upcomingTotal},debts:debtRows.results,expenses:expenseRows.results,obligations:obligations.results,upcoming_obligations:upcoming,debt_payments:paymentRows.results});
 }
 export async function onRequestPost({request,env}) {
   const user=await requireUser(request,env);
@@ -62,6 +62,18 @@ export async function onRequestPost({request,env}) {
       env.DB.prepare("UPDATE debts SET balance=?,status=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(next,next===0?"closed":"open",debtId,user.id)
     ]);
     return json({ok:true,id,balance:next},201);
+  }
+  if(action==="obligation_paid"){
+    const obligationId=String(body.obligation_id||""),date=String(body.paid_on||"");
+    if(!obligationId||!DATE.test(date))return json({error:"Проверь обязательство и дату оплаты"},400);
+    const obligation=await env.DB.prepare("SELECT * FROM payment_obligations WHERE id=? AND user_id=? AND active=1").bind(obligationId,user.id).first();
+    if(!obligation)return json({error:"Активный платёж не найден"},404);
+    const nextDue=addPeriod(obligation.due_date,obligation.frequency);
+    const statements=[env.DB.prepare("INSERT INTO obligation_payments (id,user_id,obligation_id,amount,paid_on) VALUES (?,?,?,?,?)").bind(id,user.id,obligationId,obligation.amount,date)];
+    if(nextDue)statements.push(env.DB.prepare("UPDATE payment_obligations SET due_date=? WHERE id=? AND user_id=?").bind(nextDue,obligationId,user.id));
+    else statements.push(env.DB.prepare("UPDATE payment_obligations SET active=0 WHERE id=? AND user_id=?").bind(obligationId,user.id));
+    await env.DB.batch(statements);
+    return json({ok:true,next_due_date:nextDue});
   }
   if(action==="obligation"){
     const amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.due_date||""),frequency=String(body.frequency||"once");
