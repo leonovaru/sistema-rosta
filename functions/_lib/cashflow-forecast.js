@@ -6,7 +6,7 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
  const end=addDays(today,horizonDays),events=[];
  for(const row of planned){
   if(!dateValid(row.expected_date)||row.expected_date<today||row.expected_date>end)continue;
-  events.push({date:row.expected_date,type:row.flow_type,title:row.title,amount:positive(row.amount),source:"planned",direction_title:row.direction_title||null});
+  events.push({id:row.id||null,date:row.expected_date,type:row.flow_type,title:row.title,amount:positive(row.amount),source:"planned",direction_title:row.direction_title||null});
  }
  for(const row of obligations){
   let due=row.due_date,guard=0;
