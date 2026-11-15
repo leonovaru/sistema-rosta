@@ -70,3 +70,8 @@ test("recurring irregular expense advances from month end without invalid dates"
  const x=buildCashflowForecast({today:"2026-02-20",horizonDays:40,irregularExpenses:[{title:"Годовой платёж",amount:1000,next_date:"2025-02-28",frequency:"yearly"}]});
  assert.deepEqual(x.events.map(e=>e.date),["2026-02-28"]);
 });
+
+test("quarterly recurrence preserves the original day after short months",()=>{
+ const x=buildCashflowForecast({today:"2027-01-01",horizonDays:220,irregularExpenses:[{title:"Квартальный платёж",amount:500,next_date:"2027-01-31",frequency:"quarterly"}]});
+ assert.deepEqual(x.events.map(e=>e.date),["2027-01-31","2027-04-30","2027-07-31"]);
+});
