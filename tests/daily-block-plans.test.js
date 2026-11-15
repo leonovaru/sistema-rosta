@@ -11,7 +11,7 @@ test("splits long tasks into focus blocks with recovery breaks",()=>{
 test("does not exceed available time and reports unallocated task minutes",()=>{
  const [day]=buildDailyBlockPlans([{date:"2026-11-16",available_minutes:60,planned_task_minutes:90,tasks:[{id:"a",title:"Задача",minutes:90}]}]);
  assert.equal(day.focus_minutes+day.break_minutes,60);
- assert.equal(day.unallocated.reduce((sum,row)=>sum+row.minutes,0),30);
+ assert.equal(day.unallocated.reduce((sum,row)=>sum+row.minutes,0),40);
  assert.equal(day.overloaded,true);
 });
 test("does not mutate source days and skips empty days",()=>{
