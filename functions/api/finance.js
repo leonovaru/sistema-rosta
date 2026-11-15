@@ -27,10 +27,11 @@ export async function onRequestGet({request,env}) {
   if(!user)return json({error:"Необходим вход"},401);
   const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
   const today=dateInZone(settings?.timezone||"Europe/Moscow"),monthStart=today.slice(0,7)+"-01",next30=addDays(today,30);
-  const [income,expenses,debtPayments,debtRows,expenseRows,obligations,paymentRows]=await Promise.all([
+  const [income,expenses,debtPayments,obligationPayments,debtRows,expenseRows,obligations,paymentRows]=await Promise.all([
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=?").bind(user.id,monthStart,today).first(),
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<=?").bind(user.id,monthStart,today).first(),
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM debt_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?").bind(user.id,monthStart,today).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM obligation_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?").bind(user.id,monthStart,today).first(),
     env.DB.prepare("SELECT * FROM debts WHERE user_id=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, balance DESC").bind(user.id).all(),
     env.DB.prepare("SELECT * FROM expenses WHERE user_id=? ORDER BY spent_on DESC,created_at DESC LIMIT 100").bind(user.id).all(),
     env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 ORDER BY due_date LIMIT 100").bind(user.id).all(),
@@ -39,8 +40,8 @@ export async function onRequestGet({request,env}) {
   const debtBalance=debtRows.results.filter(x=>x.status==="open").reduce((sum,x)=>sum+Number(x.balance),0);
   const upcoming=obligations.results.filter(x=>x.due_date<=next30);
   const upcomingTotal=upcoming.reduce((sum,x)=>sum+Number(x.amount),0);
-  const incomeTotal=Number(income?.total||0),expenseTotal=Number(expenses?.total||0),debtPaid=Number(debtPayments?.total||0);
-  return json({today,month_start:monthStart,summary:{income:incomeTotal,expenses:expenseTotal,debt_payments:debtPaid,net:incomeTotal-expenseTotal-debtPaid,debt_balance:debtBalance,upcoming_obligations:upcomingTotal},debts:debtRows.results,expenses:expenseRows.results,obligations:obligations.results,upcoming_obligations:upcoming,debt_payments:paymentRows.results});
+  const incomeTotal=Number(income?.total||0),expenseTotal=Number(expenses?.total||0),debtPaid=Number(debtPayments?.total||0),obligationPaid=Number(obligationPayments?.total||0);
+  return json({today,month_start:monthStart,summary:{income:incomeTotal,expenses:expenseTotal,debt_payments:debtPaid,obligation_payments:obligationPaid,net:incomeTotal-expenseTotal-debtPaid-obligationPaid,debt_balance:debtBalance,upcoming_obligations:upcomingTotal},debts:debtRows.results,expenses:expenseRows.results,obligations:obligations.results,upcoming_obligations:upcoming,debt_payments:paymentRows.results});
 }
 export async function onRequestPost({request,env}) {
   const user=await requireUser(request,env);
