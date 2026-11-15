@@ -85,3 +85,5 @@
 .voice-guide{margin:10px 0 14px;padding:12px 14px;border:1px solid var(--line,#ddd);border-radius:12px;background:var(--surface,#fff)}.voice-guide summary{cursor:pointer;font-weight:600}.voice-guide p{margin:9px 0 0;line-height:1.5}.voice-guide p:last-child{margin-bottom:2px}
 
 .voice-include{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:8px}.voice-include input{width:auto}.voice-duplicate-warning{padding:9px 11px;border-radius:8px;background:var(--warning-bg,#fff4d6);color:var(--text,#5b4510);font-size:.9rem;margin:6px 0 12px}
+
+.voice-workspace-proposals{padding:12px;border:1px solid var(--line,#ddd);border-radius:12px;margin:12px 0}.voice-workspace-item{display:grid;gap:8px;padding:10px 0;border-bottom:1px solid var(--line,#ddd)}.voice-workspace-item:last-child{border-bottom:0}.voice-workspace-item small{font-weight:650;color:var(--muted,#666)}.voice-workspace-item input,.voice-workspace-item textarea{width:100%;box-sizing:border-box}
