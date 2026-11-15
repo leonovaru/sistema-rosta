@@ -53,10 +53,21 @@ test("repeated wake confirmations on one local day return the first record", asy
     headers: { "Cookie": "sr_session=test-session", "Content-Type": "application/json" },
     body: JSON.stringify({ action: "wake", source: "push", at: "2026-11-15T08:15" })
   });
-  const first = await onRequestPost({ request: makeRequest(), env });
-  const firstBody = await first.json();
-  const second = await onRequestPost({ request: makeRequest(), env });
-  const secondBody = await second.json();
+  const RealDate = globalThis.Date;
+  const fixedNow = new RealDate("2026-11-15T05:15:00.000Z").getTime();
+  globalThis.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [fixedNow])); }
+    static now() { return fixedNow; }
+  };
+  let firstBody, secondBody;
+  try {
+    const first = await onRequestPost({ request: makeRequest(), env });
+    firstBody = await first.json();
+    const second = await onRequestPost({ request: makeRequest(), env });
+    secondBody = await second.json();
+  } finally {
+    globalThis.Date = RealDate;
+  }
   assert.equal(firstBody.ok, true);
   assert.equal(firstBody.session.woke_at, "2026-11-15T08:15");
   assert.equal(secondBody.duplicate, true);
