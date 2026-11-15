@@ -170,9 +170,14 @@ export async function onRequestDelete({request,env}) {
   if(type==="life_area") {
     const r=await env.DB.prepare("UPDATE life_areas SET active=0 WHERE id=? AND user_id=?").bind(id,user.id).run();
     if(!r.meta.changes)return json({error:"Область не найдена"},404);
+  } else if(type==="client") {
+    // Keep client interactions, linked projects, deals and financial history intact.
+    const r=await env.DB.prepare("UPDATE clients SET status='closed',updated_at=datetime('now') WHERE id=? AND user_id=?").bind(id,user.id).run();
+    if(!r.meta.changes)return json({error:"Клиент не найден"},404);
   } else {
-    const r=await env.DB.prepare(`DELETE FROM ${table} WHERE id=? AND user_id=?`).bind(id,user.id).run();
-    if(!r.meta.changes)return json({error:"Запись не найдена"},404);
+    // Archive projects instead of breaking task, meeting, cashflow and finance links.
+    const r=await env.DB.prepare("UPDATE projects SET status='archived',updated_at=datetime('now') WHERE id=? AND user_id=?").bind(id,user.id).run();
+    if(!r.meta.changes)return json({error:"Проект не найден"},404);
   }
-  return json({ok:true});
+  return json({ok:true,archived:type!=="life_area"});
 }
