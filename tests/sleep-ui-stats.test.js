@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
-const match = app.match(/function averageSleepMinutes\\(sessions,days\\)\\{([\\s\\S]*?)\\n\\}/);
+const match = app.match(/function averageSleepMinutes\(sessions,days\)\{([\s\S]*?)\n\}/);
 assert.ok(match, "averageSleepMinutes must remain available for the sleep UI");
 
 function runAverage(sessions, days, today = "2026-11-15") {
