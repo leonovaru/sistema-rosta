@@ -9,7 +9,7 @@ function summarize(rows){
  return {sample_size:rows.length,completed:done,skipped:rows.filter(row=>row.status==="skipped").length,interrupted:rows.filter(row=>row.status==="interrupted").length,completion_rate:rows.length?Math.round(done/rows.length*100):null};
 }
 export function buildCalendarExecutionContext(logs=[],events=[],{proximityMinutes=60}={}){
- const valid=(logs||[]).filter(row=>["done","skipped","interrupted"].includes(row.status)&&Number(row.planned_minutes)>0&&/^\d{4}-\d{2}-\d{2}$/.test(row.block_date||"")&&/^\d{2}:\d{2}$/.test(row.start_time||"")&&/^\d{2}:\d{2}$/.test(row.end_time||""));
+ const valid=(logs||[]).filter(row=>["done","skipped","interrupted"].includes(row.status)&&Number(row.planned_minutes)>0&&/^\d{4}-\d{2}-\d{2}$/.test(row.block_date||"")&&/^\d{2}:\d{2}$/.test(row.start_time||"")&&/^\d{2}:\d{2}$/.test(row.end_time||"")&&minute("T"+row.end_time)>minute("T"+row.start_time));
  const annotated=valid.map(row=>{
   const start=minute("T"+row.start_time),end=minute("T"+row.end_time);
   const dayEvents=intervalsForDay(events,row.block_date);
