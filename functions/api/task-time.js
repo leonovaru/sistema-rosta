@@ -1,6 +1,13 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { elapsedMinutes } from "../_lib/time-tracking.js";
 
+async function invalidateTodayPlan(env,userId) {
+  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(userId).first();
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:settings?.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));
+  await env.DB.prepare("DELETE FROM daily_plans WHERE user_id=? AND plan_date=?").bind(userId,values.year+"-"+values.month+"-"+values.day).run();
+}
+
 export async function onRequestGet({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error:"Необходим вход" },401);
@@ -39,6 +46,7 @@ export async function onRequestPost({ request, env }) {
     } catch {
       return json({ error:"Уже запущен другой таймер. Обновите страницу." },409);
     }
+    await invalidateTodayPlan(env,user.id);
     return json({ ok:true,active_timer:{id,task_id:taskId,started_at:now} },201);
   }
   if (action === "stop") {
@@ -50,6 +58,7 @@ export async function onRequestPost({ request, env }) {
     const update = await env.DB.prepare("UPDATE task_time_entries SET ended_at=?,duration_minutes=? WHERE id=? AND user_id=? AND ended_at IS NULL").bind(endedAt,minutes,active.id,user.id).run();
     if (!update.meta.changes) return json({ error:"Таймер уже остановлен" },409);
     await env.DB.prepare("UPDATE tasks SET actual_minutes=COALESCE(actual_minutes,0)+? WHERE id=? AND user_id=?").bind(minutes,active.task_id,user.id).run();
+    await invalidateTodayPlan(env,user.id);
     return json({ ok:true,task_id:active.task_id,tracked_minutes:minutes,ended_at:endedAt });
   }
   return json({ error:"Неизвестное действие" },400);
