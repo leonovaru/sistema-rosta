@@ -86,6 +86,18 @@
             <div><h3>Последние расходы</h3><div id="finance-expense-list" class="finance-list"></div></div>
           </div>
         </section>
+        <section class="panel analytics-panel">
+          <div class="section-head"><div><p class="eyebrow">АНАЛИЗ РЕЗУЛЬТАТОВ</p><h2>Время и эффективность</h2></div><div class="analytics-actions"><span class="muted" id="analytics-period"></span><button type="button" class="button ghost" id="refresh-analytics">Обновить</button></div></div>
+          <div class="analytics-metrics" id="analytics-summary"></div>
+          <div class="analytics-columns">
+            <div><h3>По направлениям дохода</h3><div id="analytics-directions" class="analytics-list"></div></div>
+            <div><h3>По проектам и клиентам</h3><div id="analytics-projects" class="analytics-list"></div></div>
+            <div><h3>Личные области</h3><div id="analytics-life-areas" class="analytics-list"></div></div>
+            <div><h3>Динамика по месяцам</h3><div id="analytics-months" class="analytics-list"></div></div>
+            <div class="analytics-wide"><h3>Время в календаре по типам событий</h3><div id="analytics-calendar" class="analytics-list"></div></div>
+          </div>
+          <p class="fine">Фактическое время задач берётся из поля «Факт»; время по таймерам показано отдельно. Календарь сравнивает запланированную и фактическую длительность событий, если фактическое время заполнено.</p>
+        </section>
         <section class="panel calendar-panel">
           <div class="section-head"><div><p class="eyebrow">ВРЕМЯ И РИТМ ЖИЗНИ</p><h2>Календарь</h2></div><div class="calendar-nav"><button type="button" class="button ghost" id="calendar-prev" aria-label="Предыдущий период">←</button><button type="button" class="button ghost" id="calendar-today">Сегодня</button><button type="button" class="button ghost" id="calendar-next" aria-label="Следующий период">→</button></div></div>
           <div class="calendar-toolbar"><strong id="calendar-caption"></strong><div class="calendar-views"><button type="button" class="filter active" data-calendar-view="month">Месяц</button><button type="button" class="filter" data-calendar-view="week">Неделя</button><button type="button" class="filter" data-calendar-view="day">День</button></div></div>
