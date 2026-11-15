@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
-import { calculateProjectEconomics } from "../_lib/project-economics.js";
+import { calculateProjectEconomics, calculateClientEconomics } from "../_lib/project-economics.js";
 import { calculateProjectWorkload } from "../_lib/project-workload.js";
 import { calculateCalendarBusyMinutes, calculateCalendarBusyByDay } from "../_lib/calendar-capacity.js";
 import { calculateProjectDailyLoad } from "../_lib/project-daily-load.js";
@@ -90,7 +90,7 @@ export async function onRequestGet({request,env}) {
   const capacityConfig={configured:Number(settings?.work_capacity_configured)===1,working_days:workingDays,daily_capacity_minutes:settings?.daily_capacity_minutes,calendar_busy_by_horizon:calendarBusyByHorizon};
   const workload=calculateProjectWorkload(projects.results,today,capacityConfig);
   const dailyLoad=calculateProjectDailyLoad(projects.results,today,capacityConfig,calendarBusyByDay);
-  return json({today,client_activity_summary:activitySummary,clients:clients.results,project_daily_load:dailyLoad,project_workload_summary:workload.horizons,work_capacity:{configured:workload.capacity_configured,working_days:workload.working_days,daily_capacity_minutes:workload.daily_capacity_minutes},projects:workload.projects.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
+  return json({today,client_activity_summary:activitySummary,clients:clients.results.map(client=>({...client,economics:calculateClientEconomics({revenue:client.revenue_total,directExpenses:client.direct_expenses_total,trackedMinutes:client.tracked_minutes})})),project_daily_load:dailyLoad,project_workload_summary:workload.horizons,work_capacity:{configured:workload.capacity_configured,working_days:workload.working_days,daily_capacity_minutes:workload.daily_capacity_minutes},projects:workload.projects.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
 }
 
 export async function onRequestPost({request,env}) {
