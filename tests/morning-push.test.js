@@ -26,6 +26,14 @@ test("local clock respects daylight-saving offsets",()=>{
   assert.equal(localClock(after,"Europe/Amsterdam").hour,"02");
 });
 
+test("local clock skips the nonexistent hour at the spring DST transition",()=>{
+  const before=new Date("2026-03-29T00:30:00.000Z");
+  const after=new Date("2026-03-29T01:30:00.000Z");
+  assert.equal(localClock(before,"Europe/Amsterdam").hour,"01");
+  assert.equal(localClock(after,"Europe/Amsterdam").hour,"03");
+  assert.equal(isMorningDeliveryWindow(new Date("2026-03-29T04:00:00.000Z"),"Europe/Amsterdam"),true);
+});
+
 test("VAPID token is signed by the configured P-256 key",async()=>{
   const pair=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);
   const jwk=await crypto.subtle.exportKey("jwk",pair.privateKey);
