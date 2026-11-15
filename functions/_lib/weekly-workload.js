@@ -28,7 +28,7 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
  const projectTargets=new Set((targets||[]).map(t=>t.project_id).filter(Boolean));
  const areaGroups=new Map();
  for(const task of active){
-  const area=taskArea(task,projectTargets),estimate=Math.max(0,Number(task.estimated_minutes)||0),remaining=task.status==="doing"?Math.max(0,estimate-Math.max(0,Number(task.actual_minutes)||0)):estimate;
+  const area=taskArea(task,projectTargets),estimate=Math.max(0,Number(task.estimated_minutes)||0),remaining=Math.max(0,estimate-Math.max(0,Number(task.actual_minutes)||0));
   const row=areaGroups.get(area.key)||{...area,task_count:0,estimated_minutes:0,weekly_estimated_minutes:0,unestimated_count:0,target_minutes:null};
   row.task_count++;row.estimated_minutes+=remaining;
   if(!Number.isFinite(Number(task.estimated_minutes))||Number(task.estimated_minutes)<=0)row.unestimated_count++;
@@ -65,6 +65,6 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
  const gross=days.reduce((sum,d)=>sum+d.gross_capacity_minutes,0);
  const busy=days.reduce((sum,d)=>sum+d.calendar_busy_minutes,0);
  const available=days.reduce((sum,d)=>sum+d.available_minutes,0);
- const planned=dueThisWeek.reduce((sum,t)=>sum+(t.status==="doing"?Math.max(0,Number(t.estimated_minutes||0)-Number(t.actual_minutes||0)):Math.max(0,Number(t.estimated_minutes)||0)),0);
+ const planned=dueThisWeek.reduce((sum,t)=>sum+(Math.max(0,Number(t.estimated_minutes||0)-Math.max(0,Number(t.actual_minutes)||0))),0);
  return {from:today,to:end,configured,area_balance:[...areaGroups.values()].map(row=>({...row,target_gap_minutes:row.target_minutes===null?null:row.target_minutes-row.weekly_estimated_minutes,target_status:row.target_minutes===null?"not_set":row.weekly_estimated_minutes>row.target_minutes?"above":row.weekly_estimated_minutes<row.target_minutes?"below":"on_target"})).sort((a,b)=>b.weekly_estimated_minutes-a.weekly_estimated_minutes),calendar_balance:[...eventGroups.values()].sort((a,b)=>b.minutes-a.minutes),working_days:[...working].sort((a,b)=>a-b),daily_capacity_minutes:configured?Number(dailyCapacityMinutes):null,summary:{gross_capacity_minutes:gross,calendar_busy_minutes:busy,available_minutes:available,estimated_task_minutes:planned,estimated_task_count:dueThisWeek.filter(t=>Number(t.estimated_minutes)>0).length,tasks_with_deadline_count:dueThisWeek.length,unestimated_task_count:unestimated.length,overdue_task_count:overdue.length,without_deadline_count:noDeadline.length,waiting_task_count:waiting.length,remaining_minutes:available-planned,over_capacity:configured&&planned>available},days,notes:["Включены активные задачи со сроком до конца периода, включая просроченные.","Задачи без срока и задачи в ожидании показаны отдельно и не распределяются по дням.","Рабочая нагрузка распределена предварительно до дедлайна; календарные события не создают и не перемещают задачи."]};
 }
