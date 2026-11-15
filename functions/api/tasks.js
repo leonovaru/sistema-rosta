@@ -100,8 +100,12 @@ export async function onRequestPatch({ request, env }) {
     const activeTimer=await env.DB.prepare("SELECT id FROM task_time_entries WHERE task_id=? AND user_id=? AND ended_at IS NULL LIMIT 1").bind(id,user.id).first();
     if(activeTimer)return json({error:"Сначала остановите таймер задачи, затем завершите её"},409);
   }
-  const result = await env.DB.prepare("UPDATE tasks SET status=?,completed_at=CASE WHEN ?='done' THEN datetime('now') ELSE NULL END WHERE id=? AND user_id=?").bind(status,status,id,user.id).run();
-  if (!result.meta.changes) return json({ error: "Задача не найдена" }, 404);
+  const result = await env.DB.prepare("UPDATE tasks SET status=?,completed_at=CASE WHEN ?='done' THEN datetime('now') ELSE NULL END WHERE id=? AND user_id=? AND (?!='done' OR NOT EXISTS (SELECT 1 FROM task_time_entries WHERE task_id=? AND user_id=? AND ended_at IS NULL))").bind(status,status,id,user.id,status,id,user.id).run();
+  if (!result.meta.changes) {
+    const exists = await env.DB.prepare("SELECT id FROM tasks WHERE id=? AND user_id=?").bind(id,user.id).first();
+    if (!exists) return json({ error: "Задача не найдена" }, 404);
+    return json({ error:"Сначала остановите таймер задачи, затем завершите её" },409);
+  }
   await invalidateTodayPlan(env, user.id);
   return json({ ok: true });
 }
