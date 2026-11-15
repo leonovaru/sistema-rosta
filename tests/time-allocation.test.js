@@ -21,8 +21,8 @@ test("does not claim strong confidence when sales sample is small",()=>{
  assert.match(result.recommendations[0].allocation_reasons[1],/не подтверждена/);
 });
 test("rejects invalid additional hours",()=>{
- assert.throws(()=>buildTimeAllocationRecommendations([],0),/от 0 до 80/);
- assert.throws(()=>buildTimeAllocationRecommendations([],81),/от 0 до 80/);
+ assert.throws(()=>buildTimeAllocationRecommendations([],0),/от 1 до 80/);
+ assert.throws(()=>buildTimeAllocationRecommendations([],81),/от 1 до 80/);
 });
 test("returns no allocation when all directions lack reliable positive hourly contribution",()=>{
  const result=buildTimeAllocationRecommendations([direction("a",null),direction("b",-100)],6);
