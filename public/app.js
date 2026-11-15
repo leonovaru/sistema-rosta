@@ -56,7 +56,7 @@ function renderDailyBlockCards(plans) {
   const windows=(day.free_windows||[]).map(window=>'<div class="balance-row"><div><b>'+escapeHtml(window.start_time)+'–'+escapeHtml(window.end_time)+' · '+duration(window.minutes)+'</b><small>'+escapeHtml(window.recommendation||window.suggested_use)+(window.observed_completion_rate!==null?' · завершение в этот период: '+window.observed_completion_rate+'% ('+window.observations+' наблюдений)':' · пока без достаточной истории')+'</small></div></div>').join("");
   const matches=(day.task_window_recommendations||[]).map(item=>'<div class="balance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+escapeHtml(item.start_time)+'–'+escapeHtml(item.end_time)+' · '+duration(item.minutes)+' · '+escapeHtml(item.reasons.join(' · '))+'</small></div><strong>Предложение</strong></div>').join("");
   const unmatched=(day.unmatched_window_tasks||[]).map(item=>'<div class="balance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+escapeHtml(item.reason)+'</small></div><strong>'+duration(item.minutes)+'</strong></div>').join("");
-  const crossDay=(day.cross_day_task_recommendations||[]).map(item=>'<div class="balance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+escapeHtml(item.from_date)+' → '+escapeHtml(item.to_date)+' · '+escapeHtml(item.start_time)+'–'+escapeHtml(item.end_time)+' · '+duration(item.minutes)+' · '+escapeHtml(item.reasons.join(' · '))+'</small></div><strong>Перенос · подтвердить</strong></div>').join("");
+  const crossDay=(day.cross_day_task_recommendations||[]).map(item=>{const key=[item.task_id,item.from_date,item.to_date,item.start_time,item.end_time].join("|");if(window.__dismissedCrossDayMoves?.has(key))return "";return '<div class="balance-row cross-day-move"><div><b>'+escapeHtml(item.title)+'</b><small>'+escapeHtml(item.from_date)+' → '+escapeHtml(item.to_date)+' · '+escapeHtml(item.start_time)+'–'+escapeHtml(item.end_time)+' · '+duration(item.minutes)+' · '+escapeHtml(item.reasons.join(' · '))+'</small><div class="daily-block-actions"><button type="button" class="button" data-confirm-cross-day="1" data-task-id="'+escapeHtml(item.task_id)+'" data-from-date="'+escapeHtml(item.from_date)+'" data-to-date="'+escapeHtml(item.to_date)+'" data-start-time="'+escapeHtml(item.start_time)+'" data-end-time="'+escapeHtml(item.end_time)+'" data-move-minutes="'+Number(item.minutes)+'">Подтвердить перенос</button><button type="button" class="button ghost" data-reject-cross-day="'+escapeHtml(key)+'">Отклонить</button></div><small class="fine" data-cross-day-status></small></div><strong>Предложение</strong></div>';}).join("");
   return '<article class="weekly-focus-card"><div><b>'+escapeHtml(day.date)+(day.overloaded?' · часть задач не помещается':'')+'</b><small>Фокус: '+duration(day.focus_minutes)+' · перерывы: '+duration(day.break_minutes)+' · доступно: '+duration(day.available_minutes)+'</small></div>'+(windows?'<b>Непрерывные окна календаря</b>'+windows:'')+(matches||unmatched||crossDay?'<b>Подбор задач под свободные окна</b><p class="fine">'+escapeHtml(day.task_window_note||"Предварительное предложение, без изменений расписания.")+'</p>'+matches+(crossDay?'<p class="fine">Варианты переноса на другой рабочий день</p>'+crossDay:'')+(unmatched?'<p class="fine">Не удалось подобрать непрерывное окно</p>'+unmatched:''):'')+blocks+(day.calendar_conflicts?'<p class="weekly-warning">Обнаружено пересечений с календарём: '+day.calendar_conflicts+'</p>':'')+(day.unallocated?.length?'<p class="weekly-warning">Не помещается в доступное время: '+day.unallocated.map(row=>escapeHtml(row.title)+' — '+duration(row.minutes)).join('; ')+'</p>':'')+'</article>';
  }).join("");
 }
@@ -221,6 +221,28 @@ $("estimate-task").addEventListener("click", async () => {
 });
 ["task-title","task-description"].forEach(id => $(id).addEventListener("input", () => { taskEstimate = null; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; }));
 
+window.__dismissedCrossDayMoves=window.__dismissedCrossDayMoves||new Set();
+document.addEventListener("click",event=>{
+ const button=event.target.closest("[data-reject-cross-day]");if(!button)return;
+ window.__dismissedCrossDayMoves.add(button.dataset.rejectCrossDay);button.closest(".cross-day-move")?.remove();
+});
+document.addEventListener("click",async event=>{
+ const button=event.target.closest("[data-confirm-cross-day]");if(!button)return;
+ const row=button.closest(".cross-day-move"),status=row?.querySelector("[data-cross-day-status]");
+ const {taskId,fromDate,toDate,startTime,endTime}=button.dataset,minutes=Number(button.dataset.moveMinutes);
+ if(!taskId||!fromDate||!toDate||!Number.isInteger(minutes)||minutes<=0)return;
+ if(!confirm("Перенести задачу на "+toDate+"? Система проверит актуальность предложения. Дедлайн не изменится."))return;
+ button.disabled=true;
+ try{
+  const query=new URLSearchParams({focus_minutes:String(dailyBlockPreferences.focus),break_minutes:String(dailyBlockPreferences.rest),start_time:dailyBlockPreferences.start,prep_before_minutes:String(dailyBlockPreferences.prep),buffer_after_minutes:String(dailyBlockPreferences.after)});
+  const fresh=await api("/api/planner/week?"+query.toString());
+  const latest=(fresh.week?.daily_block_plans||[]).flatMap(day=>day.cross_day_task_recommendations||[]).find(item=>String(item.task_id)===String(taskId)&&item.from_date===fromDate&&item.to_date===toDate&&item.start_time===startTime&&item.end_time===endTime&&Number(item.minutes)===minutes);
+  if(!latest)throw new Error("Предложение устарело: свободное окно или распределение изменилось. Обновите недельный план.");
+  await api("/api/planner/assignments",{method:"PUT",body:JSON.stringify({schedules:[{task_id:taskId,allocations:[{date:toDate,minutes}]}]})});
+  if(status)status.textContent="Перенос сохранён. Обновляю недельный план…";
+  await loadWeeklyWorkload();
+ }catch(error){if(status)status.textContent="Перенос не сохранён: "+error.message;button.disabled=false;}
+});
 document.addEventListener("click",async event=>{
  const button=event.target.closest("[data-save-daily-schedules]");
  if(!button)return;
