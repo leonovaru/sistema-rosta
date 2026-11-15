@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCalibratedWeeklyLoad } from "../functions/_lib/calibrated-weekly-load.js";
+import { buildCalibratedWeeklyLoad, toCalibratedAdjustmentDays } from "../functions/_lib/calibrated-weekly-load.js";
 
 const week={days:[
  {date:"2026-11-16",working_day:true,available_minutes:60,planned_task_minutes:50,tasks:[
@@ -45,4 +45,15 @@ test("does not mutate original week allocations",()=>{
  buildCalibratedWeeklyLoad(week,accuracy);
  assert.equal(week.days[0].tasks[0].minutes,30);
  assert.equal(week.days[0].planned_task_minutes,50);
+});
+
+test("converts calibrated task allocations into rescheduling input without losing dates or scope",()=>{
+ const calibrated=buildCalibratedWeeklyLoad(week,accuracy);
+ const days=toCalibratedAdjustmentDays(calibrated);
+ assert.equal(days[0].planned_task_minutes,69);
+ assert.equal(days[0].tasks[0].minutes,45);
+ assert.equal(days[0].tasks[0].direction_id,"d1");
+ assert.equal(days[0].tasks[1].minutes,24);
+ assert.equal(days[0].date,"2026-11-16");
+ assert.equal(days[0].available_minutes,60);
 });
