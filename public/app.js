@@ -131,7 +131,7 @@ async function boot() {
   try {
     const { user } = await api("/api/auth/me");
     if (!user) return showAuth();
-    showApp(user.email); await loadTasks(); await loadDashboardData();
+    showApp(user.email); await loadDashboardData(); await loadTasks();
   } catch { showAuth(); }
 }
 boot();
