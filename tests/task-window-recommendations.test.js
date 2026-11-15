@@ -96,3 +96,15 @@ test("does not move tasks to non-working days or beyond their deadline",()=>{
  assert.equal(source.cross_day_task_recommendations.length,0);
  assert.equal(source.unmatched_window_tasks.length,1);
 });
+
+test("does not use a later day's window when that day still has its own unmatched task",()=>{
+ const [source]=buildTaskWindowRecommendations([
+  {date:"2026-11-16",tasks:[{id:"move",title:"Переносимая задача",minutes:45}],unallocated:[{task_id:"move",title:"Переносимая задача",minutes:45}],blocks:[],free_windows:[]},
+  {date:"2026-11-17",tasks:[{id:"local",title:"Задача этого дня",minutes:90}],unallocated:[{task_id:"local",title:"Задача этого дня",minutes:90}],blocks:[],free_windows:[{start_time:"09:00",end_time:"10:00",minutes:60}]}
+ ],null,[
+  {date:"2026-11-16",working_day:true,tasks:[{id:"move",title:"Переносимая задача",minutes:45}]},
+  {date:"2026-11-17",working_day:true,tasks:[{id:"local",title:"Задача этого дня",minutes:90}]}
+ ]);
+ assert.equal(source.cross_day_task_recommendations.length,0);
+ assert.equal(source.unmatched_window_tasks.length,1);
+});
