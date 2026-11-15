@@ -64,6 +64,59 @@ $("task-form").addEventListener("submit", async e => {
   try { await api("/api/tasks", { method: "POST", body: JSON.stringify({ title: $("task-title").value, description: $("task-description").value, due_date: $("task-date").value || null, direction_id: $("task-direction").value || null, client_id: $("task-client").value || null, project_id: $("task-project").value || null, life_area_id: $("task-life-area").value || null, parent_task_id: $("task-parent").value || null, priority: $("task-priority").value, estimated_minutes: taskEstimate?.minutes ?? null, ai_plan: taskEstimate ? JSON.stringify(taskEstimate) : "" }) }); $("task-title").value = ""; $("task-description").value = ""; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; taskEstimate = null; await loadTasks(); }
   catch (err) { alert(err.message); }
 });
+let voiceRecognition=null;
+let voiceDraft=null;
+function voiceOptions(items,idField,titleField,emptyLabel){
+ return '<option value="">'+emptyLabel+'</option>'+items.map(item=>'<option value="'+escapeHtml(item[idField])+'">'+escapeHtml(item[titleField])+'</option>').join("");
+}
+function renderVoiceDraft(){
+ const box=$("voice-preview"),draft=voiceDraft;
+ if(!draft){box.classList.add("hidden");box.innerHTML="";return;}
+ const dirs=workspaceData.directions||[],projects=workspaceData.projects.filter(p=>!["done","archived"].includes(p.status)),clients=workspaceData.clients,areas=workspaceData.life_areas;
+ box.classList.remove("hidden");
+ box.innerHTML='<div class="section-head"><div><h4>Проверь распределение</h4><p class="fine">'+escapeHtml(draft.summary||"Черновик задач")+'</p></div><span class="status-chip">'+draft.tasks.length+' задач</span></div>'+
+ (draft.clarifying_questions?.length?'<div class="voice-questions"><b>Нужно уточнить</b><ul>'+draft.clarifying_questions.map(q=>'<li>'+escapeHtml(q)+'</li>').join("")+'</ul></div>':'')+
+ draft.tasks.map((t,i)=>'<article class="voice-task" data-voice-task="'+i+'"><label class="voice-task-title">Задача '+(i+1)+'<input data-vf="title" maxlength="240" value="'+escapeHtml(t.title)+'" required></label>'+
+ '<label>Описание / контекст<textarea data-vf="description" rows="2">'+escapeHtml(t.description||"")+'</textarea></label>'+
+ '<div class="voice-task-fields"><label>Проект<select data-vf="project_id">'+voiceOptions(projects,"id","title","Без проекта")+'</select></label><label>Клиент<select data-vf="client_id">'+voiceOptions(clients,"id","name","Без клиента")+'</select></label><label>Направление<select data-vf="direction_id">'+voiceOptions(dirs,"id","title","Без направления")+'</select></label><label>Личная область<select data-vf="life_area_id">'+voiceOptions(areas,"id","title","Не личная задача")+'</select></label><label>Срок<input data-vf="due_date" type="date" value="'+escapeHtml(t.due_date||"")+'"></label><label>Приоритет<select data-vf="priority"><option value="high">Высокий</option><option value="medium">Обычный</option><option value="low">Низкий</option></select></label></div>'+
+ '<small class="fine">'+(t.parent_index!==null&&t.parent_index!==undefined?'Подзадача к задаче '+(t.parent_index+1):'Самостоятельная задача')+(t.estimated_minutes?' · оценка '+duration(t.estimated_minutes):'')+'</small></article>').join("")+
+ '<div class="voice-controls"><button type="button" class="button primary" id="voice-save">Подтвердить и добавить '+draft.tasks.length+' задач</button><button type="button" class="button ghost" id="voice-discard">Отменить</button></div>';
+ draft.tasks.forEach((t,i)=>{
+  const card=box.querySelector('[data-voice-task="'+i+'"]');
+  ["project_id","client_id","direction_id","life_area_id","priority"].forEach(field=>{const el=card.querySelector('[data-vf="'+field+'"]');el.value=t[field]|| (field==="priority"?"medium":"");});
+ });
+ $("voice-save").addEventListener("click",async()=>{
+  const button=$("voice-save");button.disabled=true;button.textContent="Сохраняю…";
+  const tasks=[...box.querySelectorAll("[data-voice-task]")].map((card,i)=>{
+   const get=field=>card.querySelector('[data-vf="'+field+'"]')?.value||"";
+   return {title:get("title"),description:get("description"),project_id:get("project_id")||null,client_id:get("client_id")||null,direction_id:get("direction_id")||null,life_area_id:get("life_area_id")||null,due_date:get("due_date")||null,priority:get("priority"),estimated_minutes:draft.tasks[i].estimated_minutes,parent_index:draft.tasks[i].parent_index};
+  });
+  try{const result=await api("/api/tasks/voice-intake",{method:"POST",body:JSON.stringify({action:"save",tasks})});$("voice-status").textContent:"Добавлено задач: "+result.created;$("voice-transcript").value="";voiceDraft=null;renderVoiceDraft();await loadTasks();await loadWorkspace();}
+  catch(err){alert(err.message);button.disabled=false;button.textContent="Повторить сохранение";}
+ });
+ $("voice-discard").addEventListener("click",()=>{voiceDraft=null;renderVoiceDraft();});
+}
+function initVoiceInput(){
+ const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SpeechRecognition){$("voice-start").disabled=true;$("voice-status").textContent="Диктовка недоступна в этом браузере — вставь текст вручную";return;}
+ voiceRecognition=new SpeechRecognition();voiceRecognition.lang="ru-RU";voiceRecognition.continuous=true;voiceRecognition.interimResults=true;
+ voiceRecognition.onstart=()=>{$("voice-status").textContent="Слушаю…";$("voice-start").disabled=true;$("voice-stop").disabled=false;};
+ voiceRecognition.onresult=event=>{$("voice-transcript").value=Array.from(event.results).map(result=>result[0].transcript).join(" ");};
+ voiceRecognition.onerror=event=>{$("voice-status").textContent=event.error==="not-allowed"?"Нет доступа к микрофону — проверь разрешение браузера":"Ошибка распознавания: "+event.error;};
+ voiceRecognition.onend=()=>{$("voice-start").disabled=false;$("voice-stop").disabled=true;if($("voice-status").textContent==="Слушаю…")$("voice-status").textContent="Запись завершена — проверь текст";};
+ $("voice-start").addEventListener("click",()=>{try{voiceRecognition.start();}catch(err){$("voice-status").textContent="Не удалось начать запись. Попробуй ещё раз."; }});
+ $("voice-stop").addEventListener("click",()=>voiceRecognition.stop());
+}
+$("voice-clear").addEventListener("click",()=>{$("voice-transcript").value="";voiceDraft=null;renderVoiceDraft();$("voice-status").textContent="Текст очищен";});
+$("voice-analyze").addEventListener("click",async()=>{
+ const transcript=$("voice-transcript").value.trim();if(!transcript){alert("Сначала надиктуй или вставь текст.");return;}
+ const button=$("voice-analyze");button.disabled=true;button.textContent="Разбираю задачи…";$("voice-status").textContent="Определяю проекты, сроки и подзадачи…";
+ try{voiceDraft=await api("/api/tasks/voice-intake",{method:"POST",body:JSON.stringify({transcript})});renderVoiceDraft();$("voice-status").textContent="Проверь результат перед сохранением";}
+ catch(err){voiceDraft=null;renderVoiceDraft();$("voice-status").textContent=err.message;alert(err.message);}
+ finally{button.disabled=false;button.textContent="Разобрать и распределить";}
+});
+initVoiceInput();
+
 $("income-form").addEventListener("submit", async e => {
   e.preventDefault();
   try {
