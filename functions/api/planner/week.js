@@ -18,6 +18,7 @@ import { buildDailyAssignmentRepairs } from "../../_lib/daily-assignment-repairs
 import { buildRemainingDailyPlan } from "../../_lib/remaining-daily-plan.js";
 import { summarizeDailyBlockExecution } from "../../_lib/daily-block-execution-summary.js";
 import { buildDailyExecutionInsights } from "../../_lib/daily-execution-insights.js";
+import { buildDailyExecutionPatterns } from "../../_lib/daily-execution-patterns.js";
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day;}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 export async function onRequestGet({request,env}){
@@ -36,7 +37,7 @@ export async function onRequestGet({request,env}){
   env.DB.prepare("SELECT fell_asleep_at,woke_at,timezone,asleep_timezone,wake_timezone FROM sleep_sessions WHERE user_id=? AND sleep_date>=date('now','-90 days') AND fell_asleep_at IS NOT NULL AND woke_at IS NOT NULL ORDER BY sleep_date").bind(user.id).all(),
   env.DB.prepare("SELECT task_id,allocation_date,minutes FROM daily_task_allocations WHERE user_id=? AND allocation_date>=? AND allocation_date<=? ORDER BY allocation_date").bind(user.id,today,end).all(),
   env.DB.prepare("SELECT l.id,l.task_id,t.title AS task_title,l.block_date,l.start_time,l.end_time,l.planned_minutes,l.actual_minutes,l.status,l.note FROM daily_block_logs l JOIN tasks t ON t.id=l.task_id AND t.user_id=l.user_id WHERE l.user_id=? AND l.block_date>=? AND l.block_date<=? ORDER BY l.block_date,l.start_time").bind(user.id,today,end).all(),
-  env.DB.prepare("SELECT block_date,planned_minutes,actual_minutes,status FROM daily_block_logs WHERE user_id=? AND block_date>=? AND block_date<? ORDER BY block_date").bind(user.id,addDays(today,-29),endExclusive).all()
+  env.DB.prepare("SELECT block_date,start_time,planned_minutes,actual_minutes,status FROM daily_block_logs WHERE user_id=? AND block_date>=? AND block_date<? ORDER BY block_date").bind(user.id,addDays(today,-29),endExclusive).all()
  ]);
  const events=expandRecurringEvents(calendarRows.results,today+"T00:00",endExclusive+"T00:00");
  const calendarDays=calculateCalendarBusyByDay(events,today,7,workingDays);
@@ -47,6 +48,7 @@ export async function onRequestGet({request,env}){
  week.daily_block_logs=blockLogRows.results;
  week.daily_block_execution=summarizeDailyBlockExecution(blockLogRows.results,today);
  week.daily_execution_insights=buildDailyExecutionInsights(executionHistoryRows.results);
+ week.daily_execution_patterns=buildDailyExecutionPatterns(executionHistoryRows.results);
  attachWeeklyTaskPriority(week,taskRows.results,today);
  attachWeeklyActualTime(week,timeRows.results,timezone,targetRows.results);
  week.estimate_accuracy=buildEstimateAccuracy(completedRows.results);
