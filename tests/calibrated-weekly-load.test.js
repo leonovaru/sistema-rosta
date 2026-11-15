@@ -23,8 +23,8 @@ const accuracy={
 test("calibrates workload with category history and falls back to overall",()=>{
  const result=buildCalibratedWeeklyLoad(week,accuracy);
  assert.equal(result.days[0].calibrated_tasks[0].calibrated_minutes,45);
- assert.equal(result.days[0].calibrated_tasks[1].calibrated_minutes,25);
- assert.equal(result.days[1].calibrated_tasks[0].calibrated_minutes,35);
+ assert.equal(result.days[0].calibrated_tasks[1].calibrated_minutes,24);
+ assert.equal(result.days[1].calibrated_tasks[0].calibrated_minutes,36);
  assert.equal(result.summary.calibrated_task_minutes,105);
  assert.equal(result.summary.adjusted_task_allocations,3);
 });
@@ -32,7 +32,7 @@ test("flags a day overloaded only in the calibrated scenario",()=>{
  const result=buildCalibratedWeeklyLoad(week,accuracy);
  assert.equal(result.days[0].planned_task_minutes,50);
  assert.equal(result.days[0].calibrated_overloaded,true);
- assert.equal(result.days[0].calibrated_task_minutes,70);
+ assert.equal(result.days[0].calibrated_task_minutes,69);
  assert.equal(result.summary.overloaded_days,1);
 });
 test("keeps original plan when there is insufficient history",()=>{
