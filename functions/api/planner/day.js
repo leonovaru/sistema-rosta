@@ -1,4 +1,5 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
+import { expandRecurringEvents } from "../../_lib/calendar.js";
 
 function localDate(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(new Date());
@@ -55,8 +56,9 @@ export async function onRequestPost({ request, env }) {
   const nowMinute = Number(clock.hour)*60 + Number(clock.minute);
   const tomorrow = new Date(today+"T12:00:00Z"); tomorrow.setUTCDate(tomorrow.getUTCDate()+1);
   const tomorrowKey = tomorrow.toISOString().slice(0,10);
-  const calendarRows = await env.DB.prepare("SELECT id,title,event_type,start_at,end_at,actual_start_at,actual_end_at,status,mode,location FROM calendar_events WHERE user_id=? AND status!='cancelled' AND start_at < ? AND end_at > ? ORDER BY start_at").bind(user.id,tomorrowKey+"T00:00",today+"T00:00").all();
-  const busyIntervals = calendarRows.results.map(event => {
+  const calendarQuery = await env.DB.prepare("SELECT id,title,event_type,start_at,end_at,actual_start_at,actual_end_at,status,mode,location,repeat_rule,repeat_until FROM calendar_events WHERE user_id=? AND status!='cancelled' AND ((start_at < ? AND end_at > ?) OR (repeat_rule!='none' AND start_at < ? AND repeat_until >= ?)) ORDER BY start_at").bind(user.id,tomorrowKey+"T00:00",today+"T00:00",tomorrowKey+"T00:00",today).all();
+  const calendarEvents = expandRecurringEvents(calendarQuery.results,today+"T00:00",tomorrowKey+"T00:00");
+  const busyIntervals = calendarEvents.map(event => {
     const startValue = event.status === "completed" && event.actual_start_at ? event.actual_start_at : event.start_at;
     const endValue = event.status === "completed" && event.actual_end_at ? event.actual_end_at : event.end_at;
     const startDate = startValue.slice(0,10), endDate = endValue.slice(0,10);
@@ -67,7 +69,7 @@ export async function onRequestPost({ request, env }) {
   const sortedBusy = [...busyIntervals].sort((a,b)=>a.start-b.start);
   let busyFutureMinutes = 0, cursor = nowMinute;
   for (const interval of sortedBusy) { const start=Math.max(cursor,interval.start); if(interval.end>start){busyFutureMinutes+=interval.end-start;cursor=interval.end;} }
-  const workDoneMinutes = calendarRows.results.filter(event=>event.event_type==="work").reduce((sum,event)=>{
+  const workDoneMinutes = calendarEvents.filter(event=>event.event_type==="work").reduce((sum,event)=>{
     const endValue=event.status==="completed"&&event.actual_end_at?event.actual_end_at:event.end_at;
     if(endValue.slice(0,10)>today)return sum;
     const end=endValue.slice(0,10)<today?0:Number(endValue.slice(11,13))*60+Number(endValue.slice(14,16));
@@ -96,7 +98,7 @@ export async function onRequestPost({ request, env }) {
   const remaining = Math.max(0,monthlyTarget-actual);
   const dailyPace = remaining / Math.max(1,daysInMonth-day+1);
   const directionRows = await env.DB.prepare("SELECT title,target_month FROM directions WHERE user_id=? AND active=1 ORDER BY sort_order").bind(user.id).all();
-  const context = { date, available_minutes:capacity, daily_capacity_minutes:dailyCapacity, work_already_done_minutes:workDoneMinutes, current_local_time:clock.hour+":"+clock.minute, calendar_events:calendarRows.results, monthly_target:monthlyTarget, actual_month:actual, remaining_to_target:remaining, required_daily_income_pace:Math.round(dailyPace), days_left_including_today:daysInMonth-day+1, directions:directionRows.results, tasks };
+  const context = { date, available_minutes:capacity, daily_capacity_minutes:dailyCapacity, work_already_done_minutes:workDoneMinutes, current_local_time:clock.hour+":"+clock.minute, calendar_events:calendarEvents, monthly_target:monthlyTarget, actual_month:actual, remaining_to_target:remaining, required_daily_income_pace:Math.round(dailyPace), days_left_including_today:daysInMonth-day+1, directions:directionRows.results, tasks };
   let plan = fallbackPlan(tasks,capacity);
   let source = "algorithm";
   if (env.AI) {
