@@ -90,3 +90,14 @@ test("does not invent targets for areas without a saved target",()=>{
  assert.equal(result.area_balance[0].target_minutes,null);
  assert.equal(result.area_balance[0].target_status,"not_set");
 });
+
+test("uses an explicitly targeted project as its own bucket instead of double-counting its direction",()=>{
+ const result=buildWeeklyWorkload({...base,targets:[{project_id:"p1",title:"Решай360",target_minutes:240}],tasks:[
+  {id:"a",status:"todo",due_date:"2026-11-16",project_id:"p1",project_title:"Решай360",direction_id:"d1",direction_title:"Репетиторство",estimated_minutes:120},
+  {id:"b",status:"todo",due_date:"2026-11-16",direction_id:"d1",direction_title:"Репетиторство",estimated_minutes:60}
+ ]});
+ const rows=Object.fromEntries(result.area_balance.map(x=>[x.title,x]));
+ assert.equal(rows.Решай360.weekly_estimated_minutes,120);
+ assert.equal(rows.Репетиторство.weekly_estimated_minutes,60);
+ assert.equal(rows.Решай360.target_status,"below");
+});
