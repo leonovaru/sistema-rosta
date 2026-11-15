@@ -21,6 +21,7 @@ import { buildDailyExecutionInsights } from "../../_lib/daily-execution-insights
 import { buildDailyExecutionPatterns } from "../../_lib/daily-execution-patterns.js";
 import { buildCalendarExecutionContext } from "../../_lib/calendar-execution-context.js";
 import { annotateDailyWindowRecommendations } from "../../_lib/daily-window-recommendations.js";
+import { buildTaskWindowRecommendations } from "../../_lib/task-window-recommendations.js";
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day;}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 export async function onRequestGet({request,env}){
@@ -69,7 +70,8 @@ export async function onRequestGet({request,env}){
  const url=new URL(request.url),focusMinutes=Number(url.searchParams.get("focus_minutes"))||50,breakMinutes=Number(url.searchParams.get("break_minutes"))||10,prepBeforeMinutes=Math.max(0,Math.min(120,Number(url.searchParams.get("prep_before_minutes"))||0)),bufferAfterMinutes=Math.max(0,Math.min(120,Number(url.searchParams.get("buffer_after_minutes"))||0));
  week.daily_block_preferences={focus_minutes:focusMinutes,break_minutes:breakMinutes,prep_before_minutes:prepBeforeMinutes,buffer_after_minutes:bufferAfterMinutes};
  const dailyBlockOptions={focusMinutes,breakMinutes,startTime:url.searchParams.get("start_time")||"09:00",prepBeforeMinutes,bufferAfterMinutes,calendarEvents:events};
- week.daily_block_plans=annotateDailyWindowRecommendations(buildDailyBlockPlans(week.days,dailyBlockOptions),week.daily_execution_patterns);
+ const annotatedDailyPlans=annotateDailyWindowRecommendations(buildDailyBlockPlans(week.days,dailyBlockOptions),week.daily_execution_patterns);
+ week.daily_block_plans=buildTaskWindowRecommendations(annotatedDailyPlans.map(plan=>({...plan,tasks:week.days.find(day=>day.date===plan.date)?.tasks||[]})),week.daily_execution_patterns);
  week.today_remaining_plan=configured?buildRemainingDailyPlan({days:week.days,calendarEvents:events,logs:blockLogRows.results,now:new Date().toISOString(),timeZone:timezone,startTime:dailyBlockOptions.startTime,focusMinutes,breakMinutes,prepBeforeMinutes,bufferAfterMinutes}):null;
  if(week.today_remaining_plan)week.today_remaining_plan=annotateDailyWindowRecommendations([week.today_remaining_plan],week.daily_execution_patterns)[0];
  week.daily_block_scenarios=buildDailyBlockScenarios(week.days,dailyBlockOptions);
