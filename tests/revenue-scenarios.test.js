@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildRevenueScenarios } from "../functions/_lib/revenue-scenarios.js";
 test("creates conservative realistic and ambitious scenarios from the revenue target",()=>{
- const x=buildRevenueScenarios({monthlyTarget:300000,directionRows:[{id:"a",title:"Аудит",share_percent:60,average_sale_amount:30000},{id:"b",title:"Таблицы",share_percent:40,average_sale_amount:10000}],actualRows:[{direction_id:"a",revenue:30000}],taskRows:[{direction_id:"a",actual_minutes:600},{direction_id:"b",actual_minutes:300}],weeklyCapacityHours:25});
+ const x=buildRevenueScenarios({monthlyTarget:300000,directionRows:[{id:"a",title:"Аудит",share_percent:60,average_sale_amount:30000},{id:"b",title:"Таблицы",share_percent:40,average_sale_amount:10000}],actualRows:[{direction_id:"a",revenue:30000},{direction_id:"b",revenue:12000}],taskRows:[{direction_id:"a",actual_minutes:600},{direction_id:"b",actual_minutes:300}],weeklyCapacityHours:10});
  assert.deepEqual(x.scenarios.map(s=>s.target),[210000,300000,390000]);
  assert.equal(x.scenarios[1].directions[0].required_sales,5);
  assert.equal(x.scenarios[1].directions[0].required_hours,50);
