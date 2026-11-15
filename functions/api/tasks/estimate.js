@@ -31,7 +31,7 @@ export async function onRequestPost({ request, env }) {
   if (!env.AI) return json({ ...fallback, source: "heuristic", note: "AI binding пока не подключён. Это ориентировочная алгоритмическая оценка." });
 
   try {
-    const response = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+    const response = await env.AI.run("@cf/google/gemma-4-26b-a4b-it", {
       messages: [
         { role: "system", content: "Ты помощник по планированию работы. Оцени задачу реалистично для одного человека. Не завышай точность. Верни только JSON без markdown: {minutes: integer, range_min: integer, range_max: integer, rationale: string, delegation: 'full'|'partial'|'manual', delegation_reason: string, steps: [{title: string, minutes: integer}]}. minutes — рабочее время активного выполнения, без ожидания ответов. Разбивай на 2-5 шагов только если задача действительно крупная. delegation=full только если ИИ может подготовить готовый результат без внешних действий и решений пользователя; partial если может сделать существенную часть; manual если нужен человек/внешнее действие." },
         { role: "user", content: "Задача: " + title + (description ? "\nКонтекст: " + description : "") }
