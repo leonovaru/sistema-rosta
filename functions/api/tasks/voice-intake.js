@@ -12,6 +12,7 @@ function localDate(timeZone){
 }
 export function normalizeTaskTitle(value){return String(value||"").toLocaleLowerCase("ru-RU").replace(/ё/g,"е").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");}
 export function taskSimilarity(a,b){const x=new Set(normalizeTaskTitle(a).split(" ").filter(w=>w.length>2)),y=new Set(normalizeTaskTitle(b).split(" ").filter(w=>w.length>2));if(!x.size||!y.size)return 0;const intersection=[...x].filter(w=>y.has(w)).length;return intersection/Math.max(x.size,y.size);}
+export function appendTaskDescription(existing,addition){return [String(existing||"").trim(),String(addition||"").trim()].filter(Boolean).filter((value,index,all)=>all.findIndex(x=>x.toLocaleLowerCase("ru-RU")===value.toLocaleLowerCase("ru-RU"))===index).join("\\n\\n").slice(0,2000);}
 function safeDate(value){
  if(!value)return null;
  const s=String(value);
@@ -56,8 +57,7 @@ export async function onRequestPost({request,env}){
    if(t.operation==="update"&&t.target_task_id){
     const current=await env.DB.prepare("SELECT id,title,description FROM tasks WHERE id=? AND user_id=? AND status!='done'").bind(t.target_task_id,user.id).first();
     if(!current)return json({error:"Задача для обновления больше не найдена. Повтори разбор."},409);
-    const addition=t.description.trim();
-    const mergedDescription=[current.description||"",addition].filter(Boolean).filter((value,index,all)=>all.findIndex(x=>x.toLocaleLowerCase("ru-RU")===value.toLocaleLowerCase("ru-RU"))===index).join("\\n\\n").slice(0,2000);
+    const mergedDescription=appendTaskDescription(current.description,t.description);
     await env.DB.prepare("UPDATE tasks SET description=?,due_date=COALESCE(?,due_date) WHERE id=? AND user_id=? AND status!='done'")
      .bind(mergedDescription,t.due_date,t.target_task_id,user.id).run();
     updated++;
