@@ -6,7 +6,7 @@ function eventAfterFirstContact(event,firstContactOn){
 }
 function calendarDay(value){
  const day=String(value||"").slice(0,10);
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(day))return null;
+ if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(day))return null;
  const time=Date.parse(day+"T00:00:00Z");
  return Number.isFinite(time)?time: null;
 }
