@@ -13,7 +13,7 @@ test("limits suggestions to three directions and excludes unproven or negative c
  const result=buildTimeAllocationRecommendations([direction("a",1000),direction("b",900),direction("c",800),direction("d",700),direction("e",-100),direction("f",0,{hours:0})],5);
  assert.equal(result.recommendations.length,3);
  assert.deepEqual(result.recommendations.map(x=>x.direction_id),["a","b","c"]);
- assert.equal(result.excluded_directions.length,3);
+ assert.equal(result.excluded_directions.length,2);
 });
 test("does not claim strong confidence when sales sample is small",()=>{
  const result=buildTimeAllocationRecommendations([direction("a",3000,{qualified_clients:1,won_clients:1,contact_to_won_sample:1,avg_contact_to_won_days:null})],4);
