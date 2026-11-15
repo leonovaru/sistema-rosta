@@ -13,7 +13,8 @@ test("project economics separates agreed value, receipts, direct costs and time"
 });
 test("project economics flags negative contribution and overspending",()=>{
  assert.equal(calculateProjectEconomics({received:10000,directExpenses:12000}).status,"loss");
- assert.equal(calculateProjectEconomics({plannedRevenue:5000,directExpenses:6000}).status,"over_budget");
+ assert.equal(calculateProjectEconomics({directExpenses:12000}).status,"loss");
+ assert.equal(calculateProjectEconomics({plannedCosts:5000,directExpenses:6000}).status,"over_budget");
 });
 test("missing history does not invent hourly metrics or margins",()=>{
  const x=calculateProjectEconomics({plannedRevenue:20000});
