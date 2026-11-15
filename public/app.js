@@ -134,10 +134,8 @@ function renderMeetingPreview(){
   try{
    if(!m.saved_id){const saved=await api("/api/meetings",{method:"POST",body:JSON.stringify({action:"save",title:$("meeting-title").value,meeting_date:$("meeting-date").value,participants:$("meeting-participants").value,project_id:$("meeting-project").value||null,client_id:$("meeting-client").value||null,summary:$("meeting-summary").value,decisions:m.decisions,agreements:m.agreements,open_questions:m.open_questions,transcript:m.transcript})});m.saved_id=saved.id;}
    m.project_id=$("meeting-project").value||null;m.client_id=$("meeting-client").value||null;
-   const tasks=selected.map(i=>{const a=m.agreements[i];return {title:a.task,description:[a.assignee?"Ответственный: "+a.assignee:"", "Договорённость встречи: "+m.title].filter(Boolean).join("\n"),due_date:a.due_date,priority:"medium",project_id:a.project_id||m.project_id||null,client_id:a.client_id||m.client_id||null,operation:"create"};});
-   const created=await api("/api/tasks/voice-intake",{method:"POST",body:JSON.stringify({action:"save",tasks})});
-   const taskIds=created.created_task_ids||[];if(taskIds.length!==selected.length)throw new Error("Задачи созданы, но не удалось получить все идентификаторы для связи с протоколом.");
-   await api("/api/meetings",{method:"POST",body:JSON.stringify({action:"link_tasks",meeting_id:m.saved_id,links:selected.map((agreement_index,i)=>({agreement_index,task_id:taskIds[i]}))})});
+   const tasks=selected.map(i=>{const a=m.agreements[i];return {title:a.task,description:[a.assignee?"Ответственный: "+a.assignee:"", "Договорённость встречи: "+m.title].filter(Boolean).join("\n"),due_date:a.due_date,priority:"medium",project_id:a.project_id||m.project_id||null,client_id:a.client_id||m.client_id||null,meeting_agreement_index:i,operation:"create"};});
+   const created=await api("/api/tasks/voice-intake",{method:"POST",body:JSON.stringify({action:"save",meeting_id:m.saved_id,tasks})});
    m.created_agreement_indices=[...(m.created_agreement_indices||[]),...selected];$("meeting-status").textContent="Создано и связано с протоколом задач: "+tasks.length;renderMeetingPreview();await loadTasks();
   }catch(err){$("meeting-status").textContent=err.message;button.disabled=false;}
  });
