@@ -216,16 +216,28 @@ function renderCalendar() {
   weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
   const weekEnd=new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
   $("calendar-caption").textContent=calendarView==="month"?monthName:calendarView==="day"?selectedLabel:new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short"}).format(weekStart)+" — "+new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short",year:"numeric"}).format(weekEnd);
-  document.querySelector(".calendar-weekdays").classList.toggle("hidden",calendarView==="week");
-  const start=calendarView==="month"?new Date(calendarAnchor.getFullYear(),calendarAnchor.getMonth(),1):weekStart;
-  if(calendarView==="month") start.setDate(1-((start.getDay()+6)%7));
-  const count=calendarView==="month"?42:7;
+  document.querySelector(".calendar-weekdays").classList.toggle("hidden",calendarView!=="month");
   const cells=[];
-  for(let i=0;i<count;i++){
-    const d=new Date(start);d.setDate(start.getDate()+i);
-    const key=dateKey(d);
-    const items=calendarEvents.filter(e=>e.start_at.slice(0,10)<=key&&(e.end_at.slice(0,10)>key||(e.end_at.slice(0,10)===key&&e.end_at.slice(11,16)!=="00:00")));
-    cells.push('<button type="button" class="calendar-day '+(key===calendarSelected?"selected ":"")+(d.getMonth()!==calendarAnchor.getMonth()&&calendarView==="month"?"outside ":"")+(key===localToday?"today":"")+'" data-calendar-date="'+key+'"><span class="calendar-day-number">'+d.getDate()+'</span><span class="calendar-day-events">'+items.slice(0,3).map(e=>'<small class="event-dot '+eventColors[e.event_type]+'">'+escapeHtml(e.start_at.slice(0,10)<key?'↳':eventTime(e.start_at))+' '+escapeHtml(e.title)+'</small>').join("")+(items.length>3?'<small class="event-more">+'+(items.length-3)+'</small>':"")+'</span></button>');
+  if(calendarView==="day"){
+    for(let hour=0;hour<24;hour++){
+      const items=calendarEvents.filter(e=>{
+        const start=e.start_at.slice(0,10)<calendarSelected?0:e.start_at.slice(0,10)>calendarSelected?1440:Number(e.start_at.slice(11,13))*60+Number(e.start_at.slice(14,16));
+        const end=e.end_at.slice(0,10)>calendarSelected?1440:e.end_at.slice(0,10)<calendarSelected?0:Number(e.end_at.slice(11,13))*60+Number(e.end_at.slice(14,16));
+        return start<hour*60+60&&end>hour*60;
+      });
+      cells.push('<div class="calendar-hour-row"><span class="calendar-hour-label">'+pad2(hour)+':00</span><div class="calendar-hour-events">'+items.map(e=>'<button type="button" class="calendar-hour-event '+eventColors[e.event_type]+'" data-edit-event="'+e.id+'">'+(e.start_at.slice(0,10)<calendarSelected?'↳ ':eventTime(e.start_at)+' ')+escapeHtml(e.title)+'</button>').join("")+'</div></div>');
+    }
+  } else {
+    const start=calendarView==="month"?new Date(calendarAnchor.getFullYear(),calendarAnchor.getMonth(),1):weekStart;
+    if(calendarView==="month") start.setDate(1-((start.getDay()+6)%7));
+    const count=calendarView==="month"?42:7;
+    for(let i=0;i<count;i++){
+      const d=new Date(start);d.setDate(start.getDate()+i);
+      const key=dateKey(d);
+      const items=calendarEvents.filter(e=>e.start_at.slice(0,10)<=key&&(e.end_at.slice(0,10)>key||(e.end_at.slice(0,10)===key&&e.end_at.slice(11,16)!=="00:00")));
+      const dayLabel=calendarView==="week"?new Intl.DateTimeFormat("ru-RU",{weekday:"short"}).format(d)+" "+d.getDate():d.getDate();
+      cells.push('<button type="button" class="calendar-day '+(key===calendarSelected?"selected ":"")+(d.getMonth()!==calendarAnchor.getMonth()&&calendarView==="month"?"outside ":"")+(key===localToday?"today":"")+'" data-calendar-date="'+key+'"><span class="calendar-day-number">'+dayLabel+'</span><span class="calendar-day-events">'+items.slice(0,3).map(e=>'<small class="event-dot '+eventColors[e.event_type]+'">'+escapeHtml(e.start_at.slice(0,10)<key?"↳":eventTime(e.start_at))+' '+escapeHtml(e.title)+'</small>').join("")+(items.length>3?'<small class="event-more">+'+(items.length-3)+'</small>':"")+'</span></button>');
+    }
   }
   $("calendar-grid").className="calendar-grid "+(calendarView==="week"?"week-view":calendarView==="day"?"day-view":"month-view");
   $("calendar-grid").innerHTML=cells.join("");
