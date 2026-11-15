@@ -3,6 +3,7 @@ import { buildGoalFeasibility } from "../../_lib/goal-feasibility.js";
 import { buildVariableExpenseForecast } from "../../_lib/variable-expense-forecast.js";
 import { buildBudgetAdjustedExpenseForecast } from "../../_lib/budget-adjusted-expenses.js";
 function shift(v,n){const d=new Date(v+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
+function shiftMonth(v,n){const [y,m]=v.slice(0,7).split("-").map(Number);return new Date(Date.UTC(y,m-1+n,1,12)).toISOString().slice(0,10);}
 function todayInZone(zone){const p=new Intl.DateTimeFormat("en-CA",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date()),o=Object.fromEntries(p.map(x=>[x.type,x.value]));return o.year+"-"+o.month+"-"+o.day;}
 export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
@@ -10,13 +11,12 @@ export async function onRequestPost({request,env}){
  const goal=await env.DB.prepare("SELECT * FROM financial_goals WHERE id=? AND user_id=? AND status IN ('active','paused')").bind(goalId,user.id).first();
  if(!goal)return json({error:"Активная финансовая цель не найдена"},404);
  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first(),today=todayInZone(settings?.timezone||"Europe/Moscow"),from=shift(today,-89);
- const [income,expenses,debtPayments,obligationPayments,activeGoals]=await Promise.all([
+ const [income,debtPayments,obligationPayments,activeGoals,expenseHistory,budgets]=await Promise.all([
   env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=?").bind(user.id,from,today).first(),
-  env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<=?").bind(user.id,from,today).first(),
   env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM debt_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?").bind(user.id,from,today).first(),
   env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM obligation_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?").bind(user.id,from,today).first(),
   env.DB.prepare("SELECT COALESCE(SUM(monthly_contribution),0) total FROM financial_goals WHERE user_id=? AND status='active' AND id!=?").bind(user.id,goal.id).first(),
-  env.DB.prepare("SELECT category,substr(spent_on,1,7) AS month,SUM(amount) AS total FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<? GROUP BY category,substr(spent_on,1,7)").bind(user.id,shift(today.slice(0,7)+"-01",-90),today.slice(0,7)+"-01").all(),
+  env.DB.prepare("SELECT category,substr(spent_on,1,7) AS month,SUM(amount) AS total FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<? GROUP BY category,substr(spent_on,1,7)").bind(user.id,shiftMonth(today.slice(0,7)+"-01",-3),today.slice(0,7)+"-01").all(),
   env.DB.prepare("SELECT category,planned_amount FROM category_budgets WHERE user_id=? AND month=?").bind(user.id,today.slice(0,7)).all()
  ]);
  const historicalForecast=buildVariableExpenseForecast(expenseHistory.results,{today});
