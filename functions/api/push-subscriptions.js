@@ -3,18 +3,18 @@ import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 function allowedEndpoint(value) {
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:" || (url.port && url.port !== "443")) return false;
+    if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443") || value.length > 4096) return false;
     const host = url.hostname.toLowerCase();
     return host === "fcm.googleapis.com" || host.endsWith(".push.services.mozilla.com") ||
       host === "push.services.mozilla.com" || host === "web.push.apple.com";
   } catch { return false; }
 }
 
-function validKey(value, length) {
+function validKey(value, length, firstByte = null) {
   try {
     const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
     const bytes = Uint8Array.from(atob(normalized + "=".repeat((4 - normalized.length % 4) % 4)), c => c.charCodeAt(0));
-    return bytes.length === length;
+    return bytes.length === length && (firstByte === null || bytes[0] === firstByte);
   } catch { return false; }
 }
 
@@ -40,15 +40,17 @@ export async function onRequestPost({ request, env }) {
   const body = await readJson(request);
   const subscription = body?.subscription;
   if (!subscription || !allowedEndpoint(subscription.endpoint) ||
-      !validKey(subscription.keys?.p256dh, 65) || !validKey(subscription.keys?.auth, 16)) {
+      !validKey(subscription.keys?.p256dh, 65, 4) || !validKey(subscription.keys?.auth, 16)) {
     return json({ error: "Некорректная подписка на уведомления" }, 400);
   }
-  await env.DB.prepare(`INSERT INTO push_subscriptions (id,user_id,endpoint,p256dh,auth,user_agent)
+  const result = await env.DB.prepare(`INSERT INTO push_subscriptions (id,user_id,endpoint,p256dh,auth,user_agent)
     VALUES (?,?,?,?,?,?)
     ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,p256dh=excluded.p256dh,
-      auth=excluded.auth,user_agent=excluded.user_agent,updated_at=datetime('now')`)
+      auth=excluded.auth,user_agent=excluded.user_agent,updated_at=datetime('now')
+    WHERE push_subscriptions.user_id=excluded.user_id`)
     .bind(newId(), user.id, subscription.endpoint, subscription.keys.p256dh,
       subscription.keys.auth, String(request.headers.get("User-Agent") || "").slice(0, 500)).run();
+  if (!result.meta.changes) return json({ error: "Эта подписка уже связана с другой учётной записью" }, 409);
   return json({ ok: true });
 }
 
