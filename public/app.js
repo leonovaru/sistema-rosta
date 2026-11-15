@@ -1077,18 +1077,21 @@ $("wake-notifications-toggle").addEventListener("click",async()=>{
  button.disabled=true;
  try{
   const registration=await navigator.serviceWorker.register("/sw.js");
+  const config=await api("/api/push-subscriptions");
   const current=await registration.pushManager.getSubscription();
-  if(current){
+  if(current&&config.subscribed){
    await api("/api/push-subscriptions",{method:"DELETE",body:JSON.stringify({endpoint:current.endpoint})});
    await current.unsubscribe();
    status.textContent="Уведомления отключены.";
   }else{
-   let permission=Notification.permission;
-   if(permission==="default")permission=await Notification.requestPermission();
-   if(permission!=="granted")throw new Error("Разрешите уведомления в настройках браузера.");
-   const config=await api("/api/push-subscriptions");
-   if(!config.public_key)throw new Error("На сервере пока не настроена отправка уведомлений.");
-   const subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decodePushKey(config.public_key)});
+   let subscription=current;
+   if(!subscription){
+    let permission=Notification.permission;
+    if(permission==="default")permission=await Notification.requestPermission();
+    if(permission!=="granted")throw new Error("Разрешите уведомления в настройках браузера.");
+    if(!config.public_key)throw new Error("На сервере пока не настроена отправка уведомлений.");
+    subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decodePushKey(config.public_key)});
+   }
    await api("/api/push-subscriptions",{method:"POST",body:JSON.stringify({subscription:subscription.toJSON()})});
    status.textContent="Уведомления включены: ежедневно в 06:00 по часовому поясу настроек.";
   }
