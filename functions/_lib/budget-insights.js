@@ -8,10 +8,11 @@ export function buildBudgetInsights(historyRows=[],budgetRows=[],{month,historyM
  return [...categories].sort((a,b)=>a.localeCompare(b,"ru")).map(category=>{
   const history=months.map(m=>({month:m,actual:actual.get(category+"|"+m)||0,budget:plans.has(category+"|"+m)?plans.get(category+"|"+m):null}));
   const compared=history.filter(x=>x.budget!==null),overruns=compared.filter(x=>x.actual>x.budget);
-  const observed=history.filter(x=>actual.has(category+"|"+x.month));
-  const avg=observed.length?observed.reduce((s,x)=>s+x.actual,0)/observed.length:0;
+  const hasHistory=historyRows.length>0;
+  const observedMonths=hasHistory?historyMonths.length:0;
+  const avg=observedMonths?history.reduce((s,x)=>s+x.actual,0)/observedMonths:0;
   const repeated=overruns.length>=2;
   const suggested=repeated?Math.ceil(avg):null;
-  return {category,months:history,months_observed:observed.length,months_with_budget:compared.length,over_budget_months:overruns.length,average_actual:Math.round(avg),repeated_overrun:repeated,suggested_budget:suggested,current_budget:plans.has(category+"|"+month)?plans.get(category+"|"+month):null};
+  return {category,months:history,months_observed:observedMonths,months_with_budget:compared.length,over_budget_months:overruns.length,average_actual:Math.round(avg),repeated_overrun:repeated,suggested_budget:suggested,current_budget:plans.has(category+"|"+month)?plans.get(category+"|"+month):null};
  }).filter(x=>x.months_observed||x.months_with_budget);
 }
