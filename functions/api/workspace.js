@@ -5,6 +5,7 @@ import { calculateCalendarBusyMinutes, calculateCalendarBusyByDay } from "../_li
 import { calculateProjectDailyLoad } from "../_lib/project-daily-load.js";
 import { expandRecurringEvents } from "../_lib/calendar.js";
 import { isClientSelectable, isDirectionSelectable } from "../_lib/workspace-entity-availability.js";
+import { restoredClientStatus, restoredProjectStatus } from "../_lib/workspace-entity-restore.js";
 
 const DEFAULT_AREAS = [
   ["Дом","Уборка, порядок, бытовые задачи"],
@@ -99,6 +100,19 @@ export async function onRequestPost({request,env}) {
   if(!user)return json({error:"Необходим вход"},401);
   const b=await readJson(request)||{};
   const type=String(b.type||"");
+  if(b.action==="restore"){
+    const id=String(b.id||"");if(!id||!["client","project"].includes(type))return json({error:"Некорректный запрос на восстановление"},400);
+    if(type==="client"){
+      const client=await env.DB.prepare("SELECT status,closed_previous_status FROM clients WHERE id=? AND user_id=?").bind(id,user.id).first();
+      if(!client)return json({error:"Клиент не найден"},404);if(client.status!=="closed")return json({error:"Клиент уже не находится в архиве"},409);
+      await env.DB.prepare("UPDATE clients SET status=?,closed_previous_status=NULL,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(restoredClientStatus(client.closed_previous_status),id,user.id).run();
+    }else{
+      const project=await env.DB.prepare("SELECT status,archived_previous_status FROM projects WHERE id=? AND user_id=?").bind(id,user.id).first();
+      if(!project)return json({error:"Проект не найден"},404);if(project.status!=="archived")return json({error:"Проект уже не находится в архиве"},409);
+      await env.DB.prepare("UPDATE projects SET status=?,archived_previous_status=NULL,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(restoredProjectStatus(project.archived_previous_status),id,user.id).run();
+    }
+    return json({ok:true,restored:true});
+  }
   const id=newId();
   if(type==="client") {
     const name=String(b.name||"").trim();
@@ -175,11 +189,11 @@ export async function onRequestDelete({request,env}) {
     if(!r.meta.changes)return json({error:"Область не найдена"},404);
   } else if(type==="client") {
     // Keep client interactions, linked projects, deals and financial history intact.
-    const r=await env.DB.prepare("UPDATE clients SET status='closed',updated_at=datetime('now') WHERE id=? AND user_id=?").bind(id,user.id).run();
+    const r=await env.DB.prepare("UPDATE clients SET closed_previous_status=CASE WHEN status!='closed' THEN status ELSE closed_previous_status END,status='closed',updated_at=datetime('now') WHERE id=? AND user_id=?").bind(id,user.id).run();
     if(!r.meta.changes)return json({error:"Клиент не найден"},404);
   } else {
     // Archive projects instead of breaking task, meeting, cashflow and finance links.
-    const r=await env.DB.prepare("UPDATE projects SET status='archived',updated_at=datetime('now') WHERE id=? AND user_id=?").bind(id,user.id).run();
+    const r=await env.DB.prepare("UPDATE projects SET archived_previous_status=CASE WHEN status!='archived' THEN status ELSE archived_previous_status END,status='archived',updated_at=datetime('now') WHERE id=? AND user_id=?").bind(id,user.id).run();
     if(!r.meta.changes)return json({error:"Проект не найден"},404);
   }
   return json({ok:true,archived:type!=="life_area"});
