@@ -17,7 +17,7 @@ test("does not treat unrelated or only vaguely similar titles as duplicates", ()
 });
 
 test("appends dictated details without deleting or duplicating existing description", () => {
-  assert.equal(appendTaskDescription("Сверить главную страницу", "Добавить проверку мобильной версии"), "Сверить главную страницу\\n\\nДобавить проверку мобильной версии");
+  assert.equal(appendTaskDescription("Сверить главную страницу", "Добавить проверку мобильной версии"), "Сверить главную страницу\n\nДобавить проверку мобильной версии");
   assert.equal(appendTaskDescription("Проверить оплату", "Проверить оплату"), "Проверить оплату");
   assert.equal(appendTaskDescription("", "Новый контекст"), "Новый контекст");
 });
