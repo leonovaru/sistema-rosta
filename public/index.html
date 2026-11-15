@@ -25,6 +25,21 @@
             <form id="project-form" class="workspace-form"><h3>Новый проект</h3><label>Название проекта<input id="project-title" required maxlength="180"></label><label>Клиент<select id="project-client"><option value="">Собственный проект / без клиента</option></select></label><label>Направление дохода<select id="project-direction"><option value="">Без направления</option></select></label><label>Описание задачи<textarea id="project-description" rows="3" maxlength="5000" placeholder="Что нужно сделать, исходные условия и требования"></textarea></label><label>Ожидаемый результат<textarea id="project-result" rows="2" maxlength="2000"></textarea></label><div class="workspace-inline"><label>Срок<input id="project-deadline" type="date"></label><label>Бюджет, ₽<input id="project-budget" type="number" min="0" step="0.01"></label></div><button class="button primary">Создать проект</button></form>
             <form id="life-area-form" class="workspace-form"><h3>Новая личная область</h3><label>Название<input id="life-area-title" required maxlength="100" placeholder="Например, Обучение"></label><label>Описание<input id="life-area-description" maxlength="1000"></label><button class="button primary">Добавить область</button><p class="fine">Стартовые области: дом, покупки, коты, уход за собой, здоровье и отдых, личное развитие.</p></form>
           </div>
+          <section class="recurring-section">
+            <div class="section-head"><div><p class="eyebrow">РЕГУЛЯРНЫЕ ДЕЛА</p><h3>Повторяющиеся задачи</h3></div><span class="muted">Автоматически создаются на ближайшие 30 дней</span></div>
+            <form id="recurring-task-form" class="recurring-form">
+              <label class="recurring-wide">Что нужно делать?<input id="recurring-title" required maxlength="240" placeholder="Например, убрать кухню или проверить корм у котов"></label>
+              <label>Личная область<select id="recurring-area"><option value="">Без области</option></select></label>
+              <label>Повторять<select id="recurring-rule"><option value="daily">Каждый день</option><option value="weekly">Каждую неделю</option><option value="monthly">Каждый месяц</option></select></label>
+              <label>Начать с<input id="recurring-start" type="date" required></label>
+              <label>Последняя дата (необязательно)<input id="recurring-end" type="date"></label>
+              <label>Сколько минут<input id="recurring-minutes" type="number" min="5" max="10000" step="5" placeholder="Например, 20"></label>
+              <label>Приоритет<select id="recurring-priority"><option value="high">Высокий</option><option value="medium" selected>Обычный</option><option value="low">Низкий</option></select></label>
+              <label class="recurring-wide">Комментарий<textarea id="recurring-description" rows="2" maxlength="2000" placeholder="Что именно входит в задачу"></textarea></label>
+              <button class="button primary">Создать повторяющуюся задачу</button>
+            </form>
+            <div id="recurring-task-list" class="recurring-list"></div>
+          </section>
           <div class="workspace-columns"><div><h3>Клиенты</h3><div id="workspace-clients" class="workspace-list"></div></div><div><h3>Проекты</h3><div id="workspace-projects" class="workspace-list"></div><div id="project-plan-preview" class="project-plan-preview hidden"></div></div><div><h3>Личные области</h3><div id="workspace-areas" class="workspace-list"></div></div></div>
         </section>
         <section class="panel finance-panel">
