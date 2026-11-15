@@ -39,9 +39,9 @@ export async function onRequestPost({ request, env }) {
     const id = newId();
     const now = new Date().toISOString();
     try {
-      const [statusUpdate, timerInsert] = await env.DB.batch([
-        env.DB.prepare("UPDATE tasks SET status='doing' WHERE id=? AND user_id=? AND status!='done'").bind(taskId,user.id),
-        env.DB.prepare("INSERT INTO task_time_entries(id,user_id,task_id,started_at) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM tasks WHERE id=? AND user_id=? AND status!='done') AND NOT EXISTS (SELECT 1 FROM task_time_entries WHERE user_id=? AND ended_at IS NULL)").bind(id,user.id,taskId,now,taskId,user.id,user.id)
+      const [, timerInsert] = await env.DB.batch([
+        env.DB.prepare("UPDATE tasks SET status='doing' WHERE id=? AND user_id=? AND status!='done' AND NOT EXISTS (SELECT 1 FROM task_time_entries WHERE user_id=? AND ended_at IS NULL)").bind(taskId,user.id,user.id),
+        env.DB.prepare("INSERT INTO task_time_entries(id,user_id,task_id,started_at) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM tasks WHERE id=? AND user_id=? AND status='doing') AND NOT EXISTS (SELECT 1 FROM task_time_entries WHERE user_id=? AND ended_at IS NULL)").bind(id,user.id,taskId,now,taskId,user.id,user.id)
       ]);
       if (!timerInsert.meta.changes) return json({ error:"Задача уже завершена или запущен другой таймер. Обновите страницу." },409);
     } catch {
@@ -58,7 +58,7 @@ export async function onRequestPost({ request, env }) {
     if (minutes===null) return json({ error:"Не удалось рассчитать время таймера" },500);
     const [update] = await env.DB.batch([
       env.DB.prepare("UPDATE task_time_entries SET ended_at=?,duration_minutes=? WHERE id=? AND user_id=? AND ended_at IS NULL").bind(endedAt,minutes,active.id,user.id),
-      env.DB.prepare("UPDATE tasks SET actual_minutes=COALESCE(actual_minutes,0)+? WHERE id=? AND user_id=? AND changes()=1 AND EXISTS (SELECT 1 FROM task_time_entries WHERE id=? AND user_id=? AND ended_at=? AND duration_minutes=?)").bind(minutes,active.task_id,user.id,active.id,user.id,endedAt,minutes)
+      env.DB.prepare("UPDATE tasks SET actual_minutes=COALESCE(actual_minutes,0)+? WHERE id=? AND user_id=? AND EXISTS (SELECT 1 FROM task_time_entries WHERE id=? AND user_id=? AND ended_at=? AND duration_minutes=?)").bind(minutes,active.task_id,user.id,active.id,user.id,endedAt,minutes)
     ]);
     if (!update.meta.changes) return json({ error:"Таймер уже остановлен" },409);
     await invalidateTodayPlan(env,user.id);
