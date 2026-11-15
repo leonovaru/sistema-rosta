@@ -1,3 +1,4 @@
+import { findSimilarTaskHistory } from "../../_lib/similar-task-history.js";
 import { json, requireUser, readJson } from "../../_lib/auth.js";
 
 function fallbackEstimate(title, description) {
@@ -27,8 +28,30 @@ export async function onRequestPost({ request, env }) {
   const description = String(body?.description || "").trim();
   if (!title || title.length > 240 || description.length > 2000) return json({ error: "Укажите задачу и краткое описание (до 2000 символов)" }, 400);
 
+  const scope = {
+    project_id: body?.project_id ? String(body.project_id) : null,
+    life_area_id: body?.life_area_id ? String(body.life_area_id) : null,
+    direction_id: body?.direction_id ? String(body.direction_id) : null
+  };
+  let similarTaskHistory = null;
+  try {
+    const { results: history } = await env.DB.prepare(`
+      SELECT t.title,t.description,t.status,t.estimated_minutes,t.actual_minutes,t.project_id,t.life_area_id,
+        COALESCE(t.direction_id,p.direction_id,c.direction_id) AS direction_id
+      FROM tasks t
+      LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id
+      LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id
+      WHERE t.user_id=? AND t.status='done' AND t.completed_at>=datetime('now','-180 days')
+        AND t.estimated_minutes IS NOT NULL AND t.actual_minutes IS NOT NULL
+      ORDER BY t.completed_at DESC LIMIT 300
+    `).bind(user.id).all();
+    similarTaskHistory = findSimilarTaskHistory({ title, description, history, scope });
+  } catch {
+    similarTaskHistory = null;
+  }
+  const withSimilarHistory = payload => ({ ...payload, ...(similarTaskHistory ? { similar_task_history: similarTaskHistory } : {}) });
   const fallback = fallbackEstimate(title, description);
-  if (!env.AI) return json({ ...fallback, source: "heuristic", note: "AI binding пока не подключён. Это ориентировочная алгоритмическая оценка." });
+  if (!env.AI) return json(withSimilarHistory({ ...fallback, source: "heuristic", note: "AI binding пока не подключён. Это ориентировочная алгоритмическая оценка." }));
 
   try {
     const response = await env.AI.run("@cf/google/gemma-4-26b-a4b-it", {
@@ -45,7 +68,7 @@ export async function onRequestPost({ request, env }) {
     const steps = Array.isArray(parsed.steps) ? parsed.steps.slice(0,5).map(step => ({
       title: String(step.title || "").slice(0,160), minutes: Math.max(5, Math.min(10000, Math.round(Number(step.minutes) || 5)))
     })) : [];
-    return json({
+    return json(withSimilarHistory({
       minutes,
       range_min: Math.max(5, Math.round(Number(parsed.range_min) || minutes * 0.75)),
       range_max: Math.max(minutes, Math.round(Number(parsed.range_max) || minutes * 1.5)),
@@ -54,8 +77,8 @@ export async function onRequestPost({ request, env }) {
       delegation_reason: String(parsed.delegation_reason || "").slice(0,500),
       steps,
       source: "ai"
-    });
+    }));
   } catch {
-    return json({ ...fallback, source: "heuristic", note: "ИИ временно не ответил. Показана ориентировочная оценка." });
+    return json(withSimilarHistory({ ...fallback, source: "heuristic", note: "ИИ временно не ответил. Показана ориентировочная оценка." }));
   }
 }
