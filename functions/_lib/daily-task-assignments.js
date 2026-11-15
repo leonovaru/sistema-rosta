@@ -1,3 +1,4 @@
+import { isTaskAvailableForPlanning } from "./task-planning-availability.js";
 function dateValid(date){if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||"")))return false;const parsed=new Date(date+"T12:00:00Z");return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===date;}
 function remainingEstimate(task){const estimate=Number(task?.estimated_minutes);if(!Number.isFinite(estimate)||estimate<=0)return null;return Math.max(0,estimate-Math.max(0,Number(task.actual_minutes)||0));}
 export function applySavedDailyTaskAllocations(week,allocations=[],tasks=[]){
@@ -14,7 +15,7 @@ export function applySavedDailyTaskAllocations(week,allocations=[],tasks=[]){
   const task=taskMap.get(taskId),sum=rows.reduce((total,row)=>total+row.minutes,0);
   // Historical allocations for completed, deleted, or waiting tasks are inert.
   // They must not surface as stale schedules or trigger repair proposals.
-  if(!task||!["todo","doing"].includes(task.status))continue;
+  if(!task||!["todo","doing"].includes(task.status)||!isTaskAvailableForPlanning(task))continue;
   let reason=null;
   {
    const expected=remainingEstimate(task);
