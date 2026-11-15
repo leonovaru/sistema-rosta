@@ -39,7 +39,8 @@ export async function onRequestPost({request,env}){
  const body=await readJson(request)||{};
  if(body.action==="save"){
   const workspaceItems=Array.isArray(body.workspace_items)?body.workspace_items.slice(0,8):[];
-  if((!Array.isArray(body.tasks)||body.tasks.length>15||(!body.tasks.length&&!workspaceItems.length)))return json({error:"Проверь список изменений"},400);
+  const requestedTasks=Array.isArray(body.tasks)?body.tasks:[];
+  if(requestedTasks.length>15||(!requestedTasks.length&&!workspaceItems.length))return json({error:"Проверь список изменений"},400);
   const [dirs,clients,projects,areas,openTasks]=await Promise.all([
    env.DB.prepare("SELECT id FROM directions WHERE user_id=?").bind(user.id).all(),
    env.DB.prepare("SELECT id FROM clients WHERE user_id=?").bind(user.id).all(),
@@ -49,7 +50,7 @@ export async function onRequestPost({request,env}){
   ]);
   const allowed={direction_id:new Set(dirs.results.map(x=>x.id)),client_id:new Set(clients.results.map(x=>x.id)),project_id:new Set(projects.results.map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
   const allowedTaskIds=new Set(openTasks.results.map(x=>x.id));
-  const prepared=body.tasks.map((t,i)=>({
+  const prepared=requestedTasks.map((t,i)=>({
    id:newId(),title:String(t.title||"").trim().slice(0,240),description:String(t.description||"").trim().slice(0,2000),
    direction_id:allowed.direction_id.has(t.direction_id)?t.direction_id:null,
    client_id:allowed.client_id.has(t.client_id)?t.client_id:null,
