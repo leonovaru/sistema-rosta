@@ -137,3 +137,32 @@ test("sleep chart excludes dates outside its selected window", () => {
   assert.match(html, /420 мин/);
   assert.doesNotMatch(html, /480 мин/);
 });
+
+const goalMatch = app.match(/function sleepGoalComparison\\(sessions,days,targetMinutes\\)\\{([\\s\\S]*?)\\n\\}/);
+assert.ok(goalMatch, "sleepGoalComparison must remain available for sleep analytics");
+function runGoal(sessions, days, target, today = "2026-11-15") {
+  const sleepLocalDate = () => today;
+  const shiftDate = (date, offset) => {
+    const value = new Date(date + "T12:00:00Z");
+    value.setUTCDate(value.getUTCDate() + offset);
+    return value.toISOString().slice(0, 10);
+  };
+  const sleepDuration = (start, end) => start && end ? Number(start) : null;
+  return new Function("sessions", "days", "targetMinutes", "sleepLocalDate", "shiftDate", "sleepDuration", goalMatch[1])(
+    sessions, days, target, sleepLocalDate, shiftDate, sleepDuration
+  );
+}
+test("sleep goal comparison is opt-in and ignores incomplete nights", () => {
+  const sessions = [
+    { sleep_date: "2026-11-14", fell_asleep_at: "480", woke_at: "yes" },
+    { sleep_date: "2026-11-15", fell_asleep_at: "450", woke_at: "yes" },
+    { sleep_date: "2026-11-15", fell_asleep_at: null, woke_at: "yes" }
+  ];
+  assert.deepEqual(runGoal(sessions, 7, null), { target: null, average: null, delta: null, count: 0, below: 0, atOrAbove: 0 });
+  assert.deepEqual(runGoal(sessions, 7, 480), { target: 480, average: 465, delta: -15, count: 2, below: 1, atOrAbove: 1 });
+});
+test("sleep goal comparison does not invent an average without complete nights", () => {
+  assert.deepEqual(runGoal([{ sleep_date: "2026-11-15", fell_asleep_at: null, woke_at: "yes" }], 7, 480), {
+    target: 480, average: null, delta: null, count: 0, below: 0, atOrAbove: 0
+  });
+});
