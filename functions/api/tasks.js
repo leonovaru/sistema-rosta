@@ -1,5 +1,6 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { isClientSelectable, isProjectSelectable, isDirectionSelectable } from "../_lib/workspace-entity-availability.js";
+import { isTaskAvailableForPlanning } from "../_lib/task-planning-availability.js";
 
 async function invalidateTodayPlan(env, userId) {
   const settings = await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(userId).first();
@@ -91,6 +92,9 @@ export async function onRequestPatch({ request, env }) {
   const body = await readJson(request);
   const id = String(body?.id || "");
   if (!id) return json({ error: "Некорректные данные" }, 400);
+  const taskState=await env.DB.prepare("SELECT t.id,p.status AS project_status,c.status AS client_status,pc.status AS project_client_status FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN clients pc ON pc.id=p.client_id AND pc.user_id=p.user_id WHERE t.id=? AND t.user_id=?").bind(id,user.id).first();
+  if(!taskState)return json({error:"Задача не найдена"},404);
+  if(!isTaskAvailableForPlanning(taskState))return json({error:"Задача архивного проекта или закрытого клиента доступна только для просмотра"},409);
   if (body?.actual_minutes !== undefined) {
     const actual = body.actual_minutes === null || body.actual_minutes === "" ? null : Math.round(Number(body.actual_minutes));
     if (actual !== null && (!Number.isInteger(actual) || actual < 0 || actual > 10000)) return json({ error: "Укажите фактическое время в минутах" }, 400);
