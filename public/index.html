@@ -84,7 +84,7 @@
               <div id="budget-categories" class="finance-list"></div>
               <p class="fine">Факт берётся из внесённых расходов за выбранный месяц. Категории без заданного лимита тоже отображаются — их можно включить в бюджет.</p>
             </section>
-            <div class="cashflow-columns"><div><h4>Планируемое поступление или расход</h4><form id="cashflow-form" class="finance-form">
+            <div class="cashflow-columns"><div><h4>Планируемое поступление или разовая покупка</h4><p class="fine">Добавляй сюда крупные траты с известной датой: техника, ремонт, поездка, лечение или ежегодный платёж.</p><form id="cashflow-form" class="finance-form">
               <label>Название<input id="cashflow-title" maxlength="180" required placeholder="Оплата клиента, закупка, сервис"></label>
               <label>Тип<select id="cashflow-type"><option value="income">Ожидаемое поступление</option><option value="expense">Планируемый расход</option></select></label>
               <label>Сумма, ₽<input id="cashflow-amount" type="number" min="0.01" step="0.01" required></label>
