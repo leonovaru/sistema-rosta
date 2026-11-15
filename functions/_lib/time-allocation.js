@@ -1,7 +1,7 @@
 const round=value=>Math.round(value*10)/10;
 export function buildTimeAllocationRecommendations(directions=[],availableHours=5){
  const capacity=Number(availableHours);
- if(!Number.isFinite(capacity)||capacity<=0||capacity>80)throw new Error("Количество часов должно быть от 0 до 80");
+ if(!Number.isFinite(capacity)||capacity<=0||capacity>80)throw new Error("Количество часов должно быть от 1 до 80");
  const candidates=directions.map(row=>{
   const contributionPerHour=Number(row.contribution_per_hour),hours=Number(row.hours),revenue=Number(row.revenue),contribution=Number(row.contribution);
   const winRate=row.observed_lead_to_sale_percent===null||row.observed_lead_to_sale_percent===undefined?NaN:Number(row.observed_lead_to_sale_percent),leadSample=Number(row.qualified_clients)||0,cycle= row.avg_contact_to_won_days===null||row.avg_contact_to_won_days===undefined?NaN:Number(row.avg_contact_to_won_days),cycleSample=Number(row.contact_to_won_sample)||0;
