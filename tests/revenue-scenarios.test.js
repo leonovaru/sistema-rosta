@@ -38,3 +38,11 @@ test("does not publish a pace projection before any elapsed day is supplied",()=
  assert.equal(x.scenarios[1].projected_month_end,null);
  assert.equal(x.scenarios[1].projection_gap,null);
 });
+
+test("includes receipts without a direction in the overall forecast but not in direction targets",()=>{
+ const x=buildRevenueScenarios({monthlyTarget:100000,directionRows:[{id:"a",share_percent:100}],actualRows:[{direction_id:"a",revenue:10000},{direction_id:null,revenue:5000}],elapsedDays:5,daysInMonth:30,remainingDays:25});
+ assert.equal(x.unassigned_actual,5000);
+ assert.equal(x.scenarios[1].actual,15000);
+ assert.equal(x.scenarios[1].projected_month_end,90000);
+ assert.equal(x.scenarios[1].directions[0].actual,10000);
+});
