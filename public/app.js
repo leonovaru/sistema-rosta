@@ -244,23 +244,25 @@ function renderCalendar() {
   document.querySelectorAll("[data-calendar-view]").forEach(b=>b.classList.toggle("active",b.dataset.calendarView===calendarView));
   $("calendar-selected-date").textContent=new Intl.DateTimeFormat("ru-RU",{weekday:"long",day:"numeric",month:"long"}).format(new Date(calendarSelected+"T12:00:00"));
   const dayEvents=calendarEvents.filter(e=>e.start_at.slice(0,10)<=calendarSelected&&(e.end_at.slice(0,10)>calendarSelected||(e.end_at.slice(0,10)===calendarSelected&&e.end_at.slice(11,16)!=="00:00"))).sort((a,b)=>a.start_at.localeCompare(b.start_at));
-  $("calendar-events").innerHTML=dayEvents.length?dayEvents.map(e=>'<article class="calendar-event"><div class="calendar-event-time">'+eventTime(e.start_at)+'–'+eventTime(e.end_at)+'</div><div class="calendar-event-main"><b>'+escapeHtml(e.title)+'</b><small>'+eventTypes[e.event_type]+' · '+eventDuration(e)+(e.mode!=="none"?" · "+(e.mode==="online"?"онлайн":"офлайн"):"")+'</small>'+(e.location?'<small>'+escapeHtml(e.location)+'</small>':"")+(e.actual_start_at||e.actual_end_at?'<small>Факт: '+(eventTime(e.actual_start_at)||"—")+'–'+(eventTime(e.actual_end_at)||"—")+'</small>':"")+'</div><div class="calendar-event-actions"><button type="button" class="button ghost" data-edit-event="'+e.id+'">Изменить</button><button type="button" class="button ghost" data-delete-event="'+e.id+'">Удалить</button></div></article>').join(""):'<p class="muted">На этот день событий пока нет. Добавь встречи, дорогу, хобби или сон.</p>';
+  $("calendar-events").innerHTML=dayEvents.length?dayEvents.map(e=>'<article class="calendar-event"><div class="calendar-event-time">'+eventTime(e.start_at)+'–'+eventTime(e.end_at)+'</div><div class="calendar-event-main"><b>'+escapeHtml(e.title)+'</b><small>'+eventTypes[e.event_type]+' · '+eventDuration(e)+(e.repeat_rule&&e.repeat_rule!=="none"?" · повторяется "+(e.repeat_rule==="daily"?"ежедневно":"еженедельно"):"")+(e.mode!=="none"?" · "+(e.mode==="online"?"онлайн":"офлайн"):"")+'</small>'+(e.location?'<small>'+escapeHtml(e.location)+'</small>':"")+(e.actual_start_at||e.actual_end_at?'<small>Факт: '+(eventTime(e.actual_start_at)||"—")+'–'+(eventTime(e.actual_end_at)||"—")+'</small>':"")+'</div><div class="calendar-event-actions"><button type="button" class="button ghost" data-edit-event="'+e.id+'">Изменить</button><button type="button" class="button ghost" data-delete-event="'+(e.series_id||e.id)+'">Удалить</button></div></article>').join(""):'<p class="muted">На этот день событий пока нет. Добавь встречи, дорогу, хобби или сон.</p>';
   document.querySelectorAll("[data-calendar-date]").forEach(b=>b.addEventListener("click",async()=>{calendarSelected=b.dataset.calendarDate;const d=new Date(calendarSelected+"T12:00:00");calendarAnchor=new Date(d.getFullYear(),d.getMonth(),1);await loadCalendar();}));
   document.querySelectorAll("[data-edit-event]").forEach(b=>b.addEventListener("click",()=>editCalendarEvent(calendarEvents.find(e=>e.id===b.dataset.editEvent))));
-  document.querySelectorAll("[data-delete-event]").forEach(b=>b.addEventListener("click",async()=>{if(!confirm("Удалить это событие?"))return;try{await api("/api/calendar/events",{method:"DELETE",body:JSON.stringify({id:b.dataset.deleteEvent})});currentDayPlan=null;renderDayPlan();await loadCalendar();}catch(err){alert(err.message);}}));
+  document.querySelectorAll("[data-delete-event]").forEach(b=>b.addEventListener("click",async()=>{if(!confirm("Удалить это событие и всю серию повторений?"))return;try{await api("/api/calendar/events",{method:"DELETE",body:JSON.stringify({id:b.dataset.deleteEvent})});currentDayPlan=null;renderDayPlan();await loadCalendar();}catch(err){alert(err.message);}}));
 }
 function openCalendarForm(event=null) {
   $("calendar-form").classList.remove("hidden");
   $("calendar-form-title").textContent=event?"Изменить событие":"Новое событие";
-  $("event-id").value=event?.id||"";
+  $("event-id").value=event?.series_id||event?.id||"";
   $("event-title").value=event?.title||"";
   $("event-type").value=event?.event_type||"meeting";
   $("event-mode").value=event?.mode||"none";
-  $("event-start").value=event?.start_at||calendarSelected+"T09:00";
-  $("event-end").value=event?.end_at||calendarSelected+"T10:00";
+  $("event-start").value=event?.series_start_at||event?.start_at||calendarSelected+"T09:00";
+  $("event-end").value=event?.series_end_at||event?.end_at||calendarSelected+"T10:00";
   $("event-actual-start").value=event?.actual_start_at||"";
   $("event-actual-end").value=event?.actual_end_at||"";
   $("event-status").value=event?.status||"planned";
+  $("event-repeat").value=event?.repeat_rule||"none";
+  $("event-repeat-until").value=event?.repeat_until||"";
   $("event-location").value=event?.location||"";
   $("event-notes").value=event?.notes||"";
   $("calendar-form").scrollIntoView({behavior:"smooth",block:"nearest"});
@@ -271,7 +273,7 @@ $("calendar-cancel").addEventListener("click",()=>$("calendar-form").classList.a
 $("calendar-form").addEventListener("submit",async e=>{
   e.preventDefault();
   const id=$("event-id").value;
-  const payload={id,title:$("event-title").value,event_type:$("event-type").value,mode:$("event-mode").value,start_at:$("event-start").value,end_at:$("event-end").value,actual_start_at:$("event-actual-start").value||null,actual_end_at:$("event-actual-end").value||null,status:$("event-status").value,location:$("event-location").value,notes:$("event-notes").value};
+  const payload={id,title:$("event-title").value,event_type:$("event-type").value,mode:$("event-mode").value,start_at:$("event-start").value,end_at:$("event-end").value,actual_start_at:$("event-actual-start").value||null,actual_end_at:$("event-actual-end").value||null,status:$("event-status").value,repeat_rule:$("event-repeat").value,repeat_until:$("event-repeat-until").value||null,location:$("event-location").value,notes:$("event-notes").value};
   try{await api("/api/calendar/events",{method:id?"PATCH":"POST",body:JSON.stringify(payload)});$("calendar-form").classList.add("hidden");calendarSelected=payload.start_at.slice(0,10);const selectedDate=new Date(calendarSelected+"T12:00:00");calendarAnchor=new Date(selectedDate.getFullYear(),selectedDate.getMonth(),1);currentDayPlan=null;renderDayPlan();await loadCalendar();}
   catch(err){alert(err.message);}
 });
