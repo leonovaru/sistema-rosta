@@ -30,6 +30,13 @@ function renderDailyBlockCards(plans) {
 
 
 
+function renderDailyReallocationProposals(data){
+ const proposals=data?.proposals||[];
+ if(!proposals.length)return '<section class="weekly-balance"><h5>Переносы между днями</h5><p class="muted">Нет переносов, которые одновременно укладываются в сроки и свободные окна календаря.</p></section>';
+ const rows=proposals.map((move,index)=>'<label class="balance-row"><div><b>'+escapeHtml(move.title)+'</b><small>'+escapeHtml(move.from)+' → '+escapeHtml(move.to)+' · '+duration(move.minutes)+' · '+escapeHtml(move.reason)+'</small></div><input type="checkbox" data-reallocation-choice="'+index+'" data-reallocation-id="'+escapeHtml(move.task_id)+'" data-reallocation-to="'+escapeHtml(move.to)+'" checked aria-label="Выбрать перенос '+escapeHtml(move.title)+'"></label>').join("");
+ return '<section class="weekly-balance daily-reallocation"><h5>Предлагаемые переносы между днями</h5><p class="fine">Система проверила дедлайн, рабочие дни, календарные занятости и то, чтобы перенос не вытеснял уже помещающиеся задачи. Это предложения: сроки изменятся только после вашего подтверждения.</p>'+rows+'<p class="fine">Предложено: '+proposals.length+' · останется нераспределённым после этих переносов: '+duration(data.summary?.remaining_unallocated_minutes||0)+'</p><button type="button" class="button" data-apply-reallocations>Применить выбранные переносы</button><small class="fine" data-reallocation-status></small></section>';
+}
+
 function renderDailyBlockScenarios(scenarios,selected="priority") {
  const valid=(scenarios||[]).some(item=>item.key===selected)?selected:"priority";
  return '<div class="daily-block-variant-tabs">'+(scenarios||[]).map(item=>'<button type="button" class="button '+(item.key===valid?'':'ghost')+'" data-daily-block-scenario="'+escapeHtml(item.key)+'" aria-pressed="'+(item.key===valid?'true':'false')+'">'+escapeHtml(item.title)+'</button>').join("")+'</div>'+
@@ -154,6 +161,28 @@ $("estimate-task").addEventListener("click", async () => {
 });
 ["task-title","task-description"].forEach(id => $(id).addEventListener("input", () => { taskEstimate = null; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; }));
 
+document.addEventListener("click",async event=>{
+ const button=event.target.closest("[data-apply-reallocations]");
+ if(!button)return;
+ const panel=button.closest(".daily-reallocation");
+ const selected=[...(panel?.querySelectorAll("[data-reallocation-choice]:checked")||[])].map(input=>({id:input.dataset.reallocationId,to:input.dataset.reallocationTo}));
+ const status=panel?.querySelector("[data-reallocation-status]");
+ if(!selected.length){if(status)status.textContent="Выберите хотя бы один перенос.";return;}
+ if(!confirm("Изменить сроки у "+selected.length+" задач согласно выбранным предложениям?"))return;
+ button.disabled=true;
+ let applied=0;
+ try{
+  for(const move of selected){
+   await api("/api/tasks",{method:"PATCH",body:JSON.stringify({id:move.id,due_date:move.to})});
+   applied++;
+  }
+  if(status)status.textContent="Перенесено задач: "+applied+". Обновляю недельный план…";
+  await loadTasks();
+ }catch(error){
+  if(status)status.textContent="Успешно применено: "+applied+". Остальные не применены: "+error.message+". Обновите план и проверьте сроки.";
+  button.disabled=false;
+ }
+});
 document.addEventListener("click",event=>{
  const button=event.target.closest("[data-daily-block-scenario]");
  if(!button||!event.target.closest("#weekly-workload"))return;
@@ -1151,7 +1180,7 @@ async function loadWeeklyWorkload(){
  const recoveryPanel='<section class="weekly-balance"><h4>Перерывы и восстановление</h4><p class="fine">Анализ длительности завершённых таймер-сессий. Таймер может оставаться включённым во время отдыха, поэтому это ориентир, а не точное измерение непрерывной концентрации.</p><div class="balance-row"><div><b>Наблюдений</b><small>'+recovery.sample_sessions+' завершённых сессий · '+(recovery.confidence==="higher"?"более устойчивая выборка":recovery.confidence==="preliminary"?"предварительная выборка":"недостаточно данных")+'</small></div><strong>'+Number(recovery.long_session_share_percent||0)+'%</strong></div><div class="balance-row"><span>Медианная длительность</span><strong>'+duration(recovery.median_session_minutes||0)+'</strong></div><div class="balance-row"><span>Самая длинная сессия</span><strong>'+duration(recovery.longest_session_minutes||0)+'</strong></div><div class="balance-row"><span>Сессий от 90 минут</span><strong>'+Number(recovery.sessions_over_90_minutes||0)+'</strong></div><div class="balance-row"><span>Сессий от 2 часов</span><strong>'+Number(recovery.sessions_over_120_minutes||0)+'</strong></div><p>'+escapeHtml(recovery.guidance||"Пока нет данных для рекомендации.")+'</p><h5>Мягкая стартовая настройка перерывов</h5><p>После '+(breakRule.focus_minutes||50)+' минут фокус-блока — около '+(breakRule.break_minutes||10)+' минут отдыха. Можно начать с короткой паузы '+(breakRule.optional_short_break_minutes||5)+' минут.</p><p class="fine">Это необязательная подсказка. Система не создаёт события и не переставляет календарь. '+escapeHtml(recovery.timezone||"")+'</p></section>';
  const dailyBlockScenarios=week.daily_block_scenarios||[];
  const blockPlanCards=renderDailyBlockScenarios(dailyBlockScenarios,dailyBlockPreferences.variant);
- const blockPlanPanel='<section class="weekly-focus-scenarios"><h4>Рабочие блоки и перерывы по времени</h4><div class="voice-task-fields"><label>Начало рабочего дня<input type="time" id="daily-block-start" value="'+escapeHtml(dailyBlockPreferences.start)+'"></label><label>Фокус, минут<input type="number" id="daily-block-focus" min="15" max="120" step="5" value="'+dailyBlockPreferences.focus+'"></label><label>Перерыв, минут<input type="number" id="daily-block-rest" min="3" max="30" step="1" value="'+dailyBlockPreferences.rest+'"></label><label>Подготовка до встреч, минут<input type="number" id="daily-block-prep" min="0" max="120" step="5" value="'+dailyBlockPreferences.prep+'"></label><label>Буфер после встреч, минут<input type="number" id="daily-block-after" min="0" max="120" step="5" value="'+dailyBlockPreferences.after+'"></label></div><p class="fine">Настройки сохраняются в этом браузере. Буфер подготовки расширяет занятое время до встречи, буфер после — после её окончания. Они применяются к встречам, поездкам и другим занятым событиям, кроме сна и событий типа «Работа». Это резерв времени, а не расчёт маршрута. Система ничего не добавляет и не переносит в календаре.</p>'+(blockPlanCards||'<p class="muted">Нет задач с оценкой времени для черновика блоков.</p>')+'</section>';
+ const blockPlanPanel='<section class="weekly-focus-scenarios"><h4>Рабочие блоки и перерывы по времени</h4><div class="voice-task-fields"><label>Начало рабочего дня<input type="time" id="daily-block-start" value="'+escapeHtml(dailyBlockPreferences.start)+'"></label><label>Фокус, минут<input type="number" id="daily-block-focus" min="15" max="120" step="5" value="'+dailyBlockPreferences.focus+'"></label><label>Перерыв, минут<input type="number" id="daily-block-rest" min="3" max="30" step="1" value="'+dailyBlockPreferences.rest+'"></label><label>Подготовка до встреч, минут<input type="number" id="daily-block-prep" min="0" max="120" step="5" value="'+dailyBlockPreferences.prep+'"></label><label>Буфер после встреч, минут<input type="number" id="daily-block-after" min="0" max="120" step="5" value="'+dailyBlockPreferences.after+'"></label></div><p class="fine">Настройки сохраняются в этом браузере. Буфер подготовки расширяет занятое время до встречи, буфер после — после её окончания. Они применяются к встречам, поездкам и другим занятым событиям, кроме сна и событий типа «Работа». Это резерв времени, а не расчёт маршрута. Календарь не меняется; переносы задач возможны только после подтверждения.</p>'+(blockPlanCards||'<p class="muted">Нет задач с оценкой времени для черновика блоков.</p>')+renderDailyReallocationProposals(week.daily_reallocation_proposals)+'</section>';
  const accuracy=week.estimate_accuracy||{},overall=accuracy.overall||{},accuracyRows=(accuracy.by_area||[]).map(row=>'<div class="balance-row"><div><b>'+escapeHtml(row.title)+'</b><small>'+row.sample_count+' завершённых задач · медианная ошибка '+(row.median_error_percent===null?'нет данных':row.median_error_percent+'%')+'</small></div><strong>'+(row.recommended_estimate_multiplier===null?'Пока мало данных':'×'+row.recommended_estimate_multiplier)+'</strong></div>').join("");
  const accuracyPanel='<section class="weekly-balance"><h4>Точность оценок задач</h4><p class="fine">История завершённых задач за последние 90 дней. Множитель — подсказка для будущих оценок, существующие оценки не меняются.</p><div class="weekly-metrics"><article><span>Завершённых задач в выборке</span><b>'+overall.sample_count+'</b></article><article><span>Медианная ошибка оценки</span><b>'+(overall.median_error_percent===null?'—':overall.median_error_percent+'%')+'</b></article><article><span>Поправка к будущим оценкам</span><b>'+(overall.recommended_estimate_multiplier===null?'Недостаточно данных':'×'+overall.recommended_estimate_multiplier)+'</b></article></div>'+(accuracyRows||'<p class="muted">Пока недостаточно завершённых задач с оценкой и фактическим временем. Нужно не менее трёх наблюдений для рекомендации.</p>')+'</section>';
  const calibrated=week.calibrated_load||{},calibratedSummary=calibrated.summary||{},calibratedDays=(calibrated.days||[]).map(day=>'<div class="balance-calendar-row"><span>'+day.date+(day.calibrated_overloaded?' · перегрузка':'')+'</span><b>'+duration(day.calibrated_task_minutes||0)+' / '+duration(day.available_minutes||0)+'</b></div>').join("");
