@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
-import { isValidMeetingDate, cleanMeetingItems, normalizeMeetingAgreements } from "../_lib/meeting-notes.js";
+import { isValidMeetingDate, cleanMeetingItems, normalizeMeetingAgreements, normalizeMeetingLinks } from "../_lib/meeting-notes.js";
 
 function parseModelJson(value){
  if(typeof value!=="string")return value;
@@ -25,13 +25,22 @@ export async function onRequestPost({request,env}){
   const transcript=String(body.transcript||"").trim().slice(0,12000);
   if(!title||!isValidMeetingDate(meetingDate))return json({error:"Укажи название и корректную дату встречи"},400);
   const [projects,clients]=await Promise.all([
-   env.DB.prepare("SELECT id FROM projects WHERE id=? AND user_id=?").bind(body.project_id||"",user.id).first(),
-   env.DB.prepare("SELECT id FROM clients WHERE id=? AND user_id=?").bind(body.client_id||"",user.id).first()
+   env.DB.prepare("SELECT id,client_id FROM projects WHERE user_id=? AND status NOT IN ('archived')").bind(user.id).all(),
+   env.DB.prepare("SELECT id FROM clients WHERE user_id=?").bind(user.id).all()
   ]);
-  const id=newId();
+  const links=normalizeMeetingLinks(body.project_id,body.client_id,projects.results,clients.results);
   const decisions=cleanMeetingItems(body.decisions),agreements=cleanMeetingItems(body.agreements),questions=cleanMeetingItems(body.open_questions);
+  const values=[links.project_id,links.client_id,title,meetingDate,String(body.participants||"").slice(0,1000),String(body.summary||"").slice(0,5000),JSON.stringify(decisions),JSON.stringify(agreements),JSON.stringify(questions),transcript];
+  const existingId=String(body.id||"");
+  if(existingId){
+   const result=await env.DB.prepare("UPDATE meeting_notes SET project_id=?,client_id=?,title=?,meeting_date=?,participants=?,summary=?,decisions_json=?,agreements_json=?,open_questions_json=?,transcript=?,updated_at=datetime('now') WHERE id=? AND user_id=?")
+    .bind(...values,existingId,user.id).run();
+   if(!result.meta.changes)return json({error:"Протокол не найден"},404);
+   return json({ok:true,id:existingId,updated:true});
+  }
+  const id=newId();
   await env.DB.prepare("INSERT INTO meeting_notes (id,user_id,project_id,client_id,title,meeting_date,participants,summary,decisions_json,agreements_json,open_questions_json,transcript) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-   .bind(id,user.id,projects?.id||null,clients?.id||null,title,meetingDate,String(body.participants||"").slice(0,1000),String(body.summary||"").slice(0,5000),JSON.stringify(decisions),JSON.stringify(agreements),JSON.stringify(questions),transcript).run();
+   .bind(id,user.id,...values).run();
   return json({ok:true,id});
  }
  if(body.action!=="analyze")return json({error:"Неизвестное действие"},400);
@@ -58,6 +67,7 @@ export async function onRequestPost({request,env}){
   const parsed=parseModelJson(raw);
   if(!parsed||!Array.isArray(parsed.agreements)||!Array.isArray(parsed.decisions))throw new Error("Invalid meeting response");
   const projectIds=new Set(projects.results.map(x=>x.id)),clientIds=new Set(clients.results.map(x=>x.id));
-  return json({ok:true,source:"ai",transcript,title:String(parsed.title||"Встреча").slice(0,180),meeting_date:isValidMeetingDate(parsed.meeting_date)?parsed.meeting_date:today,participants:String(parsed.participants||"").slice(0,1000),project_id:projectIds.has(parsed.project_id)?parsed.project_id:null,client_id:clientIds.has(parsed.client_id)?parsed.client_id:null,summary:String(parsed.summary||"").slice(0,5000),decisions:cleanMeetingItems(parsed.decisions),agreements:normalizeMeetingAgreements(parsed.agreements,projectIds,clientIds),proposed_actions:cleanMeetingItems(parsed.proposed_actions),open_questions:cleanMeetingItems(parsed.open_questions),clarifying_questions:cleanMeetingItems(parsed.clarifying_questions)});
+  const links=normalizeMeetingLinks(parsed.project_id,parsed.client_id,projects.results,clients.results);
+  return json({ok:true,source:"ai",transcript,title:String(parsed.title||"Встреча").slice(0,180),meeting_date:isValidMeetingDate(parsed.meeting_date)?parsed.meeting_date:today,participants:String(parsed.participants||"").slice(0,1000),project_id:links.project_id,client_id:links.client_id,summary:String(parsed.summary||"").slice(0,5000),decisions:cleanMeetingItems(parsed.decisions),agreements:normalizeMeetingAgreements(parsed.agreements,projectIds,clientIds),proposed_actions:cleanMeetingItems(parsed.proposed_actions),open_questions:cleanMeetingItems(parsed.open_questions),clarifying_questions:cleanMeetingItems(parsed.clarifying_questions)});
  }catch(error){return json({error:"Не удалось разобрать встречу. Проверь текст и попробуй ещё раз.",details:String(error?.message||error).slice(0,300)},502);}
 }
