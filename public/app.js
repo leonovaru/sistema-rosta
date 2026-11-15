@@ -129,7 +129,8 @@ function suggestBucketForExpense(category){
  const bucket=incomeBucketsData?.buckets?.find(x=>x.title===match[1]);
  if(bucket)$("expense-bucket").value=bucket.id;
 }
-$("expense-category").addEventListener("change",()=>suggestBucketForExpense($("expense-category").value));
+$("expense-category").addEventListener("change",()=>suggestBucketForExpense($("expense-category").value+" "+$("expense-title").value));
+$("expense-title").addEventListener("change",()=>suggestBucketForExpense($("expense-category").value+" "+$("expense-title").value));
 async function loadIncomeBuckets(){
  incomeBucketsData=await api("/api/finance/buckets");
  const rows=incomeBucketsData.buckets||[];
