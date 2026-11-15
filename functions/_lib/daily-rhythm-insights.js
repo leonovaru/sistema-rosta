@@ -1,3 +1,4 @@
+import { resolveSleepWallTime } from "./sleep.js";
 function zonedParts(value,timeZone){
  const date=new Date(value);if(!Number.isFinite(date.getTime()))return null;
  const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(date);
@@ -19,13 +20,14 @@ export function buildDailyRhythmInsights(timeEntries=[],sleepSessions=[],timezon
  const sleepDurations=[],wakeTimes=[],bedTimes=[];
  for(const session of sleepSessions||[]){
   if(!session.fell_asleep_at||!session.woke_at)continue;
-  const start=zonedParts(session.fell_asleep_at.replace("T","T")+":00Z",session.asleep_timezone||session.timezone||timezone);
-  const end=zonedParts(session.woke_at.replace("T","T")+":00Z",session.wake_timezone||session.timezone||timezone);
+  const startEpoch=resolveSleepWallTime(session.fell_asleep_at,session.asleep_timezone||session.timezone||timezone);
+  const endEpoch=resolveSleepWallTime(session.woke_at,session.wake_timezone||session.timezone||timezone);
+  if(startEpoch===null||endEpoch===null||endEpoch<=startEpoch)continue;
+  const start=zonedParts(startEpoch,timezone),end=zonedParts(endEpoch,timezone);
   if(!start||!end)continue;
-  const startMinutes=Number(start.hour)*60+Number(start.minute),endMinutes=Number(end.hour)*60+Number(end.minute);
-  let elapsed=endMinutes-startMinutes;if(elapsed<=0)elapsed+=1440;
+  const elapsed=Math.round((endEpoch-startEpoch)/60000);
   if(elapsed>0&&elapsed<=960)sleepDurations.push(elapsed);
-  wakeTimes.push(endMinutes);bedTimes.push(startMinutes);
+  wakeTimes.push(Number(end.hour)*60+Number(end.minute));bedTimes.push(Number(start.hour)*60+Number(start.minute));
  }
  const sufficientWork=hours.length>=5,sufficientSleep=sleepDurations.length>=3;
  const sortedHours=[...hours].sort((a,b)=>a-b);
