@@ -97,7 +97,7 @@ export async function onRequestPost({ request, env }) {
     return {start:Math.max(nowMinute,start),end:Math.min(1440,end)};
   }));
   const schedulingIntervals=workWindows.length?intersectIntervals(freeIntervals,workWindows):freeIntervals;
-  const workIntervals = calendarEvents.filter(event=>event.event_type==="work").map(event=>{
+  const workIntervals = calendarEvents.filter(event=>event.event_type==="work"&&(event.status==="completed"||event.actual_start_at||event.actual_end_at)).map(event=>{
     const endValue=event.status==="completed"&&event.actual_end_at?event.actual_end_at:event.end_at;
     const startValue=event.status==="completed"&&event.actual_start_at?event.actual_start_at:event.start_at;
     const startDate=startValue.slice(0,10), endDate=endValue.slice(0,10);
