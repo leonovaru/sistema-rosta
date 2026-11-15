@@ -11,7 +11,16 @@ function parseModelJson(value){
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);
  if(!user)return json({error:"Необходим вход"},401);
- const result=await env.DB.prepare("SELECT id,project_id,client_id,title,meeting_date,participants,summary,decisions_json,agreements_json,open_questions_json,created_at FROM meeting_notes WHERE user_id=? ORDER BY meeting_date DESC,created_at DESC LIMIT 50").bind(user.id).all();
+ const projectId=new URL(request.url).searchParams.get("project_id")||"";
+ const clientId=new URL(request.url).searchParams.get("client_id")||"";
+ if(projectId){const project=await env.DB.prepare("SELECT id FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first();if(!project)return json({error:"Проект не найден"},404);}
+ if(clientId){const client=await env.DB.prepare("SELECT id FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first();if(!client)return json({error:"Клиент не найден"},404);}
+ let query="SELECT id,project_id,client_id,title,meeting_date,participants,summary,decisions_json,agreements_json,open_questions_json,transcript,created_at,updated_at FROM meeting_notes WHERE user_id=?";
+ const params=[user.id];
+ if(projectId){query+=" AND project_id=?";params.push(projectId);}
+ if(clientId){query+=" AND client_id=?";params.push(clientId);}
+ query+=" ORDER BY meeting_date DESC,created_at DESC LIMIT 100";
+ const result=await env.DB.prepare(query).bind(...params).all();
  return json({meetings:result.results.map(row=>({...row,decisions:parseModelJson(row.decisions_json)||[],agreements:parseModelJson(row.agreements_json)||[],open_questions:parseModelJson(row.open_questions_json)||[]}))});
 }
 
