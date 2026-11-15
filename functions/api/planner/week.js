@@ -16,6 +16,7 @@ import { buildDailyReallocationProposals } from "../../_lib/daily-block-realloca
 import { applySavedDailyTaskAllocations } from "../../_lib/daily-task-assignments.js";
 import { buildDailyAssignmentRepairs } from "../../_lib/daily-assignment-repairs.js";
 import { buildRemainingDailyPlan } from "../../_lib/remaining-daily-plan.js";
+import { summarizeDailyBlockExecution } from "../../_lib/daily-block-execution-summary.js";
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day;}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 export async function onRequestGet({request,env}){
@@ -42,6 +43,7 @@ export async function onRequestGet({request,env}){
  applySavedDailyTaskAllocations(week,allocationRows.results,taskRows.results);
  week.daily_assignment_repairs=buildDailyAssignmentRepairs(week,allocationRows.results,taskRows.results);
  week.daily_block_logs=blockLogRows.results;
+ week.daily_block_execution=summarizeDailyBlockExecution(blockLogRows.results,today);
  attachWeeklyTaskPriority(week,taskRows.results,today);
  attachWeeklyActualTime(week,timeRows.results,timezone,targetRows.results);
  week.estimate_accuracy=buildEstimateAccuracy(completedRows.results);
