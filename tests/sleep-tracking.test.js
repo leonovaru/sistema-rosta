@@ -26,3 +26,10 @@ test("nonexistent local time during spring DST transition is rejected",()=>{
 test("unambiguous times surrounding spring DST transition use elapsed time",()=>{
   assert.equal(calculateSleepDurationMinutes("2026-03-29T01:30","2026-03-29T03:30","Europe/Amsterdam"),60);
 });
+
+test("sleep duration uses the timezone recorded at each end of a trip night",()=>{
+  assert.equal(calculateSleepDurationMinutes("2026-11-15T23:00","2026-11-16T08:00","Europe/Amsterdam","Europe/Moscow"),420);
+});
+test("ambiguous time in either event timezone makes cross-zone duration unavailable",()=>{
+  assert.equal(calculateSleepDurationMinutes("2026-10-25T02:30","2026-10-25T08:00","Europe/Amsterdam","Europe/Moscow"),null);
+});
