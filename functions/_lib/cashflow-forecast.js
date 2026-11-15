@@ -1,6 +1,7 @@
 import { addDays, addPeriod } from "./finance.js";
 const positive=value=>{const n=Number(value);return Number.isFinite(n)&&n>0?n:0;};
-function dateValid(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const d=new Date(value+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}
+function dateValid(value){if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(value))return false;const d=new Date(value+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}
+function monthDays(month){return new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0,12)).getUTCDate();}
 export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,planned=[],obligations=[],debts=[],variableExpensesByMonth=[]}){
  if(!dateValid(today))throw new Error("Invalid forecast date");
  const end=addDays(today,horizonDays),events=[];
@@ -27,12 +28,18 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
   }
  }
  events.sort((a,b)=>a.date.localeCompare(b.date)||(a.type===b.type?a.title.localeCompare(b.title):a.type==="income"?-1:1));
- const variableByMonth=new Map(variableExpensesByMonth.map(x=>[x.month,Number(x.total)||0]));\n const days=[];let balance=Number(startingBalance)||0,totalVariableExpenses=0;
+ const variableByMonth=new Map(variableExpensesByMonth.map(x=>[x.month,positive(x.total)]));
+ const days=[];let balance=Number(startingBalance)||0,totalVariableExpenses=0;
  for(let date=today;date<=end;date=addDays(date,1)){
-  const dayEvents=events.filter(e=>e.date===date),income=dayEvents.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0),expense=dayEvents.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0);
-  balance+=income-expense;
-  days.push({date,income,expenses:expense,net:income-expense,balance,events:dayEvents});
+  const dayEvents=events.filter(e=>e.date===date);
+  const income=dayEvents.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0);
+  const fixedExpense=dayEvents.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0);
+  const month=date.slice(0,7),variableExpense=(variableByMonth.get(month)||0)/monthDays(month);
+  const expense=fixedExpense+variableExpense;
+  totalVariableExpenses+=variableExpense;balance+=income-expense;
+  days.push({date,income,expenses:expense,fixed_expenses:fixedExpense,variable_expenses:variableExpense,net:income-expense,balance,events:dayEvents});
  }
- const totalIncome=events.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0),totalExpenses=events.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0);
- return {period:{from:today,to:end,days:horizonDays},summary:{starting_balance:Number(startingBalance)||0,planned_income:totalIncome,planned_expenses:totalExpenses,net:totalIncome-totalExpenses,ending_balance:balance,lowest_balance:Math.min(Number(startingBalance)||0,...days.map(d=>d.balance)),negative_days:days.filter(d=>d.balance<0).map(d=>d.date)},events,days};
+ const totalIncome=events.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0);
+ const totalExpenses=events.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0);
+ return {period:{from:today,to:end,days:horizonDays},summary:{starting_balance:Number(startingBalance)||0,planned_income:totalIncome,planned_expenses:totalExpenses,variable_expenses:Math.round(totalVariableExpenses*100)/100,total_expenses:Math.round((totalExpenses+totalVariableExpenses)*100)/100,net:Math.round((totalIncome-totalExpenses-totalVariableExpenses)*100)/100,ending_balance:Math.round(balance*100)/100,lowest_balance:Math.min(Number(startingBalance)||0,...days.map(d=>d.balance)),negative_days:days.filter(d=>d.balance<0).map(d=>d.date)},events,days};
 }
