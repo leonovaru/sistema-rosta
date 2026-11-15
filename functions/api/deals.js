@@ -20,7 +20,7 @@ export async function onRequestGet({request,env}){
  const eventsByDeal=new Map();for(const event of events.results){if(!eventsByDeal.has(event.deal_id))eventsByDeal.set(event.deal_id,[]);eventsByDeal.get(event.deal_id).push(event);}
  const observed=buildObservedSalesFunnel({interactionRows:firstContacts.results,dealEventRows:dealStageEvents.results});
  const cycleByDirection=new Map(observed.map(x=>[x.direction_id,x]));
- const firstContactByClient=new Map(firstContacts.results.map(x=>[x.direction_id+\"::\"+x.client_id,x.first_contact_on]));
+ const firstContactByClient=new Map(firstContacts.results.map(x=>[x.direction_id+"::"+x.client_id,x.first_contact_on]));
  const deals=buildDealDateForecast(rows.results.map(x=>({...x,amount:Number(x.amount),weighted_amount:Number(x.weighted_amount),history:eventsByDeal.get(x.id)||[]})),{cycleByDirection,firstContactByClient});
  const open=deals.filter(x=>!["won","lost"].includes(x.stage)),won=deals.filter(x=>x.stage==="won"),lost=deals.filter(x=>x.stage==="lost");
  const lossReasons=Object.entries(LOSS_LABELS).map(([key,label])=>{const items=lost.filter(x=>x.loss_reason_category===key);return {key,label,count:items.length,amount:items.reduce((s,x)=>s+x.amount,0)};}).filter(x=>x.count).sort((a,b)=>b.count-a.count);
@@ -37,7 +37,7 @@ export async function onRequestPost({request,env}){
  }
  const id=action==="update"?String(b.id||""):newId();
  if(action==="update"&&!id)return json({error:"Сделка не найдена"},400);
- const title=String(b.title||"").trim(),clientId=b.client_id?String(b.client_id):null,directionId=b.direction_id?String(b.direction_id):null,amount=Number(b.amount),probability=Number(b.probability_percent),stage=String(b.stage||"contact"),date=b.expected_close_date?String(b.expected_close_date):null,notes=String(b.notes||"").slice(0,1500),lossCategory=stage==="lost"?String(b.loss_reason_category||""):"",lossDetails=stage==="lost"?String(b.loss_reason_details||"").trim().slice(0,1200):"";
+ const title=String(b.title||"").trim(),clientId=b.client_id?String(b.client_id):null,directionId=b.direction_id?String(b.direction_id):null,amount=Number(b.amount),probability=Number(b.probability_percent),stage=String(b.stage||"contact"),date=b.expected_close_date?String(b.expected_close_date):null,paymentDate=b.expected_payment_date?String(b.expected_payment_date):null,notes=String(b.notes||"").slice(0,1500),lossCategory=stage==="lost"?String(b.loss_reason_category||""):"",lossDetails=stage==="lost"?String(b.loss_reason_details||"").trim().slice(0,1200):"";
  if(!title||title.length>180||!Number.isFinite(amount)||amount<=0||amount>100000000||!Number.isInteger(probability)||probability<0||probability>100||!STAGES.has(stage)||!validDate(date)||!validDate(paymentDate)||(stage==="lost"&&(!LOSS_REASONS.has(lossCategory)||(lossCategory==="other"&&!lossDetails))))return json({error:"Проверь название, сумму, этап, вероятность, дату и причину проигрыша"},400);
  if(!(await owned(env,"clients",clientId,user.id))||!(await owned(env,"directions",directionId,user.id)))return json({error:"Клиент или направление не найдены"},404);
  if(action==="update"){
