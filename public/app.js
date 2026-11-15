@@ -91,7 +91,7 @@ function renderVoiceDraft(){
    const get=field=>card.querySelector('[data-vf="'+field+'"]')?.value||"";
    return {title:get("title"),description:get("description"),project_id:get("project_id")||null,client_id:get("client_id")||null,direction_id:get("direction_id")||null,life_area_id:get("life_area_id")||null,due_date:get("due_date")||null,priority:get("priority"),estimated_minutes:draft.tasks[i].estimated_minutes,parent_index:draft.tasks[i].parent_index};
   });
-  try{const result=await api("/api/tasks/voice-intake",{method:"POST",body:JSON.stringify({action:"save",tasks})});$("voice-status").textContent:"Добавлено задач: "+result.created;$("voice-transcript").value="";voiceDraft=null;renderVoiceDraft();await loadTasks();await loadWorkspace();}
+  try{const result=await api("/api/tasks/voice-intake",{method:"POST",body:JSON.stringify({action:"save",tasks})});$("voice-status").textContent="Добавлено задач: "+result.created;$("voice-transcript").value="";voiceDraft=null;renderVoiceDraft();await loadTasks();await loadWorkspace();}
   catch(err){alert(err.message);button.disabled=false;button.textContent="Повторить сохранение";}
  });
  $("voice-discard").addEventListener("click",()=>{voiceDraft=null;renderVoiceDraft();});
