@@ -38,8 +38,8 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
  const unestimated=active.filter(t=>!Number.isFinite(Number(t.estimated_minutes))||Number(t.estimated_minutes)<=0);
  const waiting=(tasks||[]).filter(t=>t.status==="waiting");
  for(const target of targets||[]){
-  const key=target.direction_id?"direction:"+target.direction_id:"life:"+target.life_area_id;
-  const type=target.direction_id?"income":"personal";
+  const key=target.direction_id?"direction:"+target.direction_id:target.life_area_id?"life:"+target.life_area_id:"project:"+target.project_id;
+  const type=target.direction_id?"income":target.life_area_id?"personal":"project";
   const row=areaGroups.get(key)||{key,title:target.title||"Сфера",type,task_count:0,estimated_minutes:0,weekly_estimated_minutes:0,unestimated_count:0};
   row.target_minutes=Number(target.target_minutes)||0;areaGroups.set(key,row);
  }
