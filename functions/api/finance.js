@@ -72,7 +72,7 @@ export async function onRequestPost({request,env}) {
     if(!obligationId||!DATE.test(date))return json({error:"Проверь обязательство и дату оплаты"},400);
     const obligation=await env.DB.prepare("SELECT * FROM payment_obligations WHERE id=? AND user_id=? AND active=1").bind(obligationId,user.id).first();
     if(!obligation)return json({error:"Активный платёж не найден"},404);
-    const nextDue=addPeriod(obligation.due_date,obligation.frequency);
+    const nextDue=addPeriod(obligation.due_date,obligation.frequency,obligation.recurrence_day);
     const statements=[env.DB.prepare("INSERT INTO obligation_payments (id,user_id,obligation_id,amount,paid_on) VALUES (?,?,?,?,?)").bind(id,user.id,obligationId,obligation.amount,date)];
     if(nextDue)statements.push(env.DB.prepare("UPDATE payment_obligations SET due_date=? WHERE id=? AND user_id=?").bind(nextDue,obligationId,user.id));
     else statements.push(env.DB.prepare("UPDATE payment_obligations SET active=0 WHERE id=? AND user_id=?").bind(obligationId,user.id));
@@ -82,7 +82,7 @@ export async function onRequestPost({request,env}) {
   if(action==="obligation"){
     const amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.due_date||""),frequency=String(body.frequency||"once");
     if(!amount||!title||title.length>180||!DATE.test(date)||!["once","monthly","weekly"].includes(frequency))return json({error:"Проверь название, сумму, дату и периодичность платежа"},400);
-    await env.DB.prepare("INSERT INTO payment_obligations (id,user_id,title,amount,due_date,frequency,category,notes) VALUES (?,?,?,?,?,?,?,?)").bind(id,user.id,title,amount,date,frequency,String(body.category||"Обязательный платёж").slice(0,80),String(body.notes||"").slice(0,500)).run();
+    await env.DB.prepare("INSERT INTO payment_obligations (id,user_id,title,amount,due_date,frequency,recurrence_day,category,notes) VALUES (?,?,?,?,?,?,?,?,?)").bind(id,user.id,title,amount,date,frequency,frequency==="monthly"?Number(date.slice(8,10)):null,String(body.category||"Обязательный платёж").slice(0,80),String(body.notes||"").slice(0,500)).run();
     return json({ok:true,id},201);
   }
   return json({error:"Неизвестный тип финансовой операции"},400);
