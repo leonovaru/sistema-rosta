@@ -119,6 +119,40 @@
             <div><h3>Последние расходы</h3><div id="finance-expense-list" class="finance-list"></div></div>
           </div>
         </section>
+                <section class="panel charity-panel">
+          <div class="section-head"><div><p class="eyebrow">СОЦИАЛЬНЫЙ ВКЛАД</p><h2>Благотворительные проекты</h2></div><span class="muted">Отдельно от коммерческих доходов</span></div>
+          <div id="charity-summary" class="finance-metrics"></div>
+          <div class="charity-forms">
+            <form id="charity-project-form" class="finance-form"><h3>Новый проект помощи</h3>
+              <label>Название<input id="charity-project-title" required maxlength="180" placeholder="Например, помощь приюту"></label>
+              <label>Организация / получатель<input id="charity-project-organization" maxlength="180" placeholder="Название приюта или фонда"></label>
+              <label>Цель и описание<textarea id="charity-project-purpose" rows="2" maxlength="2000"></textarea></label>
+              <label>Целевая сумма, ₽<input id="charity-project-target" type="number" min="0" step="0.01" value="0"></label>
+              <div class="workspace-inline"><label>Начало<input id="charity-project-start" type="date"></label><label>Окончание<input id="charity-project-end" type="date"></label></div>
+              <button class="button primary">Создать проект</button>
+            </form>
+            <form id="charity-transaction-form" class="finance-form"><h3>Записать поступление или расход</h3>
+              <label>Проект<select id="charity-transaction-project" required><option value="">Сначала создай проект</option></select></label>
+              <label>Операция<select id="charity-transaction-type"><option value="donation">Пожертвование / сбор</option><option value="expense">Расход на помощь</option></select></label>
+              <label>Название<input id="charity-transaction-title" required maxlength="180" placeholder="Пожертвование, корм, лечение"></label>
+              <label>Категория<input id="charity-transaction-category" maxlength="80" placeholder="Корм, лечение, транспорт"></label>
+              <label>Сумма, ₽<input id="charity-transaction-amount" type="number" min="0.01" step="0.01" required></label>
+              <label>Дата<input id="charity-transaction-date" type="date" required></label>
+              <label>Примечание<textarea id="charity-transaction-note" rows="2" maxlength="1000"></textarea></label>
+              <button class="button primary">Добавить операцию</button>
+            </form>
+            <form id="charity-person-form" class="finance-form"><h3>Партнёр, волонтёр или сторонник</h3>
+              <label>Имя / организация<input id="charity-person-name" required maxlength="160"></label>
+              <label>Роль<select id="charity-person-role"><option value="partner">Партнёр</option><option value="volunteer">Волонтёр</option><option value="supporter">Сторонник / жертвователь</option></select></label>
+              <label>Проект<select id="charity-person-project"><option value="">Общий контакт</option></select></label>
+              <label>Контакт<input id="charity-person-contact" maxlength="240"></label>
+              <label>Заметки<textarea id="charity-person-notes" rows="2" maxlength="1000"></textarea></label>
+              <button class="button primary">Добавить участника</button>
+            </form>
+          </div>
+          <div class="charity-columns"><div><h3>Проекты и сборы</h3><div id="charity-projects" class="workspace-list"></div></div><div><h3>Последние операции</h3><div id="charity-transactions" class="finance-list"></div></div><div><h3>Люди и партнёры</h3><div id="charity-people" class="workspace-list"></div></div></div>
+          <p class="fine">Операции этого раздела не попадают в коммерческую выручку и личные расходы. Для отражения реального движения денег в общем бюджете позднее добавим явную связь с личными счетами, чтобы не задваивать пожертвования и переводы.</p>
+        </section>
         <section class="panel analytics-panel">
           <div class="section-head"><div><p class="eyebrow">АНАЛИЗ РЕЗУЛЬТАТОВ</p><h2>Время и эффективность</h2></div><div class="analytics-actions"><span class="muted" id="analytics-period"></span><button type="button" class="button ghost" id="refresh-analytics">Обновить</button></div></div>
           <div class="analytics-metrics" id="analytics-summary"></div>
