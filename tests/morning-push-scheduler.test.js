@@ -8,7 +8,7 @@ const nativeFetch = globalThis.fetch;
 const nativeCrypto = globalThis.crypto;
 const b64u = value => Buffer.from(value).toString("base64url");
 
-async function makeEnv(fetchImpl) {
+async function makeEnv(fetchImpl, subscriptionCount = 1) {
   const pair = await webcrypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
   const privateJwk = await webcrypto.subtle.exportKey("jwk", pair.privateKey);
   const publicJwk = await webcrypto.subtle.exportKey("jwk", pair.publicKey);
@@ -16,11 +16,12 @@ async function makeEnv(fetchImpl) {
   const clientPublic = new Uint8Array(await webcrypto.subtle.exportKey("raw", client.publicKey));
   const publicBytes = Buffer.concat([Buffer.from([4]), Buffer.from(publicJwk.x, "base64url"), Buffer.from(publicJwk.y, "base64url")]);
   const deliveries = new Map();
-  const subscriptions = [{
-    id: "sub-1", user_id: "user-1", endpoint: "https://fcm.googleapis.com/fcm/send/test",
+  const subscriptions = Array.from({ length: subscriptionCount }, (_, index) => ({
+    id: "sub-" + (index + 1), user_id: "user-1",
+    endpoint: "https://fcm.googleapis.com/fcm/send/test-" + (index + 1),
     p256dh: b64u(clientPublic), auth: b64u(webcrypto.getRandomValues(new Uint8Array(16))),
     timezone: "Europe/Moscow"
-  }];
+  }));
   const DB = {
     prepare(sql) {
       let values = [];
@@ -57,7 +58,11 @@ async function makeEnv(fetchImpl) {
             if (row) row.status = "failed";
             return { meta: { changes: row ? 1 : 0 } };
           }
-          if (sql.includes("DELETE FROM push_subscriptions")) return { meta: { changes: 1 } };
+          if (sql.includes("DELETE FROM push_subscriptions")) {
+            const index = subscriptions.findIndex(item => item.id === values[0]);
+            if (index >= 0) subscriptions.splice(index, 1);
+            return { meta: { changes: index >= 0 ? 1 : 0 } };
+          }
           return { meta: { changes: 0 } };
         }
       };
@@ -112,5 +117,27 @@ test("failed delivery can be retried during the morning retry window", async () 
     });
     assert.equal(sends, 2);
     assert.equal([...env._deliveries.values()][0].status, "sent");
+  } finally { globalThis.fetch = nativeFetch; }
+});
+
+
+test("an expired device subscription is removed without blocking other devices", async () => {
+  let sends = 0;
+  const env = await makeEnv(async () => {
+    sends++;
+    return new Response(null, { status: sends === 1 ? 410 : 201 });
+  }, 2);
+  globalThis.fetch = env._fetch;
+  try {
+    await withFixedTime("2026-11-15T03:00:00.000Z", async () => {
+      await worker.scheduled({}, env, {});
+    });
+    assert.equal(sends, 2);
+    assert.equal(env._subscriptions.length, 1);
+    assert.equal(env._subscriptions[0].id, "sub-2");
+    const rows = [...env._deliveries.values()];
+    assert.equal(rows.length, 2);
+    assert.equal(rows.find(row => row.subscriptionId === "sub-1").status, "failed");
+    assert.equal(rows.find(row => row.subscriptionId === "sub-2").status, "sent");
   } finally { globalThis.fetch = nativeFetch; }
 });
