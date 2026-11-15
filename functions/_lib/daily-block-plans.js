@@ -7,16 +7,17 @@ function minuteOfDay(value){
  return Number.isInteger(hour)&&hour>=0&&hour<24&&Number.isInteger(minute)&&minute>=0&&minute<60?hour*60+minute:null;
 }
 function clock(total){const value=((total%1440)+1440)%1440;return String(Math.floor(value/60)).padStart(2,"0")+":"+String(value%60).padStart(2,"0");}
-export function buildDailyBlockPlans(days=[],{focusMinutes=50,breakMinutes=10,startTime="09:00",calendarEvents=[]}={}){
+export function buildDailyBlockPlans(days=[],{focusMinutes=50,breakMinutes=10,startTime="09:00",prepBeforeMinutes=0,bufferAfterMinutes=0,calendarEvents=[]}={}){
  const focus=Math.max(15,Math.min(120,Math.round(Number(focusMinutes)||50))),rest=Math.max(3,Math.min(30,Math.round(Number(breakMinutes)||10)));
- const start=minuteOfDay(startTime),safeStart=start===null?540:start;
+ const start=minuteOfDay(startTime),safeStart=start===null?540:start;\n const prep=Math.max(0,Math.min(120,Math.round(Number(prepBeforeMinutes)||0))),after=Math.max(0,Math.min(120,Math.round(Number(bufferAfterMinutes)||0)));
  return (days||[]).filter(day=>Array.isArray(day.tasks)&&day.tasks.length).map(day=>{
   const gross=Math.max(0,Number(day.gross_capacity_minutes)||Number(day.available_minutes)||0),budget=Math.max(0,Number(day.available_minutes)||0);
   const windowEnd=safeStart+gross;
   const events=(calendarEvents||[]).filter(event=>event.status!=="cancelled"&& !["sleep","work"].includes(event.event_type)&&String(event.start_at||"").slice(0,10)===day.date)
    .map(event=>({start:minuteOfDay(event.start_at),end:minuteOfDay(event.end_at)}))
-   .filter(event=>event.start!==null&&event.end!==null&&event.end>safeStart&&event.start<windowEnd)
-   .map(event=>({start:Math.max(safeStart,event.start),end:Math.min(windowEnd,event.end)})).sort((a,b)=>a.start-b.start);
+   .filter(event=>event.start!==null&&event.end!==null&&event.end>event.start)
+   .map(event=>({start:Math.max(safeStart,event.start-prep),end:Math.min(windowEnd,event.end+after)}))
+   .filter(event=>event.end>safeStart&&event.start<windowEnd).sort((a,b)=>a.start-b.start);
   const gaps=[];let cursor=safeStart;
   for(const event of events){if(event.start>cursor)gaps.push({start:cursor,end:event.start});cursor=Math.max(cursor,event.end);}
   if(cursor<windowEnd)gaps.push({start:cursor,end:windowEnd});
