@@ -89,7 +89,7 @@ function renderVoiceDraft(){
   const button=$("voice-save");button.disabled=true;button.textContent="Сохраняю…";
   const selected=[...box.querySelectorAll("[data-voice-task]")].filter(card=>card.querySelector('[data-vf="include"]')?.checked);
   const indexMap=new Map(selected.map((card,newIndex)=>[Number(card.dataset.voiceTask),newIndex]));
-  const workspaceItems=[...box.querySelectorAll("[data-voice-workspace]")].filter(card=>card.querySelector('[data-wf="include"]')?.checked).map(card=>{const i=Number(card.dataset.voiceWorkspace),item=draft.workspace_items[i],get=field=>card.querySelector('[data-wf="'+field+'"]')?.value||"";return item.type==="client"?{...item,name:get("name"),contact:get("contact"),notes:get("notes")} :item.type==="project"?{...item,title:get("name"),description:get("description"),expected_result:get("expected_result"),deadline:get("deadline")||null}:item;});
+  const workspaceItems=[...box.querySelectorAll("[data-voice-workspace]")].map(card=>{const i=Number(card.dataset.voiceWorkspace),item=draft.workspace_items[i],get=field=>card.querySelector('[data-wf="'+field+'"]')?.value||"";const include=!!card.querySelector('[data-wf="include"]')?.checked;return item.type==="client"?{...item,include,name:get("name"),contact:get("contact"),notes:get("notes")} :item.type==="project"?{...item,include,title:get("name"),description:get("description"),expected_result:get("expected_result"),deadline:get("deadline")||null}:{...item,include};});
   const tasks=selected.map(card=>{
    const i=Number(card.dataset.voiceTask),get=field=>card.querySelector('[data-vf="'+field+'"]')?.value||"";
    const parent=draft.tasks[i].parent_index;
