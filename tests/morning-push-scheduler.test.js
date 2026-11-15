@@ -45,8 +45,9 @@ async function makeEnv(fetchImpl, subscriptionCount = 1, timezone = "Europe/Mosc
           }
           if (sql.includes("SET status='sending'")) {
             const row = [...deliveries.values()].find(item => item.id === values[0]);
-            if (!row || row.status === "sent" || row.status === "sending") return { meta: { changes: 0 } };
-            row.status = "sending"; row.updated++;
+            if (!row || row.status === "sent") return { meta: { changes: 0 } };
+            if (row.status === "sending" && row.updatedMs > Date.now() - 120000) return { meta: { changes: 0 } };
+            row.status = "sending"; row.updated++; row.updatedMs = Date.now();
             return { meta: { changes: 1 } };
           }
           if (sql.includes("SET status='sent'")) {
@@ -78,6 +79,9 @@ async function makeEnv(fetchImpl, subscriptionCount = 1, timezone = "Europe/Mosc
     _deliveries: deliveries,
     _subscriptions: subscriptions,
     _setTimezone(value) { currentTimezone = value; },
+    _seedDelivery({ id = "stale-delivery", subscriptionId = "sub-1", localDate = "2026-11-15", status = "sending", updatedMs = Date.now() - 180000 } = {}) {
+      deliveries.set(subscriptionId + "|" + localDate, { id, userId: "user-1", subscriptionId, localDate, timezone: currentTimezone, scheduledAt: new Date().toISOString(), status, updated: 0, updatedMs });
+    },
     _fetch: fetchImpl
   };
 }
@@ -264,5 +268,34 @@ test("a failed delivery is not retried after the 06:10 local cutoff", async () =
       await worker.scheduled({}, env, {});
     });
     assert.equal(sends, 1);
+  } finally { globalThis.fetch = nativeFetch; }
+});
+
+
+test("stale sending lease is reclaimed after a worker interruption", async () => {
+  let sends = 0;
+  const env = await makeEnv(async () => { sends++; return new Response(null, { status: 201 }); });
+  env._seedDelivery({ updatedMs: new Date("2026-11-15T02:57:00.000Z").getTime() });
+  globalThis.fetch = env._fetch;
+  try {
+    await withFixedTime("2026-11-15T03:00:00.000Z", async () => {
+      await worker.scheduled({}, env, {});
+    });
+    assert.equal(sends, 1);
+    assert.equal([...env._deliveries.values()][0].status, "sent");
+  } finally { globalThis.fetch = nativeFetch; }
+});
+
+test("fresh sending lease is not reclaimed by an overlapping worker", async () => {
+  let sends = 0;
+  const env = await makeEnv(async () => { sends++; return new Response(null, { status: 201 }); });
+  env._seedDelivery({ updatedMs: new Date("2026-11-15T02:59:30.000Z").getTime() });
+  globalThis.fetch = env._fetch;
+  try {
+    await withFixedTime("2026-11-15T03:00:00.000Z", async () => {
+      await worker.scheduled({}, env, {});
+    });
+    assert.equal(sends, 0);
+    assert.equal([...env._deliveries.values()][0].status, "sending");
   } finally { globalThis.fetch = nativeFetch; }
 });
