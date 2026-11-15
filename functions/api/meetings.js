@@ -46,7 +46,7 @@ export async function onRequestPost({request,env}){
  const [projects,clients,settings]=await Promise.all([
   env.DB.prepare("SELECT id,title,client_id,direction_id,expected_result,status FROM projects WHERE user_id=? AND status NOT IN ('done','archived') ORDER BY updated_at DESC LIMIT 50").bind(user.id).all(),
   env.DB.prepare("SELECT id,name,direction_id,status FROM clients WHERE user_id=? AND status!='closed' ORDER BY updated_at DESC LIMIT 100").bind(user.id).all(),
-  env.DB.prepare("SELECT timezone FROM user_settings WHERE user_id=?").bind(user.id).first()
+  env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first()
  ]);
  const timezone=settings?.timezone||"Europe/Moscow";
  const today=new Intl.DateTimeFormat("en-CA",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
