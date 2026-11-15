@@ -14,8 +14,6 @@ self.addEventListener("push", event => {
   const title = data.title || "Система роста";
   const options = {
     body: data.body || "Доброе утро! Ты уже проснулась?",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
     tag: data.tag || "morning-wake",
     renotify: false,
     requireInteraction: true,
