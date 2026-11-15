@@ -68,6 +68,13 @@
             <div class="cashflow-days"><h4>Динамика остатка по дням</h4><div id="cashflow-daily" class="finance-list"></div></div>
             <p class="fine">Прогноз учитывает плановые записи, активные повторяющиеся обязательства и минимальные платежи по открытым долгам. Он не включает автоматически ещё не внесённые доходы и переменные расходы; неизвестные проценты по долгам не начисляются. Отрицательные дни показывают риск кассового разрыва.</p>
           </section>
+          <section class="revenue-plan-section">
+            <div class="section-head"><div><p class="eyebrow">ЦЕЛЬ 300 000 ₽</p><h3>План дохода по направлениям</h3></div><button type="button" class="button ghost" id="refresh-revenue-plan">Обновить</button></div>
+            <p class="fine">Распредели месячную цель между направлениями. Для каждого можно указать средний чек — система рассчитает нужное число продаж, недельный и дневной ориентиры. Пока доли не заданы, показывается равное предварительное распределение.</p>
+            <div id="revenue-plan-summary" class="analytics-metrics"></div>
+            <div id="revenue-plan-directions" class="revenue-plan-list"></div>
+            <div class="revenue-plan-actions"><span id="revenue-plan-share-note" class="fine"></span><button type="button" class="button primary" id="save-revenue-plan">Сохранить распределение</button></div>
+          </section>
           <p class="fine">Погашение долгов и оплата обязательных платежей учитываются отдельно. Не записывай их повторно как обычные расходы. Проценты по долгам пока фиксируются справочно и не начисляются автоматически.</p>
           <div class="finance-forms">
             <form id="expense-form" class="finance-form"><h3>Записать расход</h3>
