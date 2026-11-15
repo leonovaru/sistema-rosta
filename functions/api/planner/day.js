@@ -82,6 +82,7 @@ export async function onRequestPost({ request, env }) {
         temperature:0.2
       });
       const parsed = parseJson(response?.response);
+      if (!parsed || !Array.isArray(parsed.items)) throw new Error("Invalid planner response");
       const byId = new Map(tasks.map(task => [task.id,task]));
       const items = Array.isArray(parsed?.items) ? parsed.items.slice(0,7).map(item => {
         const task = byId.get(String(item.task_id));
