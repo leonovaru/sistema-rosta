@@ -12,14 +12,14 @@ export async function onRequestGet({request,env}){
   env.DB.prepare("SELECT t.id,t.title,t.description,t.status,t.priority,t.due_date,t.completed_at,t.created_at,t.project_id,p.title AS project_title FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id WHERE t.user_id=? AND (t.client_id=? OR t.project_id IN (SELECT id FROM projects WHERE user_id=? AND client_id=?)) ORDER BY COALESCE(t.completed_at,t.due_date,t.created_at) DESC LIMIT 150").bind(user.id,clientId,user.id,clientId).all(),
   env.DB.prepare("SELECT id,title,meeting_date,summary,decisions_json,agreements_json,open_questions_json,project_id FROM meeting_notes WHERE user_id=? AND client_id=? ORDER BY meeting_date DESC,created_at DESC LIMIT 100").bind(user.id,clientId).all(),
   env.DB.prepare("SELECT id,interaction_type,title,body,occurred_on,project_id,created_at FROM client_interactions WHERE user_id=? AND client_id=? ORDER BY occurred_on DESC,created_at DESC LIMIT 150").bind(user.id,clientId).all(),
-  env.DB.prepare("SELECT id,title,amount,received_on,note,project_id FROM income_entries WHERE user_id=? AND client_id=? ORDER BY received_on DESC,created_at DESC LIMIT 100").bind(user.id,clientId).all(),
+  env.DB.prepare("SELECT id,note AS title,amount,received_on,note,project_id FROM income_entries WHERE user_id=? AND client_id=? ORDER BY received_on DESC,created_at DESC LIMIT 100").bind(user.id,clientId).all(),
   env.DB.prepare("SELECT id,title,category,amount,spent_on,note,project_id FROM expenses WHERE user_id=? AND client_id=? ORDER BY spent_on DESC,created_at DESC LIMIT 100").bind(user.id,clientId).all()
  ]);
  const projectNames=new Map(projects.results.map(project=>[project.id,project.title]));
  const timeline=[
   ...meetings.results.map(x=>({kind:"meeting",date:x.meeting_date,title:x.title,body:x.summary,details:{decisions:parseArray(x.decisions_json),agreements:parseArray(x.agreements_json),open_questions:parseArray(x.open_questions_json)},project_id:x.project_id,project_title:projectNames.get(x.project_id)||"",id:x.id})),
   ...interactions.results.map(x=>({kind:x.interaction_type,date:x.occurred_on,title:x.title,body:x.body,project_id:x.project_id,project_title:projectNames.get(x.project_id)||"",id:x.id})),
-  ...income.results.map(x=>({kind:"income",date:x.received_on,title:x.title,body:x.note,amount:Number(x.amount),project_id:x.project_id,project_title:projectNames.get(x.project_id)||"",id:x.id})),
+  ...income.results.map(x=>({kind:"income",date:x.received_on,title:x.title||"Поступление",body:x.note,amount:Number(x.amount),project_id:x.project_id,project_title:projectNames.get(x.project_id)||"",id:x.id})),
   ...expenses.results.map(x=>({kind:"expense",date:x.spent_on,title:x.title,body:x.note,category:x.category,amount:Number(x.amount),project_id:x.project_id,project_title:projectNames.get(x.project_id)||"",id:x.id})),
   ...tasks.results.map(x=>({kind:"task",date:String(x.completed_at||x.due_date||x.created_at||"").slice(0,10),title:x.title,body:x.description,project_title:x.project_title,status:x.status,priority:x.priority,id:x.id})),
   ...projects.results.map(x=>({kind:"project",date:x.updated_at?.slice(0,10),title:x.title,body:x.expected_result,status:x.status,deadline:x.deadline,id:x.id}))
