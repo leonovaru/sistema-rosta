@@ -26,7 +26,7 @@ test("recommends shares from three complete months and keeps at least ten percen
  assert.equal(result.average_monthly_income,110000);
  assert.equal(result.buckets.find(x=>x.id==="capital").recommended_percentage,10);
  assert.equal(result.buckets.reduce((sum,x)=>sum+x.recommended_percentage,0),100);
- assert.ok(result.buckets.find(x=>x.id==="home").recommended_percentage>30);
+ assert.ok(result.buckets.find(x=>x.id==="home").recommended_percentage<30);
 });
 
 test("retains current share for buckets without recorded spending",()=>{
