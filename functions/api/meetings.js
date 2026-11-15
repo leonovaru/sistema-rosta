@@ -25,7 +25,12 @@ export async function onRequestGet({request,env}){
  const links=meetingIds.length?await env.DB.prepare("SELECT l.meeting_id,l.agreement_index,l.task_id,t.title AS task_title,t.status AS task_status,t.due_date AS task_due_date FROM meeting_task_links l JOIN tasks t ON t.id=l.task_id AND t.user_id=l.user_id WHERE l.user_id=? AND l.meeting_id IN ("+meetingIds.map(()=>"?").join(",")+")").bind(user.id,...meetingIds).all():{results:[]};
  const byMeeting=new Map();
  for(const link of links.results){if(!byMeeting.has(link.meeting_id))byMeeting.set(link.meeting_id,[]);byMeeting.get(link.meeting_id).push(link);}
- return json({meetings:result.results.map(row=>({...row,decisions:parseModelJson(row.decisions_json)||[],agreements:(parseModelJson(row.agreements_json)||[]).map((agreement,index)=>{const link=(byMeeting.get(row.id)||[]).find(x=>x.agreement_index===index);return link?{...agreement,task_id:link.task_id,task_title:link.task_title,task_status:link.task_status,task_due_date:link.task_due_date}:agreement;}),open_questions:parseModelJson(row.open_questions_json)||[]}))});
+ const meetings=result.results.map(row=>({...row,decisions:parseModelJson(row.decisions_json)||[],agreements:(parseModelJson(row.agreements_json)||[]).map((agreement,index)=>{const link=(byMeeting.get(row.id)||[]).find(x=>x.agreement_index===index);return link?{...agreement,task_id:link.task_id,task_title:link.task_title,task_status:link.task_status,task_due_date:link.task_due_date}:agreement;}),open_questions:parseModelJson(row.open_questions_json)||[]}));
+ const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+ const today=new Intl.DateTimeFormat("en-CA",{timeZone:settings?.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+ const agreements=meetings.flatMap(meeting=>meeting.agreements.map(agreement=>({...agreement,meeting_title:meeting.title,meeting_date:meeting.meeting_date})));
+ const followup_summary={agreements_total:agreements.length,linked_tasks:agreements.filter(x=>x.task_id).length,completed:agreements.filter(x=>x.task_status==="done").length,overdue:agreements.filter(x=>x.task_id&&x.task_status!=="done"&&(x.task_due_date||x.due_date)&&((x.task_due_date||x.due_date)<today)).length,pending:agreements.filter(x=>!x.task_id||x.task_status!=="done").length,open_questions:meetings.reduce((sum,x)=>sum+x.open_questions.length,0)};
+ return json({meetings,followup_summary,today});
 }
 
 export async function onRequestPost({request,env}){
