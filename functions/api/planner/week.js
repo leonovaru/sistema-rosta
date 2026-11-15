@@ -10,6 +10,7 @@ import { buildCalibratedWeeklyLoad, toCalibratedAdjustmentDays } from "../../_li
 import { attachWeeklyTaskPriority } from "../../_lib/weekly-task-priority.js";
 import { buildWeeklyAttentionScenarios } from "../../_lib/weekly-attention-scenarios.js";
 import { buildDailyRhythmInsights } from "../../_lib/daily-rhythm-insights.js";
+import { buildRecoveryInsights } from "../../_lib/recovery-insights.js";
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day;}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 export async function onRequestGet({request,env}){
@@ -24,7 +25,7 @@ export async function onRequestGet({request,env}){
   env.DB.prepare("SELECT wt.direction_id,wt.life_area_id,wt.project_id,wt.target_minutes,COALESCE(d.title,la.title,p.title) AS title FROM weekly_time_targets wt LEFT JOIN directions d ON d.id=wt.direction_id AND d.user_id=wt.user_id LEFT JOIN life_areas la ON la.id=wt.life_area_id AND la.user_id=wt.user_id LEFT JOIN projects p ON p.id=wt.project_id AND p.user_id=wt.user_id WHERE wt.user_id=?").bind(user.id).all(),
   env.DB.prepare("SELECT e.started_at,e.duration_minutes,t.direction_id,d.title AS direction_title,t.life_area_id,la.title AS life_area_title,t.project_id,p.title AS project_title,t.client_id,c.name AS client_name FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN directions d ON d.id=COALESCE(t.direction_id,p.direction_id,c.direction_id) LEFT JOIN life_areas la ON la.id=t.life_area_id AND la.user_id=t.user_id WHERE e.user_id=? AND e.ended_at IS NOT NULL AND e.started_at>=? AND e.started_at<? ORDER BY e.started_at").bind(user.id,addDays(today,-1)+"T00:00:00.000Z",addDays(endExclusive,1)+"T00:00:00.000Z").all(),
   env.DB.prepare("SELECT t.estimated_minutes,t.actual_minutes,t.status,t.direction_id,d.title AS direction_title,t.life_area_id,la.title AS life_area_title,t.project_id,p.title AS project_title FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN directions d ON d.id=COALESCE(t.direction_id,p.direction_id) LEFT JOIN life_areas la ON la.id=t.life_area_id AND la.user_id=t.user_id WHERE t.user_id=? AND t.status='done' AND t.completed_at>=datetime('now','-90 days') AND t.estimated_minutes IS NOT NULL AND t.actual_minutes IS NOT NULL").bind(user.id).all(),
-  env.DB.prepare("SELECT started_at,duration_minutes FROM task_time_entries WHERE user_id=? AND ended_at IS NOT NULL AND started_at>=datetime('now','-90 days') AND duration_minutes>0 ORDER BY started_at").bind(user.id).all(),
+  env.DB.prepare("SELECT started_at,ended_at,duration_minutes FROM task_time_entries WHERE user_id=? AND ended_at IS NOT NULL AND started_at>=datetime('now','-90 days') AND duration_minutes>0 ORDER BY started_at").bind(user.id).all(),
   env.DB.prepare("SELECT fell_asleep_at,woke_at,timezone,asleep_timezone,wake_timezone FROM sleep_sessions WHERE user_id=? AND sleep_date>=date('now','-90 days') AND fell_asleep_at IS NOT NULL AND woke_at IS NOT NULL ORDER BY sleep_date").bind(user.id).all()
  ]);
  const events=expandRecurringEvents(calendarRows.results,today+"T00:00",endExclusive+"T00:00");
@@ -42,5 +43,6 @@ export async function onRequestGet({request,env}){
  week.focus_scenarios=buildWeeklyFocusScenarios(week.area_balance,week.days);
  week.attention_scenarios=buildWeeklyAttentionScenarios(week.days);
  week.daily_rhythm=buildDailyRhythmInsights(rhythmTimeRows.results,sleepRows.results,timezone);
+ week.recovery_insights=buildRecoveryInsights(rhythmTimeRows.results,timezone);
  return json({week});
 }
