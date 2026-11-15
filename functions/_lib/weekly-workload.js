@@ -1,3 +1,4 @@
+import { isTaskAvailableForPlanning } from "./task-planning-availability.js";
 function addDays(date,days){const value=new Date(date+"T12:00:00Z");value.setUTCDate(value.getUTCDate()+days);return value.toISOString().slice(0,10);}
 function weekday(date){const day=new Date(date+"T12:00:00Z").getUTCDay();return day||7;}
 function eventMinutes(event){const start=new Date(event.actual_start_at||event.start_at),end=new Date(event.actual_end_at||event.end_at);return Number.isFinite(start.getTime())&&Number.isFinite(end.getTime())?Math.max(0,Math.round((end-start)/60000)):0;}
@@ -24,7 +25,7 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
   const row=eventGroups.get(type)||{type,title:({meeting:"Встречи",travel:"Поездки",hobby:"Хобби",sleep:"Сон",work:"Работа",personal:"Личные дела",other:"Прочее"})[type]||"Прочее",minutes:0,count:0};
   row.minutes+=minutes;row.count++;eventGroups.set(type,row);
  }
- const active=(tasks||[]).filter(t=>["todo","doing"].includes(t.status));
+ const active=(tasks||[]).filter(t=>["todo","doing"].includes(t.status)&&isTaskAvailableForPlanning(t));
  const projectTargets=new Set((targets||[]).map(t=>t.project_id).filter(Boolean));
  const areaGroups=new Map();
  for(const task of active){
@@ -38,7 +39,7 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
  const noDeadline=active.filter(t=>!t.due_date);
  const overdue=active.filter(t=>t.due_date&&t.due_date<today);
  const unestimated=active.filter(t=>!Number.isFinite(Number(t.estimated_minutes))||Number(t.estimated_minutes)<=0);
- const waiting=(tasks||[]).filter(t=>t.status==="waiting");
+ const waiting=(tasks||[]).filter(t=>t.status==="waiting"&&isTaskAvailableForPlanning(t));
  for(const target of targets||[]){
   const key=target.direction_id?"direction:"+target.direction_id:target.life_area_id?"life:"+target.life_area_id:"project:"+target.project_id;
   const type=target.direction_id?"income":target.life_area_id?"personal":"project";
