@@ -1,21 +1,11 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
 import { expandRecurringEvents } from "../../_lib/calendar.js";
+import { mergeMinuteIntervals, intersectMinuteIntervals, allocateTaskSlots } from "../../_lib/planner-scheduling.js";
 
 function localDate(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(new Date());
   const values = Object.fromEntries(parts.map(part => [part.type,part.value]));
   return `${values.year}-${values.month}-${values.day}`;
-}
-function mergeIntervals(intervals) {
-  const sorted=[...intervals].filter(x=>x.end>x.start).sort((a,b)=>a.start-b.start);
-  const merged=[];
-  for(const item of sorted){const last=merged[merged.length-1];if(last&&item.start<=last.end)last.end=Math.max(last.end,item.end);else merged.push({...item});}
-  return merged;
-}
-function intersectIntervals(left,right) {
-  const result=[];
-  for(const a of left) for(const b of right){const start=Math.max(a.start,b.start),end=Math.min(a.end,b.end);if(end>start)result.push({start,end});}
-  return mergeIntervals(result);
 }
 function localDateTime(date, minute) {
   const value=new Date(date+"T00:00:00Z");value.setUTCMinutes(minute);
@@ -90,13 +80,14 @@ export async function onRequestPost({ request, env }) {
     if(interval.end>start){busyFutureMinutes+=interval.end-start;cursor=interval.end;}
   }
   if(cursor<1440) freeIntervals.push({start:cursor,end:1440});
-  const workWindows=mergeIntervals(calendarEvents.filter(event=>event.event_type==="work"&&event.status!=="completed").map(event=>{
+  const hasExplicitWorkWindows=calendarEvents.some(event=>event.event_type==="work");
+  const workWindows=mergeMinuteIntervals(calendarEvents.filter(event=>event.event_type==="work").map(event=>{
     const startDate=event.start_at.slice(0,10),endDate=event.end_at.slice(0,10);
     const start=startDate<today?0:startDate>today?1440:Number(event.start_at.slice(11,13))*60+Number(event.start_at.slice(14,16));
     const end=endDate>today?1440:endDate<today?0:Number(event.end_at.slice(11,13))*60+Number(event.end_at.slice(14,16));
     return {start:Math.max(nowMinute,start),end:Math.min(1440,end)};
   }));
-  const schedulingIntervals=workWindows.length?intersectIntervals(freeIntervals,workWindows):freeIntervals;
+  const schedulingIntervals=hasExplicitWorkWindows?intersectMinuteIntervals(freeIntervals,workWindows):freeIntervals;
   const workIntervals = calendarEvents.filter(event=>event.event_type==="work"&&(event.status==="completed"||event.actual_start_at||event.actual_end_at)).map(event=>{
     const endValue=event.status==="completed"&&event.actual_end_at?event.actual_end_at:event.end_at;
     const startValue=event.status==="completed"&&event.actual_start_at?event.actual_start_at:event.start_at;
@@ -157,20 +148,11 @@ export async function onRequestPost({ request, env }) {
       source = "ai";
     } catch { /* безопасно используем алгоритмический план */ }
   }
-  const slotPool=schedulingIntervals.map(interval=>({...interval}));
-  const placed=[],unplaced=[];
-  for(const item of plan.items){
-    const slot=slotPool.find(interval=>interval.end-interval.start>=item.minutes);
-    if(!slot){unplaced.push({...item,scheduled:false,schedule_note:"Нет непрерывного свободного окна такой длины"});continue;}
-    const start=slot.start,end=start+item.minutes;
-    placed.push({...item,scheduled:true,start_at:localDateTime(today,start),end_at:localDateTime(today,end)});
-    slot.start=end;
-  }
-  placed.sort((a,b)=>a.start_at.localeCompare(b.start_at));
-  plan.items=[...placed,...unplaced];
-  plan.total_minutes=placed.reduce((sum,item)=>sum+item.minutes,0);
-  plan.reserve_minutes=Math.max(0,capacity-plan.total_minutes);
-  plan.unscheduled_count=unplaced.length;
+  const allocation = allocateTaskSlots(plan.items, schedulingIntervals, today);
+  plan.items = allocation.items;
+  plan.total_minutes = allocation.scheduled_minutes;
+  plan.reserve_minutes = Math.max(0, capacity - plan.total_minutes);
+  plan.unscheduled_count = allocation.unscheduled_count;
   plan.source = source;
   plan.daily_capacity_minutes = dailyCapacity;
   plan.available_minutes = capacity;
