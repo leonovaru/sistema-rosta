@@ -50,6 +50,13 @@ export async function onRequestPost({request,env}){
   ]);
   const allowed={direction_id:new Set(dirs.results.map(x=>x.id)),client_id:new Set(clients.results.map(x=>x.id)),project_id:new Set(projects.results.map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
   const allowedTaskIds=new Set(openTasks.results.map(x=>x.id));
+  const meetingId=String(body.meeting_id||"");
+  let meetingAgreements=[];
+  if(meetingId){
+   const meeting=await env.DB.prepare("SELECT agreements_json FROM meeting_notes WHERE id=? AND user_id=?").bind(meetingId,user.id).first();
+   if(!meeting)return json({error:"Протокол встречи не найден"},404);
+   try{meetingAgreements=JSON.parse(meeting.agreements_json||"[]");}catch{meetingAgreements=[];}
+  }
   const prepared=requestedTasks.map((t,i)=>({
    id:newId(),title:String(t.title||"").trim().slice(0,240),description:String(t.description||"").trim().slice(0,2000),
    direction_id:allowed.direction_id.has(t.direction_id)?t.direction_id:null,
@@ -60,10 +67,18 @@ export async function onRequestPost({request,env}){
    life_area_id:allowed.life_area_id.has(t.life_area_id)?t.life_area_id:null,
    due_date:safeDate(t.due_date),priority:["low","medium","high"].includes(t.priority)?t.priority:"medium",
    estimated_minutes:Number.isInteger(Number(t.estimated_minutes))&&Number(t.estimated_minutes)>=5&&Number(t.estimated_minutes)<=10000?Number(t.estimated_minutes):null,
+   meeting_agreement_index:Number.isInteger(t.meeting_agreement_index)?t.meeting_agreement_index:null,
    parent_index:Number.isInteger(t.parent_index)&&t.parent_index>=0&&t.parent_index<i?t.parent_index:null,
    operation:t.operation==="update"&&allowedTaskIds.has(t.target_task_id)?"update":"create",
    target_task_id:allowedTaskIds.has(t.target_task_id)?t.target_task_id:null
   }));
+  if(meetingId){
+   const indices=prepared.map(x=>x.meeting_agreement_index);
+   if(indices.some(index=>index===null||index<0||index>=meetingAgreements.length)||new Set(indices).size!==indices.length)return json({error:"Не удалось сопоставить поручения с протоколом встречи"},400);
+   const existing=await env.DB.prepare("SELECT agreement_index FROM meeting_task_links WHERE user_id=? AND meeting_id=?").bind(user.id,meetingId).all();
+   const linked=new Set(existing.results.map(x=>x.agreement_index));
+   if(indices.some(index=>linked.has(index)))return json({error:"Одно из поручений уже связано с задачей. Обнови протокол перед повторным созданием."},409);
+  }
   if(prepared.some(t=>!t.title))return json({error:"У каждой задачи должно быть название. Проверь пустые строки в черновике."},400);
   if(prepared.some(t=>t.parent_index!==null&&t.parent_index>=prepared.length))return json({error:"Проверь связь подзадач с родительскими задачами."},400);
   if(!prepared.length&&!workspaceItems.length)return json({error:"Не найдено изменений для сохранения"},400);
@@ -143,6 +158,7 @@ export async function onRequestPost({request,env}){
    if(parent&&(t.project_id!==parent.project_id||t.life_area_id!==parent.life_area_id||t.client_id!==parent.client_id||t.direction_id!==parent.direction_id))return json({error:"Подзадача должна относиться к той же области, что и родительская задача"},400);
    statements.push(env.DB.prepare("INSERT INTO tasks (id,user_id,direction_id,client_id,project_id,life_area_id,parent_task_id,title,description,due_date,priority,estimated_minutes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
     .bind(t.id,user.id,t.direction_id,t.client_id,t.project_id,t.life_area_id,parent?.id||null,t.title,t.description,t.due_date,t.priority,t.estimated_minutes));
+   if(meetingId&&t.meeting_agreement_index!==null)statements.push(env.DB.prepare("INSERT INTO meeting_task_links (user_id,meeting_id,agreement_index,task_id) VALUES (?,?,?,?)").bind(user.id,meetingId,t.meeting_agreement_index,t.id));
    createdTaskIds.push(t.id);created++;
   }
   if(statements.length)await env.DB.batch(statements);
