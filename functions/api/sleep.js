@@ -47,7 +47,7 @@ export async function onRequestPost({request,env}){
   const now=new Date(),parts=localParts(now,timezone),today=parts.year+"-"+parts.month+"-"+parts.day;
   if(action==="bed"||action==="asleep"){
     const value=body?.at?String(body.at):parts.year+"-"+parts.month+"-"+parts.day+"T"+parts.hour+":"+parts.minute;
-    if(!LOCAL_DATE_TIME.test(value)||value.slice(0,10)!==today)return json({error:"Время отметки должно относиться к сегодняшней дате"},400);
+    if(!validateTime(value)||value.slice(0,10)!==today)return json({error:"Укажите корректное время сегодняшнего дня"},400);
     const row=await ensureSession(env,user.id,today,timezone);
     const field=action==="bed"?"went_to_bed_at":"fell_asleep_at";
     const source=action==="bed"?"bed_source":"asleep_source";
@@ -57,13 +57,15 @@ export async function onRequestPost({request,env}){
   }
   if(action==="wake"){
     const wakeAt=body?.at?String(body.at):parts.year+"-"+parts.month+"-"+parts.day+"T"+parts.hour+":"+parts.minute;
-    if(!LOCAL_DATE_TIME.test(wakeAt)||wakeAt.slice(0,10)!==today)return json({error:"Время пробуждения должно относиться к сегодняшней дате"},400);
+    if(!validateTime(wakeAt)||wakeAt.slice(0,10)!==today)return json({error:"Укажите корректное время пробуждения за сегодня"},400);
     const alreadyConfirmed=await env.DB.prepare("SELECT * FROM sleep_sessions WHERE user_id=? AND wake_date=? AND woke_at IS NOT NULL ORDER BY updated_at DESC LIMIT 1").bind(user.id,today).first();
     if(alreadyConfirmed)return json({ok:true,duplicate:true,session:alreadyConfirmed});
     let row=await env.DB.prepare("SELECT * FROM sleep_sessions WHERE user_id=? AND woke_at IS NULL AND sleep_date IN (?,?) ORDER BY sleep_date DESC LIMIT 1").bind(user.id,today,shiftDate(today,-1)).first();
     if(!row)row=await ensureSession(env,user.id,shiftDate(today,-1),timezone);
     if(row.woke_at)return json({ok:true,duplicate:true,session:row});
-        const saved=await env.DB.prepare("UPDATE sleep_sessions SET woke_at=?,wake_date=?,wake_source=?,wake_confidence='exact',timezone=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND woke_at IS NULL").bind(wakeAt,today,body?.source==="push"?"push":"app",timezone,row.id,user.id).run();
+    const lastSleepTime=row.fell_asleep_at||row.went_to_bed_at;
+    if(lastSleepTime&&wakeAt<=lastSleepTime)return json({error:"Время пробуждения должно быть позже времени отхода ко сну"},400);
+    const saved=await env.DB.prepare("UPDATE sleep_sessions SET woke_at=?,wake_date=?,wake_source=?,wake_confidence='exact',timezone=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND woke_at IS NULL").bind(wakeAt,today,body?.source==="push"?"push":"app",timezone,row.id,user.id).run();
     if(!saved.meta.changes)return json({ok:true,duplicate:true,session:await env.DB.prepare("SELECT * FROM sleep_sessions WHERE id=? AND user_id=?").bind(row.id,user.id).first()});
     return json({ok:true,session:await env.DB.prepare("SELECT * FROM sleep_sessions WHERE id=? AND user_id=?").bind(row.id,user.id).first()});
   }
