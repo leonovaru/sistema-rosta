@@ -32,17 +32,18 @@ export function calculateProjectWorkload(projects = [], today, capacity = null) 
     const deadline = project.deadline || null;
     const days = deadline ? Math.round((Date.parse(deadline + "T12:00:00Z") - Date.parse(today + "T12:00:00Z")) / 86400000) : null;
     const workdays = deadline && days >= 0 && ["active", "waiting"].includes(project.status) ? businessDaysInclusive(today, deadline) : null;
-    const minutes = Math.max(0, Number(project.open_estimated_minutes) || 0);
+    const isActive = ["active", "waiting"].includes(project.status);
+    const minutes = isActive ? Math.max(0, Number(project.open_estimated_minutes) || 0) : 0;
     return {
       ...project,
       workload: {
         estimated_minutes: minutes,
         estimated_hours: Math.round(minutes / 60 * 100) / 100,
-        unestimated_open_tasks: Math.max(0, Number(project.unestimated_open_tasks) || 0),
+        unestimated_open_tasks: isActive ? Math.max(0, Number(project.unestimated_open_tasks) || 0) : 0,
         days_to_deadline: days,
         workdays_to_deadline: workdays,
         required_hours_per_workday: workdays > 0 ? Math.round(minutes / 60 / workdays * 100) / 100 : null,
-        estimate_complete: Number(project.unestimated_open_tasks || 0) === 0
+        estimate_complete: !isActive || Number(project.unestimated_open_tasks || 0) === 0
       }
     };
   });
