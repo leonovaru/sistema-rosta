@@ -3,6 +3,7 @@ import { expandRecurringEvents } from "../../_lib/calendar.js";
 import { calculateCalendarBusyByDay } from "../../_lib/calendar-capacity.js";
 import { buildWeeklyWorkload } from "../../_lib/weekly-workload.js";
 import { buildWeeklyAdjustmentProposals } from "../../_lib/weekly-adjustments.js";
+import { buildWeeklyFocusScenarios } from "../../_lib/weekly-focus-scenarios.js";
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day;}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 export async function onRequestGet({request,env}){
@@ -21,5 +22,6 @@ export async function onRequestGet({request,env}){
  const configured=Number(settings?.work_capacity_configured)===1&&workingDays.length>0&&Number(settings?.daily_capacity_minutes)>0;
  const week=buildWeeklyWorkload({today,workingDays,dailyCapacityMinutes:settings?.daily_capacity_minutes,configured,calendarDays,calendarEvents:events,tasks:taskRows.results,targets:targetRows.results});
  week.adjustment_proposals=buildWeeklyAdjustmentProposals(week.days,taskRows.results);
+ week.focus_scenarios=buildWeeklyFocusScenarios(week.area_balance,week.days);
  return json({week});
 }
