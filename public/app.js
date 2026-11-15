@@ -238,7 +238,7 @@ function renderTasks() {
       '</div></article>';
   }).join("") : '<p class="muted">В этом периоде задач нет. Добавь следующий конкретный шаг.</p>';
   document.querySelectorAll("[data-task]").forEach(input => input.addEventListener("change", async () => {
-    await api("/api/tasks", { method: "PATCH", body: JSON.stringify({ id: input.dataset.task, status: input.checked ? "done" : "todo" }) }); await loadTasks();
+    await api("/api/tasks", { method: "PATCH", body: JSON.stringify({ id: input.dataset.task, status: input.checked ? "done" : "todo" }) }); await loadTasks(); await rebuildDayPlanIfToday();
   }));
   document.querySelectorAll("[data-save-time]").forEach(button => button.addEventListener("click", async () => {
     const input = document.querySelector('[data-actual-time="' + button.dataset.saveTime + '"]');
@@ -368,12 +368,12 @@ function renderCalendar() {
   if(selectedTasks.length)$("calendar-events").innerHTML+='<div class="calendar-task-agenda"><b>Задачи на этот день</b>'+selectedTasks.map(t=>'<label class="calendar-task-chip"><input type="checkbox" data-calendar-task="'+escapeHtml(t.id)+'" '+(t.status==="done"?"checked":"")+'><span>'+escapeHtml(t.title)+'</span></label>').join("")+'</div>';
   document.querySelectorAll("[data-calendar-task]").forEach(input=>input.addEventListener("change",async()=>{
     input.disabled=true;
-    try{await api("/api/tasks",{method:"PATCH",body:JSON.stringify({id:input.dataset.calendarTask,status:input.checked?"done":"todo"})});await loadTasks();await loadCalendar();if(calendarSelected===localToday)await loadPlanner();}
+    try{await api("/api/tasks",{method:"PATCH",body:JSON.stringify({id:input.dataset.calendarTask,status:input.checked?"done":"todo"})});await loadTasks();await loadCalendar();await rebuildDayPlanIfToday();}
     catch(err){alert(err.message);input.checked=!input.checked;input.disabled=false;}
   }));
   document.querySelectorAll("[data-calendar-date]").forEach(b=>b.addEventListener("click",async()=>{calendarSelected=b.dataset.calendarDate;const d=new Date(calendarSelected+"T12:00:00");calendarAnchor=new Date(d.getFullYear(),d.getMonth(),1);await loadCalendar();}));
   document.querySelectorAll("[data-edit-event]").forEach(b=>b.addEventListener("click",()=>editCalendarEvent(calendarEvents.find(e=>e.id===b.dataset.editEvent))));
-  document.querySelectorAll("[data-delete-event]").forEach(b=>b.addEventListener("click",async()=>{if(!confirm("Удалить это событие и всю серию повторений?"))return;try{await api("/api/calendar/events",{method:"DELETE",body:JSON.stringify({id:b.dataset.deleteEvent})});currentDayPlan=null;renderDayPlan();await loadCalendar();}catch(err){alert(err.message);}}));
+  document.querySelectorAll("[data-delete-event]").forEach(b=>b.addEventListener("click",async()=>{if(!confirm("Удалить это событие и всю серию повторений?"))return;try{await api("/api/calendar/events",{method:"DELETE",body:JSON.stringify({id:b.dataset.deleteEvent})});currentDayPlan=null;renderDayPlan();await loadCalendar();await rebuildDayPlanIfToday();}catch(err){alert(err.message);}}));
 }
 function openCalendarForm(event=null) {
   $("calendar-form").classList.remove("hidden");
@@ -400,7 +400,7 @@ $("calendar-form").addEventListener("submit",async e=>{
   e.preventDefault();
   const id=$("event-id").value;
   const payload={id,title:$("event-title").value,event_type:$("event-type").value,mode:$("event-mode").value,start_at:$("event-start").value,end_at:$("event-end").value,actual_start_at:$("event-actual-start").value||null,actual_end_at:$("event-actual-end").value||null,status:$("event-status").value,repeat_rule:$("event-repeat").value,repeat_until:$("event-repeat-until").value||null,location:$("event-location").value,notes:$("event-notes").value};
-  try{await api("/api/calendar/events",{method:id?"PATCH":"POST",body:JSON.stringify(payload)});$("calendar-form").classList.add("hidden");calendarSelected=payload.start_at.slice(0,10);const selectedDate=new Date(calendarSelected+"T12:00:00");calendarAnchor=new Date(selectedDate.getFullYear(),selectedDate.getMonth(),1);currentDayPlan=null;renderDayPlan();await loadCalendar();}
+  try{await api("/api/calendar/events",{method:id?"PATCH":"POST",body:JSON.stringify(payload)});$("calendar-form").classList.add("hidden");calendarSelected=payload.start_at.slice(0,10);const selectedDate=new Date(calendarSelected+"T12:00:00");calendarAnchor=new Date(selectedDate.getFullYear(),selectedDate.getMonth(),1);currentDayPlan=null;renderDayPlan();await loadCalendar();await rebuildDayPlanIfToday();}
   catch(err){alert(err.message);}
 });
 $("calendar-prev").addEventListener("click",async()=>{if(calendarView==="month"){calendarAnchor=new Date(calendarAnchor.getFullYear(),calendarAnchor.getMonth()-1,1);calendarSelected=dateKey(calendarAnchor);}else calendarSelected=shiftDate(calendarSelected,-7);await loadCalendar();});
@@ -416,6 +416,18 @@ async function loadPlanner() {
     currentDayPlan = data.plan;
     renderDayPlan();
   } catch (err) { $("day-plan").textContent = err.message; }
+}
+async function rebuildDayPlanIfToday() {
+  if (calendarSelected !== localToday) return;
+  try {
+    const capacity = Number(userSettings.daily_capacity_minutes || 360);
+    const data = await api("/api/planner/day", { method:"POST", body:JSON.stringify({ available_minutes:capacity }) });
+    currentDayPlan = data.plan;
+    $("planner-date").textContent = data.date || localToday;
+    renderDayPlan();
+  } catch (err) {
+    console.warn("Не удалось пересчитать план дня:", err);
+  }
 }
 function renderDayPlan() {
   const plan = currentDayPlan;
