@@ -3,6 +3,13 @@ import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
 const TYPES = ["meeting","travel","hobby","sleep","work","personal","other"];
 const MODES = ["none","online","offline"];
 const STATUSES = ["planned","completed","cancelled"];
+async function invalidateTodayPlan(env,userId) {
+  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(userId).first();
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:settings?.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));
+  const today=values.year+"-"+values.month+"-"+values.day;
+  await env.DB.prepare("DELETE FROM daily_plans WHERE user_id=? AND plan_date=?").bind(userId,today).run();
+}
 const DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 
 function cleanEvent(body) {
@@ -51,6 +58,7 @@ export async function onRequestPost({ request, env }) {
     INSERT INTO calendar_events (id,user_id,title,event_type,mode,start_at,end_at,actual_start_at,actual_end_at,location,notes,status)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
   `).bind(id,user.id,e.title,e.event_type,e.mode,e.start_at,e.end_at,e.actual_start_at,e.actual_end_at,e.location,e.notes,e.status).run();
+  await invalidateTodayPlan(env,user.id);
   return json({ ok:true,id },201);
 }
 
@@ -68,6 +76,7 @@ export async function onRequestPatch({ request, env }) {
     WHERE id=? AND user_id=?
   `).bind(e.title,e.event_type,e.mode,e.start_at,e.end_at,e.actual_start_at,e.actual_end_at,e.location,e.notes,e.status,id,user.id).run();
   if (!result.meta.changes) return json({ error:"Событие не найдено" },404);
+  await invalidateTodayPlan(env,user.id);
   return json({ ok:true });
 }
 
@@ -79,5 +88,6 @@ export async function onRequestDelete({ request, env }) {
   if (!id) return json({ error:"Событие не выбрано" },400);
   const result = await env.DB.prepare("DELETE FROM calendar_events WHERE id=? AND user_id=?").bind(id,user.id).run();
   if (!result.meta.changes) return json({ error:"Событие не найдено" },404);
+  await invalidateTodayPlan(env,user.id);
   return json({ ok:true });
 }
