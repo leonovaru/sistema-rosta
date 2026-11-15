@@ -13,3 +13,10 @@ test("keeps zero remaining target at zero actions",()=>{
  const [x]=buildSalesPlan([{direction_id:"a",remaining_target:0,average_sale_amount:10000,contact_to_lead_percent:40,lead_to_sale_percent:20}],30);
  assert.equal(x.sales_required,0);assert.equal(x.outreach_required,0);
 });
+
+test("includes real lead counts separately from calculated outreach requirements",()=>{
+ const [x]=buildSalesPlan([{direction_id:"a",title:"AI",remaining_target:60000,average_sale_amount:20000,contact_to_lead_percent:50,lead_to_sale_percent:25,potential_clients:7,contacted_clients:3}],14);
+ assert.equal(x.potential_clients,7);
+ assert.equal(x.contacted_clients,3);
+ assert.equal(x.outreach_required,24);
+});
