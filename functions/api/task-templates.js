@@ -40,6 +40,7 @@ export async function onRequestPost({request,env}){
   const active=b.active?1:0;
   const r=await env.DB.prepare("UPDATE task_templates SET active=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(active,id,user.id).run();
   if(!r.meta.changes)return json({error:"Шаблон не найден"},404);
+  if(!active){const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();const today=todayInZone(settings?.timezone);await env.DB.prepare("DELETE FROM tasks WHERE template_id=? AND user_id=? AND due_date>? AND status=?").bind(id,user.id,today,"todo").run();}
   return json({ok:true});
  }
  if(action!=="create")return json({error:"Неизвестное действие"},400);
