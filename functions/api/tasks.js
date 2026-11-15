@@ -3,7 +3,13 @@ import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 export async function onRequestGet({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error: "Необходим вход" }, 401);
-  const { results } = await env.DB.prepare("SELECT * FROM tasks WHERE user_id=? ORDER BY CASE status WHEN 'doing' THEN 0 WHEN 'todo' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END, due_date IS NULL, due_date").bind(user.id).all();
+  const { results } = await env.DB.prepare(`
+    SELECT t.*, d.title AS direction_title
+    FROM tasks t LEFT JOIN directions d ON d.id=t.direction_id
+    WHERE t.user_id=?
+    ORDER BY CASE t.status WHEN 'doing' THEN 0 WHEN 'todo' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END,
+      t.due_date IS NULL, t.due_date, t.created_at DESC
+  `).bind(user.id).all();
   return json({ tasks: results });
 }
 
@@ -14,13 +20,15 @@ export async function onRequestPost({ request, env }) {
   const title = String(body?.title || "").trim();
   if (!title || title.length > 240) return json({ error: "Введите название задачи (до 240 символов)" }, 400);
   const directionId = body?.direction_id ? String(body.direction_id) : null;
+  const dueDate = body?.due_date ? String(body.due_date) : null;
+  if (dueDate && !/^\\d{4}-\\d{2}-\\d{2}$/.test(dueDate)) return json({ error: "Проверьте срок задачи" }, 400);
   if (directionId) {
     const owns = await env.DB.prepare("SELECT id FROM directions WHERE id=? AND user_id=?").bind(directionId, user.id).first();
     if (!owns) return json({ error: "Направление не найдено" }, 404);
   }
   const id = newId();
   await env.DB.prepare("INSERT INTO tasks (id,user_id,direction_id,title,description,due_date,priority) VALUES (?,?,?,?,?,?,?)")
-    .bind(id, user.id, directionId, title, String(body?.description || "").slice(0,2000), body?.due_date || null, ["low","medium","high"].includes(body?.priority) ? body.priority : "medium").run();
+    .bind(id, user.id, directionId, title, String(body?.description || "").slice(0,2000), dueDate, ["low","medium","high"].includes(body?.priority) ? body.priority : "medium").run();
   return json({ ok: true, id }, 201);
 }
 
