@@ -1056,7 +1056,7 @@ function renderTasks() {
       await api("/api/task-time", { method:"POST", body:JSON.stringify(isActive ? {action:"pause"} : {action:"start",task_id:taskId}) });
       await loadTasks();
       await rebuildDayPlanIfToday();
-    } catch (err) { alert(err.message); button.disabled = false; }
+    } catch (err) { try { await loadTasks(); } catch {} alert(err.message); button.disabled = false; }
   }));
   document.querySelectorAll("[data-save-time]").forEach(button => button.addEventListener("click", async () => {
     const input = document.querySelector('[data-actual-time="' + button.dataset.saveTime + '"]');
