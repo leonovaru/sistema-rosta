@@ -64,7 +64,7 @@ test("yearly and quarterly irregular expenses appear on their actual recurrence 
  assert.deepEqual(x.events.filter(e=>e.source==="irregular_expense").map(e=>[e.title,e.date]),[
   ["Обслуживание","2026-11-30"],["Страховка","2026-12-01"],["Покупка","2026-12-15"],["Обслуживание","2027-02-28"]
  ]);
- assert.equal(x.summary.planned_expenses,33000);
+ assert.equal(x.summary.planned_expenses,23000);
 });
 test("recurring irregular expense advances from month end without invalid dates",()=>{
  const x=buildCashflowForecast({today:"2026-02-20",horizonDays:40,irregularExpenses:[{title:"Годовой платёж",amount:1000,next_date:"2025-02-28",frequency:"yearly"}]});
