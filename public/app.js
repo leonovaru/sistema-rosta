@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 let authMode = "login";
 let directions = [];
-let userSettings = { monthly_target: 300000, timezone: "Europe/Moscow" };
+let userSettings = { monthly_target: 300000, timezone: "Europe/Moscow" };\nlet allTasks = [];\nlet taskFilter = "today";\nlet localToday = "";
 
 const money = n => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(n || 0)) + " ₽";
 async function api(path, options = {}) {
@@ -31,7 +31,7 @@ $("auth-form").addEventListener("submit", async e => {
 $("logout").addEventListener("click", async () => { await api("/api/auth/logout", { method: "POST" }).catch(() => {}); showAuth(); });
 $("task-form").addEventListener("submit", async e => {
   e.preventDefault();
-  try { await api("/api/tasks", { method: "POST", body: JSON.stringify({ title: $("task-title").value }) }); $("task-title").value = ""; await loadTasks(); }
+  try { await api("/api/tasks", { method: "POST", body: JSON.stringify({ title: $("task-title").value, due_date: $("task-date").value || null, direction_id: $("task-direction").value || null, priority: $("task-priority").value }) }); $("task-title").value = ""; await loadTasks(); }
   catch (err) { alert(err.message); }
 });
 $("income-form").addEventListener("submit", async e => {
@@ -55,7 +55,7 @@ async function loadDirections() {
       <small>${target ? "Осталось: " + money(gap) + " · " + Math.round(actual/target*100) + "% цели" : "Установите месячную цель"}</small>
     </article>`;
   }).join("");
-  $("income-direction").innerHTML = '<option value="">Без привязки</option>' + directions.map(d => `<option value="${d.id}">${escapeHtml(d.title)}</option>`).join("");
+  $("income-direction").innerHTML = '<option value="">Без привязки</option>' + directions.map(d => `<option value="${d.id}">${escapeHtml(d.title)}</option>`).join("");\n  $("task-direction").innerHTML = '<option value="">Без привязки</option>' + directions.map(d => `<option value="${d.id}">${escapeHtml(d.title)}</option>`).join("");
   document.querySelectorAll("[data-save-direction]").forEach(button => button.addEventListener("click", async () => {
     const d = directions.find(item => item.id === button.dataset.saveDirection);
     const input = document.querySelector(`[data-direction-target="${button.dataset.saveDirection}"]`);
@@ -66,13 +66,38 @@ async function loadDirections() {
   }));
 }
 async function loadTasks() {
-  const data = await api("/api/tasks");
-  $("task-count").textContent = data.tasks.filter(t => t.status !== "done").length;
-  $("tasks").innerHTML = data.tasks.length ? data.tasks.map(t => `<label class="task ${t.status === "done" ? "done" : ""}"><input type="checkbox" data-task="${t.id}" ${t.status === "done" ? "checked" : ""}><span>${escapeHtml(t.title)}</span></label>`).join("") : '<p class="muted">Пока нет задач. Добавь один конкретный следующий шаг.</p>';
+  const data = await api("/api/tasks"); allTasks = data.tasks;
+  $("task-count").textContent = allTasks.filter(t => t.status !== "done").length;
+  renderTasks();
+}
+function renderTasks() {
+  const now = new Date(localToday + "T12:00:00");
+  const day = now.getDay() || 7;
+  const monday = new Date(now); monday.setDate(now.getDate() - day + 1);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+  const mondayKey = monday.toISOString().slice(0,10), sundayKey = sunday.toISOString().slice(0,10);
+  const visible = allTasks.filter(task => {
+    if (taskFilter === "all") return true;
+    if (taskFilter === "today") return !task.due_date || task.due_date <= localToday;
+    return task.due_date && task.due_date >= mondayKey && task.due_date <= sundayKey;
+  });
+  $("tasks").innerHTML = visible.length ? visible.map(t => {
+    const dateText = t.due_date ? (t.due_date < localToday ? "Просрочено · " : "") + t.due_date : "Без срока";
+    const priorityText = ({high:"Высокий",medium:"Обычный",low:"Низкий"})[t.priority] || "Обычный";
+    return `<label class="task ${t.status === "done" ? "done" : ""}">
+      <input type="checkbox" data-task="${t.id}" ${t.status === "done" ? "checked" : ""}>
+      <span class="task-body"><b>${escapeHtml(t.title)}</b><small>${escapeHtml(dateText)} · ${escapeHtml(t.direction_title || "Без направления")} · ${priorityText}</small></span>
+    </label>`;
+  }).join("") : '<p class="muted">В этом периоде задач нет. Добавь следующий конкретный шаг.</p>';
   document.querySelectorAll("[data-task]").forEach(input => input.addEventListener("change", async () => {
     await api("/api/tasks", { method: "PATCH", body: JSON.stringify({ id: input.dataset.task, status: input.checked ? "done" : "todo" }) }); await loadTasks();
   }));
 }
+document.querySelectorAll("[data-task-filter]").forEach(button => button.addEventListener("click", () => {
+  taskFilter = button.dataset.taskFilter;
+  document.querySelectorAll("[data-task-filter]").forEach(item => item.classList.toggle("active", item === button));
+  renderTasks();
+}));
 async function loadIncome() {
   const data = await api("/api/income");
   $("actual").textContent = money(data.month_total);
