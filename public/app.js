@@ -1008,6 +1008,30 @@ $("recurring-task-list").addEventListener("click",async e=>{
  catch(err){alert(err.message);b.disabled=false;}
 });
 
+let taskTimerPollHandle = null;
+let taskTimerPollInFlight = false;
+async function refreshTaskTimerState() {
+  if (taskTimerPollInFlight || document.visibilityState === "hidden") return;
+  taskTimerPollInFlight = true;
+  try {
+    const next = await api("/api/task-time");
+    if (JSON.stringify(next) !== JSON.stringify(taskTimerState)) {
+      taskTimerState = next;
+      if (allTasks.length && $("tasks")) renderTasks();
+    }
+  } catch {
+    // Keep the last known state; the next visible poll will retry.
+  } finally {
+    taskTimerPollInFlight = false;
+  }
+}
+function startTaskTimerSync() {
+  if (taskTimerPollHandle !== null) clearInterval(taskTimerPollHandle);
+  taskTimerPollHandle = setInterval(refreshTaskTimerState, 15000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refreshTaskTimerState();
+  });
+}
 async function loadTasks() {
   const [data, timerData] = await Promise.all([api("/api/tasks"), api("/api/task-time")]); allTasks = data.tasks; taskTimerState = timerData;
   $("task-parent").innerHTML = '<option value="">Самостоятельная задача</option>' + allTasks.filter(t=>t.status!=="done").map(t=>'<option value="'+escapeHtml(t.id)+'">'+escapeHtml(t.title)+'</option>').join("");
@@ -1610,7 +1634,7 @@ async function boot() {
       try{await api("/api/sleep",{method:"POST",body:JSON.stringify({action:"wake",source:"push"})});}
       catch(error){$("sleep-status").textContent="Не удалось автоматически подтвердить пробуждение. Нажмите «Подтвердить пробуждение» после восстановления соединения.";}
     }
-    await refreshWakeNotificationStatus().catch(()=>{}); await loadDashboardData(); await loadFinance(); await loadProfitability(); await loadRevenuePlan(); await loadRevenueScenarios(); await loadSalesPlan(); await loadDeals(); await loadAnalytics(); await loadWorkspace(); await loadCharity(); await loadDreams(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadSleep().catch(err=>{ $("sleep-status").textContent="Не удалось загрузить записи сна: "+err.message; }); await loadPlanner();
+    await refreshWakeNotificationStatus().catch(()=>{}); await loadDashboardData(); await loadFinance(); await loadProfitability(); await loadRevenuePlan(); await loadRevenueScenarios(); await loadSalesPlan(); await loadDeals(); await loadAnalytics(); await loadWorkspace(); await loadCharity(); await loadDreams(); await loadRecurringTemplates(); await loadTasks(); startTaskTimerSync(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadSleep().catch(err=>{ $("sleep-status").textContent="Не удалось загрузить записи сна: "+err.message; }); await loadPlanner();
   } catch { showAuth(); }
 }
 boot();
