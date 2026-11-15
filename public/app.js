@@ -127,9 +127,29 @@ $("cash-reserves").addEventListener("click",async e=>{
  if(add){const r=cashReservesData.reserves.find(x=>x.id===add.dataset.reserveAdd);if(!r)return;const raw=prompt("Сколько добавить к резерву? Осталось накопить: "+money(Number(r.target_amount)-Number(r.current_amount)));if(raw===null)return;const amount=Number(raw);if(!Number.isFinite(amount)||amount<=0){alert("Укажи сумму больше нуля.");return;}try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({action:"update",id:r.id,title:r.title,purpose:r.purpose,target_amount:r.target_amount,current_amount:Math.min(Number(r.target_amount),Number(r.current_amount)+amount),monthly_contribution:r.monthly_contribution,target_date:r.target_date})});await loadCashReserves();await loadCashflowForecast();}catch(err){alert(err.message);}return;}
  const b=e.target.closest("[data-reserve-delete]");if(!b)return;if(!confirm("Удалить этот резерв?"))return;try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({action:"delete",id:b.dataset.reserveDelete})});await loadCashReserves();await loadCashflowForecast();}catch(err){alert(err.message);}
 });
+let irregularExpenseData=null;
+async function loadIrregularExpenses(){
+ irregularExpenseData=await api("/api/finance/irregular-expenses");
+ const labels={once:"один раз",yearly:"ежегодно",quarterly:"раз в квартал"};
+ $("irregular-expense-list").innerHTML=irregularExpenseData.items.length?irregularExpenseData.items.map(x=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+escapeHtml(x.category)+' · '+x.next_date+' · '+labels[x.frequency]+' · '+money(x.amount)+'</small>'+(x.notes?'<small>'+escapeHtml(x.notes)+'</small>':'')+'</div><button class="button ghost" data-irregular-delete="'+escapeHtml(x.id)+'">Удалить</button></article>').join(""):'<p class="muted">Нерегулярные расходы пока не добавлены.</p>';
+}
+$("irregular-expense-form").addEventListener("submit",async e=>{
+ e.preventDefault();
+ try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({title:$("irregular-title").value,category:$("irregular-category").value,amount:$("irregular-amount").value,next_date:$("irregular-date").value,frequency:$("irregular-frequency").value,notes:$("irregular-notes").value})});$("irregular-expense-form").reset();$("irregular-date").value=cashflowData?.period?.from||"";await loadIrregularExpenses();await loadCashflowForecast();}
+ catch(err){alert(err.message);}
+});
+$("irregular-expense-list").addEventListener("click",async e=>{
+ const b=e.target.closest("[data-irregular-delete]");if(!b)return;
+ if(!confirm("Удалить этот нерегулярный расход?"))return;
+ try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({action:"delete",id:b.dataset.irregularDelete})});await loadIrregularExpenses();await loadCashflowForecast();}
+ catch(err){alert(err.message);}
+});
 async function loadCashflowForecast(){
  cashflowData=await api("/api/finance/forecast?days="+$("cashflow-days").value);
  await loadCashReserves();
+ await loadIrregularExpenses();
+ $("irregular-date").min=cashflowData.period.from;
+ if(!$("irregular-date").value)$("irregular-date").value=cashflowData.period.from;
  $("cashflow-opening-balance").value=String(cashflowData.starting_balance||0);
  $("cashflow-date").min=cashflowData.period.from;
  $("cashflow-date").value=cashflowData.period.from;
@@ -139,7 +159,7 @@ async function loadCashflowForecast(){
  ].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
  const vf=cashflowData.variable_expense_forecast;
  $("variable-expense-forecast").innerHTML='<h4>Оценка обычных расходов</h4><p class="fine">Средние суммы за завершённые месяцы: '+vf.based_on_months.join(", ")+'. В расчёте остатка сумма распределяется по дням месяца только математически; фиктивные даты покупок не создаются.</p><div class="analytics-metrics"><article><span>Оценка на '+vf.target_month+'</span><b>'+money(vf.total)+'</b></article><article><span>Обычные расходы за выбранный период</span><b>'+money(s.variable_expenses)+'</b></article></div>'+cashflowData.variable_expenses_by_month.map(m=>'<article class="finance-row"><div><b>'+m.month+'</b><small>'+m.categories.map(c=>escapeHtml(c.category)+': '+money(c.monthly_amount)+(c.source==="monthly_budget"?" · бюджет":" · история")).join(" · ")+'</small></div><strong>'+money(m.total)+'</strong></article>').join("")+(vf.categories.length?'':'<p class="muted">Пока недостаточно истории расходов для прогноза. Добавь бюджеты по категориям, чтобы включить их в расчёт.</p>');
- $("cashflow-events").innerHTML=cashflowData.events.length?cashflowData.events.map(x=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+x.date+' · '+(x.type==="income"?"Поступление":"Расход")+(x.direction_title?" · "+escapeHtml(x.direction_title):"")+(x.source==="obligation"?" · обязательство":x.source==="debt_minimum"?" · минимальный платёж":" · план")+'</small></div><strong class="'+(x.type==="income"?"cashflow-in":"cashflow-out")+'">'+(x.type==="income"?"+":"−")+money(x.amount)+'</strong>'+(x.source==="planned"?'<button class="button ghost" data-cashflow-delete="'+escapeHtml(x.id||"")+'">×</button>':"")+'</article>').join(""):'<p class="muted">На выбранный период пока нет запланированных движений.</p>';
+ $("cashflow-events").innerHTML=cashflowData.events.length?cashflowData.events.map(x=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+x.date+' · '+(x.type==="income"?"Поступление":"Расход")+(x.direction_title?" · "+escapeHtml(x.direction_title):"")+(x.source==="obligation"?" · обязательство":x.source==="debt_minimum"?" · минимальный платёж":x.source==="irregular_expense"?" · нерегулярный расход":" · план")+'</small></div><strong class="'+(x.type==="income"?"cashflow-in":"cashflow-out")+'">'+(x.type==="income"?"+":"−")+money(x.amount)+'</strong>'+(x.source==="planned"?'<button class="button ghost" data-cashflow-delete="'+escapeHtml(x.id||"")+'">×</button>':"")+'</article>').join(""):'<p class="muted">На выбранный период пока нет запланированных движений.</p>';
  $("cashflow-daily").innerHTML=cashflowData.days.filter((x,i)=>i===0||x.events.length||i===cashflowData.days.length-1||x.date.slice(8,10)==="01").map(x=>'<article class="finance-row"><div><b>'+x.date+'</b><small>+'+money(x.income)+' / −'+money(x.expenses)+'</small></div><strong>'+money(x.balance)+'</strong></article>').join("");
  const risk=s.negative_days.length;
  $("cashflow-daily").insertAdjacentHTML("beforebegin",risk?'<p class="cashflow-warning">Возможен кассовый разрыв: '+risk+' дней с отрицательным остатком. Первый — '+s.negative_days[0]+'.</p>':'<p class="cashflow-safe">По внесённым данным отрицательного остатка не прогнозируется.</p>');
