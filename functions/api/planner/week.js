@@ -47,6 +47,6 @@ export async function onRequestGet({request,env}){
  week.recovery_insights=buildRecoveryInsights(rhythmTimeRows.results,timezone);
  const url=new URL(request.url),focusMinutes=Number(url.searchParams.get("focus_minutes"))||50,breakMinutes=Number(url.searchParams.get("break_minutes"))||10;
  week.daily_block_preferences={focus_minutes:focusMinutes,break_minutes:breakMinutes};
- week.daily_block_plans=buildDailyBlockPlans(week.days,{focusMinutes,breakMinutes});
+ week.daily_block_plans=buildDailyBlockPlans(week.days,{focusMinutes,breakMinutes,startTime:url.searchParams.get("start_time")||"09:00",calendarEvents:events});
  return json({week});
 }
