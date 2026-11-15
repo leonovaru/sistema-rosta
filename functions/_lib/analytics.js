@@ -12,16 +12,17 @@ function finish(map) {
   return [...map.values()].map(x=>({...x,variance_minutes:x.actual_minutes-x.estimated_minutes,completion_rate:x.tasks?Math.round(x.completed/x.tasks*100):0,overrun_rate:x.tasks?Math.round(x.overrun_tasks/x.tasks*100):0})).sort((a,b)=>b.actual_minutes-a.actual_minutes||b.tasks-a.tasks);
 }
 export function buildTaskAnalytics(rows=[]) {
-  const directions=new Map(),projects=new Map(),lifeAreas=new Map(),months=new Map();
+  const directions=new Map(),clients=new Map(),projects=new Map(),lifeAreas=new Map(),months=new Map();
   for(const row of rows){
     bucket(directions,row.direction_id||"unassigned",row.direction_title||"Без направления",row);
+    bucket(clients,row.client_id||"unassigned",row.client_name||"Без клиента",row);
     bucket(projects,row.project_id||"unassigned",row.project_title||"Без проекта",row);
     bucket(lifeAreas,row.life_area_id||"unassigned",row.life_area_title||"Без личной области",row);
-    const month=String(row.completed_at||row.created_at||"").slice(0,7);
+    const month=row.status==="done"&&row.completed_at?String(row.completed_at).slice(0,7):"";
     if(month)bucket(months,month,month,row);
   }
   const totals=rows.reduce((a,r)=>{a.tasks++;if(r.status==="done")a.completed++;a.estimated_minutes+=minutes(r.estimated_minutes);a.actual_minutes+=minutes(r.actual_minutes);if(minutes(r.estimated_minutes)>0&&minutes(r.actual_minutes)>minutes(r.estimated_minutes))a.overrun_tasks++;return a;},{tasks:0,completed:0,estimated_minutes:0,actual_minutes:0,overrun_tasks:0});
-  return {summary:{...totals,variance_minutes:totals.actual_minutes-totals.estimated_minutes,completion_rate:totals.tasks?Math.round(totals.completed/totals.tasks*100):0,overrun_rate:totals.tasks?Math.round(totals.overrun_tasks/totals.tasks*100):0},by_direction:finish(directions),by_project:finish(projects),by_life_area:finish(lifeAreas),by_month:finish(months).sort((a,b)=>a.id.localeCompare(b.id))};
+  return {summary:{...totals,variance_minutes:totals.actual_minutes-totals.estimated_minutes,completion_rate:totals.tasks?Math.round(totals.completed/totals.tasks*100):0,overrun_rate:totals.tasks?Math.round(totals.overrun_tasks/totals.tasks*100):0},by_direction:finish(directions),by_client:finish(clients),by_project:finish(projects),by_life_area:finish(lifeAreas),by_month:finish(months).sort((a,b)=>a.id.localeCompare(b.id))};
 }
 export function buildTimeAnalytics(rows=[],calendarRows=[]) {
   const tracked=rows.reduce((sum,r)=>sum+minutes(r.tracked_minutes),0);
