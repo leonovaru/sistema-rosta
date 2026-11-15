@@ -46,6 +46,31 @@ const DAILY_BLOCK_VARIANTS=[
  {key:"focus",title:"Концентрация",description:"Сначала задачи с высокой когнитивной нагрузкой"},
  {key:"flexible",title:"Гибкий",description:"Сначала короткая рутина, затем длинные сложные блоки"}
 ];
+
+function summarizeDailyBlockScenario(days,plans){
+ const sourceTasks=(days||[]).flatMap(day=>day.tasks||[]);
+ const planByDate=new Map((plans||[]).map(plan=>[plan.date,plan]));
+ let totalTasks=0,completedTasks=0,partialTasks=0,unplacedTasks=0,highPriorityTotal=0,highPriorityCompleted=0;
+ let focusMinutes=0,breakMinutes=0,availableMinutes=0,unallocatedMinutes=0,unusedMinutes=0,overloadedDays=0;
+ for(const day of days||[]){
+  const plan=planByDate.get(day.date);if(!plan)continue;
+  const tasks=day.tasks||[],unallocatedById=new Map((plan.unallocated||[]).map(item=>[String(item.task_id),item.minutes]));
+  const placedIds=new Set((plan.blocks||[]).filter(block=>block.type==="focus"&&block.task_id!=null).map(block=>String(block.task_id)));
+  for(const task of tasks){
+   totalTasks++;
+   const id=String(task.id),remaining=Number(unallocatedById.get(id)||0),placed=placedIds.has(id);
+   if(remaining<=0){completedTasks++;}else if(placed){partialTasks++;}else{unplacedTasks++;}
+   const isHigh=task.priority==="high"||task.priority_label==="Высокий"||Number(task.priority_score)>=60;
+   if(isHigh){highPriorityTotal++;if(remaining<=0)highPriorityCompleted++;}
+  }
+  focusMinutes+=plan.focus_minutes||0;breakMinutes+=plan.break_minutes||0;availableMinutes+=plan.available_minutes||0;
+  unallocatedMinutes+=(plan.unallocated||[]).reduce((sum,item)=>sum+Number(item.minutes||0),0);
+  unusedMinutes+=Math.max(0,Number(plan.available_minutes||0)-Number(plan.focus_minutes||0)-Number(plan.break_minutes||0));
+  if(plan.overloaded)overloadedDays++;
+ }
+ return {total_tasks:totalTasks,completed_tasks:completedTasks,partially_scheduled_tasks:partialTasks,unplaced_tasks:unplacedTasks,high_priority_tasks:highPriorityTotal,high_priority_completed:highPriorityCompleted,focus_minutes:focusMinutes,break_minutes:breakMinutes,available_minutes:availableMinutes,unallocated_minutes:unallocatedMinutes,unused_minutes:unusedMinutes,overloaded_days:overloadedDays,cross_day_moves:0};
+}
+
 export function buildDailyBlockScenarios(days=[],options={}){
  const scenarios=DAILY_BLOCK_VARIANTS.map(variant=>{
   const ordered=(days||[]).map(day=>({...day,tasks:[...(day.tasks||[])].sort((a,b)=>{
@@ -56,7 +81,7 @@ export function buildDailyBlockScenarios(days=[],options={}){
    if(variant.key==="focus")return load(b)-load(a)||score(b)-score(a)||minutes(b)-minutes(a);
    return load(a)-load(b)||(load(a)===1?minutes(a)-minutes(b):minutes(b)-minutes(a))||score(b)-score(a);
   })}));
-  return {...variant,plans:buildDailyBlockPlans(ordered,options)};
+  const plans=buildDailyBlockPlans(ordered,options);\n  return {...variant,plans,summary:summarizeDailyBlockScenario(ordered,plans)};
  });
  return scenarios;
 }
