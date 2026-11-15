@@ -28,3 +28,18 @@ test("monthly task is not generated for a date that has already passed this mont
 test("monthly task later this month is not skipped",()=>{
  assert.deepEqual(recurringTaskDates({start_date:"2026-01-10",recurrence:"monthly"}, "2026-11-05","2026-12-05"),["2026-11-10"]);
 });
+
+import { normalizeRecurringSteps } from "../functions/_lib/recurring-tasks.js";
+
+test("recurring template subtasks are trimmed and blank lines are ignored",()=>{
+ assert.deepEqual(normalizeRecurringSteps(["  Протереть поверхности  ","","Помыть пол"]),["Протереть поверхности","Помыть пол"]);
+});
+test("recurring template accepts no subtasks",()=>{
+ assert.deepEqual(normalizeRecurringSteps(undefined),[]);
+});
+test("recurring template rejects more than 30 subtasks",()=>{
+ assert.equal(normalizeRecurringSteps(Array.from({length:31},(_,i)=>"Шаг "+i)),null);
+});
+test("recurring template rejects an overlong subtask title",()=>{
+ assert.equal(normalizeRecurringSteps(["x".repeat(241)]),null);
+});
