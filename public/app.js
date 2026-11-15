@@ -771,6 +771,7 @@ async function loadTasks() {
   $("task-parent").innerHTML = '<option value="">Самостоятельная задача</option>' + allTasks.filter(t=>t.status!=="done").map(t=>'<option value="'+escapeHtml(t.id)+'">'+escapeHtml(t.title)+'</option>').join("");
   $("task-count").textContent = allTasks.filter(t => t.status !== "done").length;
   renderTasks();
+  await loadWeeklyWorkload().catch(()=>{});
 }
 function renderTasks() {
   const now = new Date(localToday + "T00:00:00Z");
@@ -1016,6 +1017,16 @@ function renderDayPlan() {
     (items.length ? '<ol class="planner-items">' + items.map(item => '<li><div><b>' + escapeHtml(item.title) + '</b><small>' + escapeHtml(item.reason || "") + '</small>' + (item.scheduled ? '<small class="planner-slot">' + item.start_at.slice(11,16) + '–' + item.end_at.slice(11,16) + '</small>' : item.scheduled === false ? '<small class="planner-unscheduled">' + escapeHtml(item.schedule_note || "Не помещается в свободные окна") + '</small>' : '') + '</div><span>' + duration(item.minutes) + '</span></li>').join("") + '</ol>' : '<p class="muted">Пока нет подходящих незавершённых задач. Добавь конкретные следующие шаги в список задач.</p>') +
     '<div class="planner-summary"><span>Свободно с учётом календаря: <b>' + duration(plan.available_minutes || 0) + '</b></span><span>Уже отработано: <b>' + duration(plan.work_already_done_minutes || 0) + '</b></span><span>Календарь занят: <b>' + duration(plan.calendar_busy_minutes_remaining || 0) + '</b></span><span>Запланировано: <b>' + duration(plan.total_minutes || 0) + '</b></span><span>Резерв: <b>' + duration(plan.reserve_minutes || 0) + '</b></span><span>Без временного слота: <b>' + Number(plan.unscheduled_count || 0) + '</b></span><span>Источник: <b>' + (plan.source === "ai" ? "ИИ" : "алгоритм") + '</b></span></div>';
 }
+async function loadWeeklyWorkload(){
+ const data=await api("/api/planner/week"),week=data.week,s=week.summary;
+ const dayNames=["Вс","Пн","Вт","Ср","Чт","Пт","Сб"];
+ const summary=[["Ёмкость недели",week.configured?duration(s.gross_capacity_minutes):"не настроена"],["Занято календарём",week.configured?duration(s.calendar_busy_minutes):"—"],["Доступно для работы",week.configured?duration(s.available_minutes):"—"],["Оценённые задачи со сроком",duration(s.estimated_task_minutes)],["Просрочено",s.overdue_task_count],["Без оценки",s.unestimated_task_count]];
+ const metrics=summary.map(([label,value])=>'<article><span>'+label+'</span><b>'+value+'</b></article>').join("");
+ const days=week.days.filter(d=>d.working_day).map(d=>{const date=new Date(d.date+"T12:00:00Z"),label=dayNames[date.getUTCDay()]+" · "+date.toLocaleDateString("ru-RU",{day:"numeric",month:"short"});return '<div class="weekly-day '+(d.overloaded?'overloaded':'')+'"><div><b>'+label+'</b><small>Календарь: '+duration(d.calendar_busy_minutes)+' · задачи: '+duration(d.planned_task_minutes)+'</small></div><span>Доступно: '+duration(d.available_minutes)+'</span><span>Задач: '+d.task_count+'</span>'+(d.overloaded?'<strong>Перегрузка</strong>':'')+'</div>';}).join("");
+ const warning=week.configured?(s.over_capacity?'<p class="weekly-warning">Оценённая работа со сроком превышает доступную недельную ёмкость на '+duration(Math.abs(s.remaining_minutes))+'. Нужно перенести сроки, пересмотреть объём или увеличить доступность — не пытаться вместить всё.</p>':'<p class="fine">Оценка учитывает выбранные рабочие дни и занятость календаря. Свободное время не считается автоматически обязательством работать.</p>'):'<p class="weekly-warning">Сначала сохрани рабочие дни и доступное время выше — тогда появится расчёт ёмкости и перегрузки.</p>';
+ $("weekly-workload").innerHTML='<div class="section-head"><div><h3>Полная рабочая неделя</h3><p class="fine">'+week.from+' — '+week.to+'</p></div><button type="button" class="button ghost" id="refresh-weekly-workload">Обновить</button></div><div class="weekly-metrics">'+metrics+'</div>'+warning+'<div class="weekly-days">'+(days||"")+'</div><div class="weekly-backlog"><span>Без срока: <b>'+s.without_deadline_count+'</b></span><span>В ожидании: <b>'+s.waiting_task_count+'</b></span><span>Оценённые задачи со сроком: <b>'+s.estimated_task_count+'</b></span></div><small class="fine">Предварительная раскладка по срокам, а не автоматическое бронирование календаря. Задачи без срока и ожидающие ответа не распределяются.</small>';
+ $("refresh-weekly-workload").addEventListener("click",async()=>{const button=$("refresh-weekly-workload");button.disabled=true;try{await loadWeeklyWorkload();}catch(err){alert(err.message);}});
+}
 function renderWorkCapacitySettings() {
   const days=Array.isArray(userSettings.working_days)?userSettings.working_days:[];
   document.querySelectorAll("[data-workday]").forEach(el=>{el.checked=days.includes(Number(el.dataset.workday));});
@@ -1028,7 +1039,7 @@ $("save-work-capacity").addEventListener("click",async()=>{
   button.disabled=true;button.textContent="Сохраняю…";
   try{
     await api("/api/settings",{method:"PUT",body:JSON.stringify({monthly_target:userSettings.monthly_target||300000,timezone:userSettings.timezone||"Europe/Moscow",daily_capacity_minutes:Number($("weekly-capacity").value),working_days:days})});
-    const {settings}=await api("/api/settings");userSettings=settings||userSettings;renderWorkCapacitySettings();await loadWorkspace();
+    const {settings}=await api("/api/settings");userSettings=settings||userSettings;renderWorkCapacitySettings();await loadWorkspace();await loadWeeklyWorkload();
     $("work-capacity-status").textContent="Рабочий график сохранён.";
   }catch(err){$("work-capacity-status").textContent=err.message;}
   finally{button.disabled=false;button.textContent="Сохранить рабочий график";}
@@ -1040,7 +1051,7 @@ $("make-day-plan").addEventListener("click", async () => {
     const capacity = Number($("planner-capacity").value);
     await api("/api/settings", { method:"PUT", body:JSON.stringify({ monthly_target:userSettings.monthly_target || 300000, timezone:userSettings.timezone || "Europe/Moscow", daily_capacity_minutes:capacity }) });
     const data = await api("/api/planner/day", { method:"POST", body:JSON.stringify({ available_minutes:capacity }) });
-    currentDayPlan = data.plan; $("planner-date").textContent = data.date; renderDayPlan();
+    currentDayPlan = data.plan; $("planner-date").textContent = data.date; renderDayPlan(); await loadWeeklyWorkload();
   } catch (err) { alert(err.message); }
   finally { button.disabled = false; button.textContent = "Сформировать план дня с ИИ"; }
 });
