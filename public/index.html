@@ -257,6 +257,7 @@
         <section class="panel sleep-panel">
           <div class="section-head"><div><p class="eyebrow">ВОССТАНОВЛЕНИЕ</p><h2>Сон и пробуждение</h2></div><span class="muted">Фиксируем факты, не догадки</span></div>
           <p class="fine">Отметь, когда ложишься. Время засыпания можно добавить отдельно, если помнишь его. Утреннее подтверждение пробуждения сохранит фактическое время нажатия.</p>
+          <form id="sleep-goal-form" class="sleep-goal-form"><label>Моя цель продолжительности сна, часов<input id="sleep-goal-hours" type="number" min="3" max="12" step="0.25" placeholder="Например, 8"></label><button type="submit" class="button ghost">Сохранить цель</button><button type="button" id="sleep-goal-clear" class="button ghost">Не задавать цель</button><span id="sleep-goal-status" class="fine" aria-live="polite">Цель не задана</span></form>
           <div id="sleep-summary" class="sleep-summary"></div>
           <div id="sleep-chart"></div>
           <div class="sleep-actions">
