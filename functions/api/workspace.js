@@ -1,7 +1,8 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { calculateProjectEconomics } from "../_lib/project-economics.js";
 import { calculateProjectWorkload } from "../_lib/project-workload.js";
-import { calculateCalendarBusyMinutes } from "../_lib/calendar-capacity.js";
+import { calculateCalendarBusyMinutes, calculateCalendarBusyByDay } from "../_lib/calendar-capacity.js";
+import { calculateProjectDailyLoad } from "../_lib/project-daily-load.js";
 import { expandRecurringEvents } from "../_lib/calendar.js";
 
 const DEFAULT_AREAS = [
@@ -84,9 +85,12 @@ export async function onRequestGet({request,env}) {
   activitySummary.month.total=activitySummary.month.interactions+activitySummary.month.meetings+activitySummary.month.tasks_completed;
   let workingDays=[]; try { workingDays=JSON.parse(settings?.working_days_json||'[]'); } catch {}
   const expandedCalendar=expandRecurringEvents(calendarRows.results,calendarFrom,calendarTo);
-  const calendarBusyByHorizon=[7,14,30].map(days=>calculateCalendarBusyMinutes(expandedCalendar,today,days,workingDays));
-  const workload=calculateProjectWorkload(projects.results,today,{configured:Number(settings?.work_capacity_configured)===1,working_days:workingDays,daily_capacity_minutes:settings?.daily_capacity_minutes,calendar_busy_by_horizon:calendarBusyByHorizon});
-  return json({today,client_activity_summary:activitySummary,clients:clients.results,project_workload_summary:workload.horizons,work_capacity:{configured:workload.capacity_configured,working_days:workload.working_days,daily_capacity_minutes:workload.daily_capacity_minutes},projects:workload.projects.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
+  const calendarBusyByDay=calculateCalendarBusyByDay(expandedCalendar,today,30,workingDays);
+  const calendarBusyByHorizon=[7,14,30].map(days=>calendarBusyByDay.slice(0,days).reduce((sum,d)=>sum+d.busy_minutes,0));
+  const capacityConfig={configured:Number(settings?.work_capacity_configured)===1,working_days:workingDays,daily_capacity_minutes:settings?.daily_capacity_minutes,calendar_busy_by_horizon:calendarBusyByHorizon};
+  const workload=calculateProjectWorkload(projects.results,today,capacityConfig);
+  const dailyLoad=calculateProjectDailyLoad(projects.results,today,capacityConfig,calendarBusyByDay);
+  return json({today,client_activity_summary:activitySummary,clients:clients.results,project_daily_load:dailyLoad,project_workload_summary:workload.horizons,work_capacity:{configured:workload.capacity_configured,working_days:workload.working_days,daily_capacity_minutes:workload.daily_capacity_minutes},projects:workload.projects.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
 }
 
 export async function onRequestPost({request,env}) {
