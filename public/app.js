@@ -1039,7 +1039,7 @@ function averageSleepMinutes(sessions,days){
 function averageSleepClock(sessions,days,timeField){
  const today=sleepLocalDate(),start=shiftDate(today,-(days-1));
  const records=sessions.filter(s=>s.sleep_date>=start&&s.sleep_date<=today&&s[timeField]);
- const minutes=records.map(s=>{const value=s[timeField];if(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(value))return null;const [h,m]=value.slice(11).split(":").map(Number);return h<24&&m<60?h*60+m:null;}).filter(v=>v!==null);
+ const minutes=records.map(s=>{const value=s[timeField];if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))return null;const [h,m]=value.slice(11).split(":").map(Number);return h<24&&m<60?h*60+m:null;}).filter(v=>v!==null);
  if(!minutes.length)return {time:null,count:0,variation:null};
  const angles=minutes.map(v=>v/1440*2*Math.PI),x=angles.reduce((a,b)=>a+Math.cos(b),0),y=angles.reduce((a,b)=>a+Math.sin(b),0);
  if(Math.hypot(x,y)<1e-8)return {time:null,count:minutes.length,variation:null};
