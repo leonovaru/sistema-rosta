@@ -54,3 +54,19 @@ test("reserve contributions stop when the target is fully funded",()=>{
  assert.equal(x.summary.new_reserve_allocations,200);
  assert.equal(x.summary.available_ending_balance,8800);
 });
+
+test("yearly and quarterly irregular expenses appear on their actual recurrence dates",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:100,reserves:[],irregularExpenses:[
+  {id:"year",title:"Страховка",amount:12000,next_date:"2026-12-01",frequency:"yearly"},
+  {id:"quarter",title:"Обслуживание",amount:3000,next_date:"2026-11-30",frequency:"quarterly"},
+  {id:"once",title:"Покупка",amount:5000,next_date:"2026-12-15",frequency:"once"}
+ ]});
+ assert.deepEqual(x.events.filter(e=>e.source==="irregular_expense").map(e=>[e.title,e.date]),[
+  ["Обслуживание","2026-11-30"],["Страховка","2026-12-01"],["Покупка","2026-12-15"],["Обслуживание","2027-02-28"]
+ ]);
+ assert.equal(x.summary.planned_expenses,33000);
+});
+test("recurring irregular expense advances from month end without invalid dates",()=>{
+ const x=buildCashflowForecast({today:"2026-02-20",horizonDays:40,irregularExpenses:[{title:"Годовой платёж",amount:1000,next_date:"2025-02-28",frequency:"yearly"}]});
+ assert.deepEqual(x.events.map(e=>e.date),["2026-02-28"]);
+});
