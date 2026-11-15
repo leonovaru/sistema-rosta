@@ -1,6 +1,6 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { isValidMeetingDate, cleanMeetingItems, normalizeMeetingAgreements, normalizeMeetingLinks } from "../_lib/meeting-notes.js";
-import { summarizeMeetingFollowup } from "../_lib/meeting-followup.js";
+import { summarizeMeetingFollowup, listMeetingFollowups } from "../_lib/meeting-followup.js";
 
 function parseModelJson(value){
  if(typeof value!=="string")return value;
@@ -30,7 +30,7 @@ export async function onRequestGet({request,env}){
  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
  const today=new Intl.DateTimeFormat("en-CA",{timeZone:settings?.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
  const followup_summary=summarizeMeetingFollowup(meetings,today);
- return json({meetings,followup_summary,today});
+ return json({meetings,followup_summary,followups:listMeetingFollowups(meetings,today),today});
 }
 
 export async function onRequestPost({request,env}){
