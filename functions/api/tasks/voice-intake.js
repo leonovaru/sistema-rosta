@@ -150,12 +150,12 @@ export async function onRequestPost({request,env}){
   });
   const modelText=response?.response ?? response?.choices?.[0]?.message?.content ?? response?.result?.response;
   const parsed=typeof modelText==="string"?parseJson(modelText):(modelText&&typeof modelText==="object"?modelText:null);
-  if(!Array.isArray(parsed?.tasks)||!parsed.tasks.length)throw new Error("Invalid response");
+  if(!parsed||(!Array.isArray(parsed.tasks)||!parsed.tasks.length)&&(!Array.isArray(parsed.workspace_items)||!parsed.workspace_items.length))throw new Error("Invalid response");
   const allowed={direction_id:new Set(dirs.results.map(x=>x.id)),client_id:new Set(clients.results.map(x=>x.id)),project_id:new Set(projects.results.map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
   const clarifyingQuestions=Array.isArray(parsed.clarifying_questions)?parsed.clarifying_questions.slice(0,5).map(x=>String(x).slice(0,300)):[];
   const existingById=new Map(existingTasks.results.map(task=>[task.id,task]));
   const workspaceItems=(Array.isArray(parsed.workspace_items)?parsed.workspace_items:[]).slice(0,8).map(item=>item.type==="client"?{type:"client",name:String(item.name||"").trim().slice(0,160),direction_id:allowed.direction_id.has(item.direction_id)?item.direction_id:null,contact:String(item.contact||"").slice(0,240),notes:String(item.notes||"").slice(0,3000)}:item.type==="project"?{type:"project",title:String(item.title||"").trim().slice(0,180),description:String(item.description||"").slice(0,5000),expected_result:String(item.expected_result||"").slice(0,2000),deadline:safeDate(item.deadline),client_id:allowed.client_id.has(item.client_id)?item.client_id:null,client_draft_index:Number.isInteger(item.client_draft_index)&&item.client_draft_index>=0?item.client_draft_index:null,direction_id:allowed.direction_id.has(item.direction_id)?item.direction_id:null}:null).filter(Boolean);
-  const tasks=parsed.tasks.slice(0,15).map((t,i)=>({
+  const tasks=(Array.isArray(parsed.tasks)?parsed.tasks:[]).slice(0,15).map((t,i)=>({
    title:String(t.title||"").trim().slice(0,240),description:String(t.description||"").trim().slice(0,2000),
    due_date:safeDate(t.due_date),priority:["low","medium","high"].includes(t.priority)?t.priority:"medium",
    estimated_minutes:Number.isInteger(Number(t.estimated_minutes))&&Number(t.estimated_minutes)>=5&&Number(t.estimated_minutes)<=10000?Number(t.estimated_minutes):null,
