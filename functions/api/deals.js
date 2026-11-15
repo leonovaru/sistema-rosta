@@ -1,4 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
+import { buildMonthlyDealForecast } from "../_lib/deal-forecast.js";
 const STAGES=new Set(["contact","negotiation","proposal","awaiting_payment","won","lost"]);
 const LOSS_REASONS=new Set(["price","timing","no_need","competitor","no_response","trust","scope","other"]);
 const LOSS_LABELS={price:"Цена / бюджет",timing:"Сроки",no_need:"Нет потребности",competitor:"Выбрали конкурента",no_response:"Нет ответа",trust:"Недостаток доверия",scope:"Не подошёл объём / формат",other:"Другая причина"};
