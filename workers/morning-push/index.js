@@ -31,7 +31,7 @@ async function vapidToken(endpoint,env){
   const header=b64u(enc.encode(JSON.stringify({typ:"JWT",alg:"ES256"})));
   const payload=b64u(enc.encode(JSON.stringify({aud:audience,exp:now+12*60*60,sub:env.VAPID_SUBJECT})));
   const unsigned=header+"."+payload;
-  const privateKey=await await importVapidPrivateKey(env);
+  const privateKey=await importVapidPrivateKey(env);
   const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},privateKey,enc.encode(unsigned));
   return unsigned+"."+b64u(signature);
 }
