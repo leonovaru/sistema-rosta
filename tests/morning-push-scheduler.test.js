@@ -201,3 +201,68 @@ test("scheduler uses the updated timezone setting on its next run", async () => 
     assert.equal(delivery.localDate, "2026-11-15");
   } finally { globalThis.fetch = nativeFetch; }
 });
+
+
+test("network failure is marked failed and can be retried", async () => {
+  let sends = 0;
+  const env = await makeEnv(async () => {
+    sends++;
+    if (sends === 1) throw new Error("simulated network timeout");
+    return new Response(null, { status: 201 });
+  });
+  globalThis.fetch = env._fetch;
+  try {
+    await withFixedTime("2026-11-15T03:00:00.000Z", async () => {
+      await worker.scheduled({}, env, {});
+      assert.equal([...env._deliveries.values()][0].status, "failed");
+      await worker.scheduled({}, env, {});
+    });
+    assert.equal(sends, 2);
+    assert.equal([...env._deliveries.values()][0].status, "sent");
+  } finally { globalThis.fetch = nativeFetch; }
+});
+
+test("overlapping scheduler runs do not send the same delivery twice", async () => {
+  let sends = 0;
+  let releaseFetch;
+  let notifyFetchStarted;
+  const fetchStarted = new Promise(resolve => { notifyFetchStarted = resolve; });
+  const fetchGate = new Promise(resolve => { releaseFetch = resolve; });
+  const env = await makeEnv(async () => {
+    sends++;
+    notifyFetchStarted();
+    await fetchGate;
+    return new Response(null, { status: 201 });
+  });
+  globalThis.fetch = env._fetch;
+  try {
+    await withFixedTime("2026-11-15T03:00:00.000Z", async () => {
+      const firstRun = worker.scheduled({}, env, {});
+      await fetchStarted;
+      await worker.scheduled({}, env, {});
+      releaseFetch();
+      await firstRun;
+    });
+    assert.equal(sends, 1);
+    assert.equal([...env._deliveries.values()][0].status, "sent");
+  } finally { globalThis.fetch = nativeFetch; }
+});
+
+test("a failed delivery is not retried after the 06:10 local cutoff", async () => {
+  let sends = 0;
+  const env = await makeEnv(async () => {
+    sends++;
+    return new Response(null, { status: 503 });
+  });
+  globalThis.fetch = env._fetch;
+  try {
+    await withFixedTime("2026-11-15T03:00:00.000Z", async () => {
+      await worker.scheduled({}, env, {});
+    });
+    assert.equal([...env._deliveries.values()][0].status, "failed");
+    await withFixedTime("2026-11-15T03:11:00.000Z", async () => {
+      await worker.scheduled({}, env, {});
+    });
+    assert.equal(sends, 1);
+  } finally { globalThis.fetch = nativeFetch; }
+});
