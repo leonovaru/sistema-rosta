@@ -30,7 +30,7 @@ export async function onRequestGet({request,env}) {
     env.DB.prepare("SELECT * FROM life_areas WHERE user_id=? AND active=1 ORDER BY sort_order,title").bind(user.id).all(),
     env.DB.prepare("SELECT id,title FROM directions WHERE user_id=? AND active=1 ORDER BY sort_order").bind(user.id).all()
   ]);
-  return json({clients:clients.results,projects:projects.results.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
+  return json({clients:clients.results,projects:projects.results.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
 }
 
 export async function onRequestPost({request,env}) {
@@ -57,8 +57,8 @@ export async function onRequestPost({request,env}) {
     const finalDirectionId=directionId||client?.direction_id||null;
     const deadline=b.deadline?String(b.deadline):null;
     if(deadline&&!/^\d{4}-\d{2}-\d{2}$/.test(deadline))return json({error:"Проверь дату завершения"},400);
-    await env.DB.prepare("INSERT INTO projects (id,user_id,client_id,direction_id,title,description,expected_result,deadline,budget,status) VALUES (?,?,?,?,?,?,?,?,?,?)")
-      .bind(id,user.id,clientId,finalDirectionId,title,String(b.description||"").slice(0,5000),String(b.expected_result||"").slice(0,2000),deadline,Math.max(0,Number(b.budget)||0),["draft","active","waiting","done","archived"].includes(b.status)?b.status:"active").run();
+    await env.DB.prepare("INSERT INTO projects (id,user_id,client_id,direction_id,title,description,expected_result,deadline,budget,cost_budget,status) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(id,user.id,clientId,finalDirectionId,title,String(b.description||"").slice(0,5000),String(b.expected_result||"").slice(0,2000),deadline,Math.max(0,Number(b.budget)||0),Math.max(0,Number(b.cost_budget)||0),["draft","active","waiting","done","archived"].includes(b.status)?b.status:"active").run();
     return json({ok:true,id},201);
   }
   if(type==="life_area") {
@@ -87,8 +87,8 @@ export async function onRequestPatch({request,env}) {
   } else if(type==="project") {
     const title=String(b.title||"").trim();
     if(!title||title.length>180)return json({error:"Проверь название проекта"},400);
-    const r=await env.DB.prepare("UPDATE projects SET title=?,description=?,expected_result=?,deadline=?,budget=?,status=?,updated_at=datetime('now') WHERE id=? AND user_id=?")
-      .bind(title,String(b.description||"").slice(0,5000),String(b.expected_result||"").slice(0,2000),b.deadline||null,Math.max(0,Number(b.budget)||0),["draft","active","waiting","done","archived"].includes(b.status)?b.status:"active",id,user.id).run();
+    const r=await env.DB.prepare("UPDATE projects SET title=?,description=?,expected_result=?,deadline=?,budget=?,cost_budget=?,status=?,updated_at=datetime('now') WHERE id=? AND user_id=?")
+      .bind(title,String(b.description||"").slice(0,5000),String(b.expected_result||"").slice(0,2000),b.deadline||null,Math.max(0,Number(b.budget)||0),Math.max(0,Number(b.cost_budget)||0),["draft","active","waiting","done","archived"].includes(b.status)?b.status:"active",id,user.id).run();
     if(!r.meta.changes)return json({error:"Проект не найден"},404);
   } else if(type==="life_area") {
     const title=String(b.title||"").trim();
