@@ -13,8 +13,10 @@ export async function onRequestPut({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const body=await readJson(request)||{},schedules=body.schedules;
  if(!Array.isArray(schedules)||!schedules.length||schedules.length>50)return json({error:"Передан некорректный список назначений"},400);
- const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+ const settings=await env.DB.prepare("SELECT timezone,working_days_json,work_capacity_configured,daily_capacity_minutes FROM settings WHERE user_id=?").bind(user.id).first();
  const today=localDate(settings?.timezone||"Europe/Moscow"),weekEnd=addDays(today,6);
+ let workingDays=[];try{workingDays=JSON.parse(settings?.working_days_json||"[]").map(Number);}catch{}
+ if(Number(settings?.work_capacity_configured)!==1||!workingDays.length||Number(settings?.daily_capacity_minutes)<=0)return json({error:"Сначала настройте рабочие дни и дневную ёмкость"},400);
  const seenTasks=new Set(),normalized=[];
  for(const schedule of schedules){
   const taskId=String(schedule?.task_id||"");
@@ -27,7 +29,8 @@ export async function onRequestPut({request,env}){
   const seenDates=new Set();let total=0;const rows=[];
   for(const allocation of schedule.allocations){
    const date=String(allocation?.date||""),minutes=Number(allocation?.minutes);
-   if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<today||date>weekEnd||(task.due_date&&date>task.due_date)||seenDates.has(date)||!Number.isInteger(minutes)||minutes<=0||minutes>10000)return json({error:"Назначение выходит за пределы недели или срока задачи"},400);
+   const parsedDate=new Date(date+"T12:00:00Z"),weekday=parsedDate.getUTCDay()||7;
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(parsedDate.getTime())||parsedDate.toISOString().slice(0,10)!==date||date<today||date>weekEnd||!workingDays.includes(weekday)||(task.due_date&&date>task.due_date)||seenDates.has(date)||!Number.isInteger(minutes)||minutes<=0||minutes>10000)return json({error:"Назначение выходит за пределы недели, рабочего дня или срока задачи"},400);
    seenDates.add(date);total+=minutes;rows.push({date,minutes});
   }
   if(total!==remaining)return json({error:"Сумма дневных назначений должна совпадать с оставшейся оценкой задачи"},400);
