@@ -157,6 +157,7 @@
             <form id="obligation-form" class="finance-form"><h3>Запланировать платёж</h3>
               <label>Название<input id="obligation-title" required maxlength="180" placeholder="Аренда, связь, подписка"></label>
               <label>Сумма, ₽<input id="obligation-amount" type="number" min="0.01" step="0.01" required></label>
+              <label>Корзина<select id="obligation-category"><option value="Долги и обязательства">Долги и обязательства</option><option value="Жильё">Жильё</option><option value="Питание">Питание</option><option value="Коты">Коты</option><option value="Транспорт">Транспорт</option><option value="Здоровье и уход">Здоровье и уход</option><option value="Свободные расходы">Свободные расходы</option></select></label>
               <label>Дата оплаты<input id="obligation-date" type="date" required></label>
               <label>Повторение<select id="obligation-frequency"><option value="once">Один раз</option><option value="monthly">Ежемесячно</option><option value="weekly">Еженедельно</option></select></label>
               <button class="button primary">Добавить платёж</button>
