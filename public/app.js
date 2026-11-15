@@ -335,6 +335,8 @@ function renderCalendar() {
   document.querySelector(".calendar-weekdays").classList.toggle("hidden",calendarView!=="month");
   const cells=[];
   if(calendarView==="day"){
+    const selectedTasks=allTasks.filter(t=>t.due_date===calendarSelected);
+    if(selectedTasks.length)cells.push('<div class="calendar-hour-row calendar-task-row"><span class="calendar-hour-label">Весь день</span><div class="calendar-hour-events">'+selectedTasks.map(t=>'<label class="calendar-task-chip"><input type="checkbox" data-calendar-task="'+escapeHtml(t.id)+'" '+(t.status==="done"?"checked":"")+'><span>'+escapeHtml(t.title)+'</span></label>').join("")+'</div></div>');
     for(let hour=0;hour<24;hour++){
       const items=calendarEvents.filter(e=>{
         const start=e.start_at.slice(0,10)<calendarSelected?0:e.start_at.slice(0,10)>calendarSelected?1440:Number(e.start_at.slice(11,13))*60+Number(e.start_at.slice(14,16));
@@ -351,8 +353,9 @@ function renderCalendar() {
       const d=new Date(start);d.setDate(start.getDate()+i);
       const key=dateKey(d);
       const items=calendarEvents.filter(e=>e.start_at.slice(0,10)<=key&&(e.end_at.slice(0,10)>key||(e.end_at.slice(0,10)===key&&e.end_at.slice(11,16)!=="00:00")));
+      const tasks=allTasks.filter(t=>t.due_date===key);
       const dayLabel=calendarView==="week"?new Intl.DateTimeFormat("ru-RU",{weekday:"short"}).format(d)+" "+d.getDate():d.getDate();
-      cells.push('<button type="button" class="calendar-day '+(key===calendarSelected?"selected ":"")+(d.getMonth()!==calendarAnchor.getMonth()&&calendarView==="month"?"outside ":"")+(key===localToday?"today":"")+'" data-calendar-date="'+key+'"><span class="calendar-day-number">'+dayLabel+'</span><span class="calendar-day-events">'+items.slice(0,3).map(e=>'<small class="event-dot '+eventColors[e.event_type]+'">'+escapeHtml(e.start_at.slice(0,10)<key?"↳":eventTime(e.start_at))+' '+escapeHtml(e.title)+'</small>').join("")+(items.length>3?'<small class="event-more">+'+(items.length-3)+'</small>':"")+'</span></button>');
+      cells.push('<button type="button" class="calendar-day '+(key===calendarSelected?"selected ":"")+(d.getMonth()!==calendarAnchor.getMonth()&&calendarView==="month"?"outside ":"")+(key===localToday?"today":"")+'" data-calendar-date="'+key+'"><span class="calendar-day-number">'+dayLabel+'</span><span class="calendar-day-events">'+items.slice(0,3).map(e=>'<small class="event-dot '+eventColors[e.event_type]+'">'+escapeHtml(e.start_at.slice(0,10)<key?"↳":eventTime(e.start_at))+' '+escapeHtml(e.title)+'</small>').join("")+tasks.slice(0,2).map(t=>'<small class="event-dot task">'+(t.status==="done"?"✓ ":"□ ")+escapeHtml(t.title)+'</small>').join("")+((items.length+tasks.length)>5?'<small class="event-more">+'+(items.length+tasks.length-5)+'</small>':"")+'</span></button>');
     }
   }
   $("calendar-grid").className="calendar-grid "+(calendarView==="week"?"week-view":calendarView==="day"?"day-view":"month-view");
@@ -361,6 +364,13 @@ function renderCalendar() {
   $("calendar-selected-date").textContent=new Intl.DateTimeFormat("ru-RU",{weekday:"long",day:"numeric",month:"long"}).format(new Date(calendarSelected+"T12:00:00"));
   const dayEvents=calendarEvents.filter(e=>e.start_at.slice(0,10)<=calendarSelected&&(e.end_at.slice(0,10)>calendarSelected||(e.end_at.slice(0,10)===calendarSelected&&e.end_at.slice(11,16)!=="00:00"))).sort((a,b)=>a.start_at.localeCompare(b.start_at));
   $("calendar-events").innerHTML=dayEvents.length?dayEvents.map(e=>'<article class="calendar-event"><div class="calendar-event-time">'+eventTime(e.start_at)+'–'+eventTime(e.end_at)+'</div><div class="calendar-event-main"><b>'+escapeHtml(e.title)+'</b><small>'+eventTypes[e.event_type]+' · '+eventDuration(e)+(e.repeat_rule&&e.repeat_rule!=="none"?" · повторяется "+(e.repeat_rule==="daily"?"ежедневно":"еженедельно"):"")+(e.mode!=="none"?" · "+(e.mode==="online"?"онлайн":"офлайн"):"")+'</small>'+(e.location?'<small>'+escapeHtml(e.location)+'</small>':"")+(e.actual_start_at||e.actual_end_at?'<small>Факт: '+(eventTime(e.actual_start_at)||"—")+'–'+(eventTime(e.actual_end_at)||"—")+'</small>':"")+'</div><div class="calendar-event-actions"><button type="button" class="button ghost" data-edit-event="'+e.id+'">Изменить</button><button type="button" class="button ghost" data-delete-event="'+(e.series_id||e.id)+'">Удалить</button></div></article>').join(""):'<p class="muted">На этот день событий пока нет. Добавь встречи, дорогу, хобби или сон.</p>';
+  const selectedTasks=allTasks.filter(t=>t.due_date===calendarSelected);
+  if(selectedTasks.length)$("calendar-events").innerHTML+='<div class="calendar-task-agenda"><b>Задачи на этот день</b>'+selectedTasks.map(t=>'<label class="calendar-task-chip"><input type="checkbox" data-calendar-task="'+escapeHtml(t.id)+'" '+(t.status==="done"?"checked":"")+'><span>'+escapeHtml(t.title)+'</span></label>').join("")+'</div>';
+  document.querySelectorAll("[data-calendar-task]").forEach(input=>input.addEventListener("change",async()=>{
+    input.disabled=true;
+    try{await api("/api/tasks",{method:"PATCH",body:JSON.stringify({id:input.dataset.calendarTask,status:input.checked?"done":"todo"})});await loadTasks();await loadCalendar();if(calendarSelected===localToday)await loadPlanner();}
+    catch(err){alert(err.message);input.checked=!input.checked;input.disabled=false;}
+  }));
   document.querySelectorAll("[data-calendar-date]").forEach(b=>b.addEventListener("click",async()=>{calendarSelected=b.dataset.calendarDate;const d=new Date(calendarSelected+"T12:00:00");calendarAnchor=new Date(d.getFullYear(),d.getMonth(),1);await loadCalendar();}));
   document.querySelectorAll("[data-edit-event]").forEach(b=>b.addEventListener("click",()=>editCalendarEvent(calendarEvents.find(e=>e.id===b.dataset.editEvent))));
   document.querySelectorAll("[data-delete-event]").forEach(b=>b.addEventListener("click",async()=>{if(!confirm("Удалить это событие и всю серию повторений?"))return;try{await api("/api/calendar/events",{method:"DELETE",body:JSON.stringify({id:b.dataset.deleteEvent})});currentDayPlan=null;renderDayPlan();await loadCalendar();}catch(err){alert(err.message);}}));
