@@ -8,7 +8,7 @@
     "push:keys": "node scripts/generate-vapid-keys.mjs",
     "db:migrate:local": "wrangler d1 execute sistema-rosta-db --local --file=./schema.sql && wrangler d1 migrations apply sistema-rosta-db --local --directory=./migrations",
     "db:migrate:remote": "wrangler d1 execute sistema-rosta-db --remote --file=./schema.sql && wrangler d1 migrations apply sistema-rosta-db --remote --directory=./migrations",
-    "check": "node --check public/app.js && find functions workers -name '*.js' -print0 | xargs -0 -n1 node --check && node --test tests/*.test.js"
+    "check": "node --check public/app.js && find functions workers scripts -name '*.js' -print0 | xargs -0 -n1 node --check && node --test tests/*.test.js"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
