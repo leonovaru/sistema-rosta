@@ -23,7 +23,7 @@ export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const b=await readJson(request),projectId=String(b.project_id||""),type=String(b.flow_type||""),title=String(b.title||"").trim(),amount=Number(b.amount),date=String(b.expected_date||"");
  const project=await projectForUser(env,user.id,projectId);if(!project)return json({error:"Проект не найден"},404);
- if(!isProjectSelectable(project))return json({error:"Нельзя создавать платежи в архивном проекте"},409);
+ if(!isProjectSelectable(project)||project.status==="done")return json({error:"Нельзя добавлять плановые платежи в завершённый или архивный проект"},409);
  if(project.client_id){const client=await env.DB.prepare("SELECT status FROM clients WHERE id=? AND user_id=?").bind(project.client_id,user.id).first();if(!isClientSelectable(client))return json({error:"Нельзя создавать платежи для закрытого клиента"},409);}
  if(!title||title.length>180||!Number.isFinite(amount)||amount<=0||amount>100000000||!validDate(date)||!["income","expense"].includes(type))return json({error:"Проверь название, сумму, дату и тип записи"},400);
  const id=newId();await env.DB.prepare("INSERT INTO planned_cashflows(id,user_id,flow_type,title,amount,expected_date,note,project_id,client_id) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,user.id,type,title,amount,date,String(b.note||"").slice(0,500),projectId,project.client_id||null).run();
