@@ -35,7 +35,7 @@
               <label>Последняя дата (необязательно)<input id="recurring-end" type="date"></label>
               <label>Сколько минут<input id="recurring-minutes" type="number" min="5" max="10000" step="5" placeholder="Например, 20"></label>
               <label>Приоритет<select id="recurring-priority"><option value="high">Высокий</option><option value="medium" selected>Обычный</option><option value="low">Низкий</option></select></label>
-              <label class="recurring-wide">Комментарий<textarea id="recurring-description" rows="2" maxlength="2000" placeholder="Что именно входит в задачу"></textarea></label>
+              <label class="recurring-wide">Комментарий<textarea id="recurring-description" rows="2" maxlength="2000" placeholder="Что именно входит в задачу"></textarea></label><label class="recurring-wide">Подзадачи — каждая с новой строки<textarea id="recurring-subtasks" rows="4" maxlength="4000" placeholder="Протереть поверхности&#10;Помыть пол&#10;Вынести мусор"></textarea><small class="fine">Подзадачи будут создаваться вместе с каждой повторяющейся задачей.</small></label>
               <button class="button primary">Создать повторяющуюся задачу</button>
             </form>
             <div id="recurring-task-list" class="recurring-list"></div>
