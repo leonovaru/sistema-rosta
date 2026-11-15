@@ -4,7 +4,7 @@ export function validateDailyTaskMove({week,taskId,fromDate,toDate,minutes,rows,
  for(const day of week?.days||[])for(const task of day.tasks||[])if(String(task.id)===String(taskId))baseByDate.set(day.date,(baseByDate.get(day.date)||0)+Number(task.minutes||0));
  const nextByDate=new Map((rows||[]).map(row=>[row.date,Number(row.minutes)]));
  const sourceCurrent=baseByDate.get(fromDate)||0,targetCurrent=baseByDate.get(toDate)||0;
- if(sourceCurrent<minutes||nextByDate.get(fromDate)!==sourceCurrent-minutes||nextByDate.get(toDate)!==targetCurrent+minutes)return fail("Распределение задачи изменилось. Пересчитайте недельный план и подтвердите перенос заново.");
+ if(sourceCurrent<minutes||(nextByDate.get(fromDate)||0)!==sourceCurrent-minutes||(nextByDate.get(toDate)||0)!==targetCurrent+minutes)return fail("Распределение задачи изменилось. Пересчитайте недельный план и подтвердите перенос заново.");
  const dates=new Set([...baseByDate.keys(),...nextByDate.keys()]);
  for(const date of dates)if(date!==fromDate&&date!==toDate&&(baseByDate.get(date)||0)!==(nextByDate.get(date)||0))return fail("Перенос изменяет дополнительные даты. Обновите предложение.");
  if(!(week?.days||[]).some(day=>day.date===fromDate&&day.working_day)||!(week?.days||[]).some(day=>day.date===toDate&&day.working_day))return fail("Исходная или целевая дата больше не является рабочим днём");
