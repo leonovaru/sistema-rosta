@@ -264,3 +264,13 @@
 .financial-risk-suggestions li{margin:5px 0}
 .financial-risk-suggestions small{font-size:11px}
 @media(max-width:600px){.financial-risk-actions{padding:11px}.financial-risk-row{gap:6px}}
+
+.risk-sales-plan{margin-top:14px;padding:13px;border:1px solid #e6e8f0;border-radius:12px;background:#f8f9fd}
+.risk-sales-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px}
+.risk-sales-head span{color:var(--muted)}
+.risk-sales-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #e7e9f0}
+.risk-sales-card>div{display:grid;gap:4px;min-width:0}
+.risk-sales-card span,.risk-sales-card small{font-size:11px;color:var(--muted);line-height:1.45}
+.risk-sales-card button{flex-shrink:0}
+.risk-sales-warning{color:#9a5d28!important}
+@media(max-width:600px){.risk-sales-card{align-items:stretch;flex-direction:column}.risk-sales-card button{width:100%}}
