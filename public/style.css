@@ -274,3 +274,8 @@
 .risk-sales-card button{flex-shrink:0}
 .risk-sales-warning{color:#9a5d28!important}
 @media(max-width:600px){.risk-sales-card{align-items:stretch;flex-direction:column}.risk-sales-card button{width:100%}}
+
+.observed-funnel{display:grid;gap:5px;margin:10px 0;padding:10px;border:1px solid #e4e8ef;border-radius:9px;background:#f8fafc}
+.observed-funnel>b{font-size:12px}
+.observed-funnel>span,.observed-funnel>small{font-size:11px;color:var(--muted);line-height:1.45}
+.observed-funnel button{justify-self:start;margin-top:4px}
