@@ -85,7 +85,7 @@ async function loadAnalytics(){
  ['Задач в анализе',s.tasks+' · завершено '+s.completed],
  ['Фактическое время',duration(s.actual_minutes)],
  ['По плану',duration(s.estimated_minutes)],
- ['Отклонение', (s.variance_minutes>0?'+':'')+duration(Math.abs(s.variance_minutes))],
+ ['Отклонение', (s.variance_minutes>0?'+':s.variance_minutes<0?'−':'')+duration(Math.abs(s.variance_minutes))],
  ['Задачи с перерасходом',s.overrun_tasks+' · '+s.overrun_rate+'%'],
  ['Время по таймерам',duration(data.time.tracked_minutes)]
  ].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join('');
