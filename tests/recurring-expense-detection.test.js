@@ -7,7 +7,7 @@ test("suggests stable monthly payments after three matching expenses",()=>{
  const found=detectRecurringExpenses(rows,{today:"2026-11-10"});
  assert.equal(found.length,1);
  assert.equal(found[0].frequency,"monthly");
- assert.equal(found[0].next_date,"2026-11-05");
+ assert.equal(found[0].next_date,"2026-12-05");
  assert.equal(found[0].amount,650);
 });
 
@@ -40,5 +40,38 @@ test("recognizes stable weekly payments",()=>{
  const found=detectRecurringExpenses(rows,{today:"2026-11-10"});
  assert.equal(found.length,1);
  assert.equal(found[0].frequency,"weekly");
- assert.equal(found[0].next_date,"2026-11-09");
+ assert.equal(found[0].next_date,"2026-11-16");
+});
+
+test("groups monthly descriptions that differ by month and payment wording",()=>{
+ const rows=[
+  {title:"Домашний интернет",category:"Связь",amount:650,spent_on:"2026-08-05"},
+  {title:"Оплата интернета за сентябрь",category:"Связь",amount:660,spent_on:"2026-09-05"},
+  {title:"Интернет за октябрь",category:"Связь",amount:655,spent_on:"2026-10-05"}
+ ];
+ const found=detectRecurringExpenses(rows,{today:"2026-11-10"});
+ assert.equal(found.length,1);
+ assert.equal(found[0].occurrences,3);
+ assert.equal(found[0].amount,655);
+});
+
+test("does not merge unrelated expenses or different categories",()=>{
+ const rows=[
+  ...["2026-08-05","2026-09-05","2026-10-05"].map(spent_on=>({title:"Интернет",category:"Связь",amount:650,spent_on})),
+  ...["2026-08-06","2026-09-06","2026-10-06"].map(spent_on=>({title:"Электричество",category:"Коммунальные услуги",amount:650,spent_on}))
+ ];
+ const found=detectRecurringExpenses(rows,{today:"2026-11-10"});
+ assert.equal(found.length,2);
+});
+
+test("skips a recurring obligation when its title differs only by billing wording",()=>{
+ const rows=["2026-08-05","2026-09-05","2026-10-05"].map(spent_on=>({title:"Домашний интернет",category:"Связь",amount:650,spent_on}));
+ const found=detectRecurringExpenses(rows,{today:"2026-11-10",existingTitles:[{title:"Оплата интернета",category:"Связь"}]});
+ assert.equal(found.length,0);
+});
+
+test("suggests the next future date when the last expected payment date has passed",()=>{
+ const rows=["2026-08-15","2026-09-15","2026-10-15"].map(spent_on=>({title:"Абонемент",category:"Спорт",amount:1200,spent_on}));
+ const found=detectRecurringExpenses(rows,{today:"2026-11-20"});
+ assert.equal(found[0].next_date,"2026-12-15");
 });
