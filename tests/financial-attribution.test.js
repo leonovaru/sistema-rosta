@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildFinancialAttributionSnapshot } from "../functions/_lib/financial-attribution.js";
+import { buildFinancialAttributionSnapshot, resolveHistoricalLabel } from "../functions/_lib/financial-attribution.js";
 
 test("financial entries keep client, project and direction labels from transaction time",()=>{
  const snapshot=buildFinancialAttributionSnapshot({
@@ -24,4 +24,10 @@ test("unassigned financial entries retain explicit null snapshots",()=>{
   client_id_snapshot:null,client_name_snapshot:null,
   project_id_snapshot:null,project_title_snapshot:null
  });
+});
+
+test("financial history prefers the transaction-time label after an entity is renamed",()=>{
+ assert.equal(resolveHistoricalLabel("Проект до переименования","Новое название проекта"),"Проект до переименования");
+ assert.equal(resolveHistoricalLabel("","Текущее название"),"Текущее название");
+ assert.equal(resolveHistoricalLabel(null,null),"");
 });
