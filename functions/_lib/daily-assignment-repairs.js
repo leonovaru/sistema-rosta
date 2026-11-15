@@ -52,7 +52,8 @@ export function buildDailyAssignmentRepairs(week,allocations=[],tasks=[]){
   };
   // Keep the original daily amounts wherever possible; only then place any increase.
   for(const date of preferred)place(date,oldByDate.get(date)||0);
-  for(const date of candidates)place(date,left);
+  for(const date of candidates.filter(date=>!oldByDate.has(date)))place(date,left);
+  if(left>0)for(const date of preferred)place(date,left);
   for(const [date,minutes] of allocated){next.push({date,minutes});reserved.set(date,(reserved.get(date)||0)+minutes);}
   if(left>0){
    unresolved.push({task_id:taskId,title:task.title||"Задача",minutes:left,reason:"Не найдено достаточно свободного времени до дедлайна без перегрузки других задач."});
