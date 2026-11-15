@@ -20,3 +20,9 @@ test("does not invent a close date when sample or first contact is insufficient"
  assert.equal(noSample.estimated_close_date,null);
  assert.equal(noContact.estimated_close_date,null);
 });
+
+test("does not estimate close dates for won or lost deals",()=>{
+ const deals=["won","lost"].map(stage=>({direction_id:"d",client_id:"c",stage,expected_close_date:null}));
+ const result=buildDealDateForecast(deals,{cycleByDirection:new Map([["d",{avg_contact_to_won_days:10,contact_to_won_sample:4}]]),firstContactByClient:new Map([["d::c","2026-11-01"]])});
+ assert.deepEqual(result.map(x=>x.estimated_close_date),[null,null]);
+});
