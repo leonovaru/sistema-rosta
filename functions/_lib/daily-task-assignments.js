@@ -12,9 +12,11 @@ export function applySavedDailyTaskAllocations(week,allocations=[],tasks=[]){
  const validGroups=[],issues=[],comparison=[];
  for(const [taskId,rows] of grouped){
   const task=taskMap.get(taskId),sum=rows.reduce((total,row)=>total+row.minutes,0);
+  // Historical allocations for completed, deleted, or waiting tasks are inert.
+  // They must not surface as stale schedules or trigger repair proposals.
+  if(!task||!["todo","doing"].includes(task.status))continue;
   let reason=null;
-  if(!task||!["todo","doing"].includes(task.status))reason="Задача больше не активна";
-  else{
+  {
    const expected=remainingEstimate(task);
    if(expected===null)reason="У задачи нет актуальной оценки";
    else if(sum!==expected)reason="Оценка или фактически выполненное время изменились: сохранено "+sum+" мин., актуальный остаток "+expected+" мин.";
