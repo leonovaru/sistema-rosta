@@ -52,3 +52,12 @@ test("keeps valid saved assignments visible but warns when calendar capacity no 
  assert.equal(week.daily_assignment_issues[0].type,"capacity");
  assert.equal(week.days[0].overloaded,true);
 });
+
+test("ignores historical allocations for completed tasks without reporting stale schedule issues",()=>{
+ const week={days:[{date:"2026-11-16",working_day:true,available_minutes:120,planned_task_minutes:0,tasks:[]}]};
+ applySavedDailyTaskAllocations(week,[{task_id:"done-task",allocation_date:"2026-11-16",minutes:60}],
+ [{id:"done-task",title:"Готово",status:"done",estimated_minutes:60,actual_minutes:60,due_date:"2026-11-16"}]);
+ assert.equal(week.daily_assignments_applied,0);
+ assert.deepEqual(week.daily_assignment_issues,[]);
+ assert.deepEqual(week.days[0].tasks,[]);
+});
