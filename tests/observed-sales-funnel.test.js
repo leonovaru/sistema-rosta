@@ -50,3 +50,33 @@ test("ignores deal stage transitions that happened before the first recorded con
  assert.equal(result.observed_contact_to_lead_percent,66.7);
  assert.equal(result.observed_lead_to_sale_percent,50);
 });
+
+test("calculates average calendar days from first contact to sales milestones",()=>{
+ const interactions=[
+  {direction_id:"d",client_id:"c1",first_contact_on:"2026-11-01"},
+  {direction_id:"d",client_id:"c2",first_contact_on:"2026-11-03"}
+ ];
+ const events=[
+  {direction_id:"d",client_id:"c1",created_at:"2026-11-03 10:00:00",changes_json:'[{"field":"stage","to":"negotiation"}]'},
+  {direction_id:"d",client_id:"c1",created_at:"2026-11-06 10:00:00",changes_json:'[{"field":"stage","to":"proposal"}]'},
+  {direction_id:"d",client_id:"c1",created_at:"2026-11-11 10:00:00",changes_json:'[{"field":"stage","to":"won"}]'},
+  {direction_id:"d",client_id:"c2",created_at:"2026-11-07 10:00:00",changes_json:'[{"field":"stage","to":"negotiation"}]'},
+  {direction_id:"d",client_id:"c2",created_at:"2026-11-08 10:00:00",changes_json:'[{"field":"stage","to":"proposal"}]'},
+  {direction_id:"d",client_id:"c2",created_at:"2026-11-13 10:00:00",changes_json:'[{"field":"stage","to":"won"}]'}
+ ];
+ const result=buildObservedSalesFunnel({interactionRows:interactions,dealEventRows:events})[0];
+ assert.equal(result.avg_contact_to_negotiation_days,3);
+ assert.equal(result.contact_to_negotiation_sample,2);
+ assert.equal(result.avg_contact_to_proposal_days,5);
+ assert.equal(result.contact_to_proposal_sample,2);
+ assert.equal(result.avg_contact_to_won_days,10);
+ assert.equal(result.contact_to_won_sample,2);
+});
+test("does not fabricate sales cycle duration when event dates are missing",()=>{
+ const result=buildObservedSalesFunnel({
+  interactionRows:[{direction_id:"d",client_id:"c",first_contact_on:"2026-11-01"}],
+  dealEventRows:[{direction_id:"d",client_id:"c",changes_json:'[{"field":"stage","to":"won"}]'}]
+ })[0];
+ assert.equal(result.avg_contact_to_won_days,null);
+ assert.equal(result.contact_to_won_sample,0);
+});
