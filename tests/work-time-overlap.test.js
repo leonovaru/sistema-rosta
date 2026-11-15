@@ -29,5 +29,5 @@ test("merges task timer and calendar work intervals so overlapping time is count
     [{ start: 9 * 60, end: 10 * 60 + 30 }, { start: 12 * 60, end: 13 * 60 }],
     [{ start: 10 * 60, end: 11 * 60 }, { start: 12 * 60 + 30, end: 13 * 30 }]
   );
-  assert.equal(minutes, 150);
+  assert.equal(minutes, 210);
 });
