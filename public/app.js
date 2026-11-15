@@ -74,17 +74,35 @@ function suggestAdjustedEstimate(baseMinutes, accuracy, scopeKey = null) {
 function currentEstimateScopeKey(){const project=$("task-project")?.value,area=$("task-life-area")?.value,direction=$("task-direction")?.value;return project?"project:"+project:area?"life:"+area:direction?"direction:"+direction:null;}
 function renderHistoricalEstimateSuggestion(){
  const result=$("estimate-result");if(!result||!taskEstimate)return;
- const old=result.querySelector(".estimate-history-suggestion");if(old)old.remove();
- const suggestion=suggestAdjustedEstimate(taskEstimate.base_minutes??taskEstimate.minutes,estimateAccuracyData,currentEstimateScopeKey());if(!suggestion)return;
- const applied=taskEstimate.historical_adjustment?.suggested_minutes===taskEstimate.minutes;
- const panel=document.createElement("div");panel.className="estimate-history-suggestion";
- panel.innerHTML='<p><b>Поправка по факту выполненных задач</b><br>Для '+escapeHtml(suggestion.title)+': ×'+suggestion.multiplier+' на основе '+suggestion.sample_count+' завершённых задач. '+duration(suggestion.base_minutes)+' → <b>'+duration(suggestion.suggested_minutes)+'</b>.</p><button type="button" class="button ghost" data-apply-history-estimate '+(applied?'disabled':'')+'>'+(applied?'Поправка применена':'Применить историческую поправку')+'</button><small class="fine">Предложение не меняет оценку автоматически. Без достаточной выборки исходная оценка сохраняется.</small>';
- result.appendChild(panel);
+ result.querySelectorAll(".estimate-history-suggestion,.estimate-similar-suggestion").forEach(node=>node.remove());
+ const suggestion=suggestAdjustedEstimate(taskEstimate.base_minutes??taskEstimate.minutes,estimateAccuracyData,currentEstimateScopeKey());
+ if(suggestion){
+  const applied=taskEstimate.historical_adjustment?.suggested_minutes===taskEstimate.minutes;
+  const panel=document.createElement("div");panel.className="estimate-history-suggestion";
+  panel.innerHTML='<p><b>Поправка по категории задач</b><br>Для '+escapeHtml(suggestion.title)+': ×'+suggestion.multiplier+' на основе '+suggestion.sample_count+' завершённых задач. '+duration(suggestion.base_minutes)+' → <b>'+duration(suggestion.suggested_minutes)+'</b>.</p><button type="button" class="button ghost" data-apply-history-estimate '+(applied?'disabled':'')+'>'+(applied?'Поправка применена':'Применить поправку категории')+'</button>';
+  result.appendChild(panel);
+ }
+ const similar=taskEstimate.similar_task_history;
+ if(similar?.multiplier&&similar.sample_count>=3){
+  const minutes=Math.max(5,Math.round((taskEstimate.base_minutes??taskEstimate.minutes)*similar.multiplier/5)*5);
+  const applied=taskEstimate.similar_adjustment?.suggested_minutes===taskEstimate.minutes;
+  const examples=(similar.examples||[]).map(row=>escapeHtml(row.title)+' ('+duration(row.actual_minutes)+' фактически)').join("; ");
+  const panel=document.createElement("div");panel.className="estimate-similar-suggestion";
+  panel.innerHTML='<p><b>Похожие завершённые задачи</b><br>Найдено '+similar.sample_count+' похожих задач. Их медианный коэффициент факта к оценке: ×'+similar.multiplier+'. '+duration(taskEstimate.base_minutes??taskEstimate.minutes)+' → <b>'+duration(minutes)+'</b>.</p><small class="fine">Примеры: '+examples+'.</small><button type="button" class="button ghost" data-apply-similar-estimate '+(applied?'disabled':'')+'>'+(applied?'Поправка применена':'Применить поправку похожих задач')+'</button>';
+  result.appendChild(panel);
+ }
 }
 $("estimate-result").addEventListener("click",event=>{
- if(!event.target.closest("[data-apply-history-estimate]")||!taskEstimate)return;
- const suggestion=suggestAdjustedEstimate(taskEstimate.base_minutes??taskEstimate.minutes,estimateAccuracyData,currentEstimateScopeKey());if(!suggestion)return;
- taskEstimate.base_minutes=suggestion.base_minutes;taskEstimate.minutes=suggestion.suggested_minutes;taskEstimate.historical_adjustment=suggestion;renderHistoricalEstimateSuggestion();
+ if(!taskEstimate)return;
+ if(event.target.closest("[data-apply-history-estimate]")){
+  const suggestion=suggestAdjustedEstimate(taskEstimate.base_minutes??taskEstimate.minutes,estimateAccuracyData,currentEstimateScopeKey());if(!suggestion)return;
+  taskEstimate.minutes=suggestion.suggested_minutes;taskEstimate.historical_adjustment=suggestion;taskEstimate.similar_adjustment=null;renderHistoricalEstimateSuggestion();return;
+ }
+ if(event.target.closest("[data-apply-similar-estimate]")){
+  const similar=taskEstimate.similar_task_history;if(!similar?.multiplier||similar.sample_count<3)return;
+  const minutes=Math.max(5,Math.round((taskEstimate.base_minutes??taskEstimate.minutes)*similar.multiplier/5)*5);
+  taskEstimate.minutes=minutes;taskEstimate.similar_adjustment={suggested_minutes:minutes,multiplier:similar.multiplier,sample_count:similar.sample_count};taskEstimate.historical_adjustment=null;renderHistoricalEstimateSuggestion();
+ }
 });
 ["task-project","task-life-area","task-direction"].forEach(id=>$(id).addEventListener("change",renderHistoricalEstimateSuggestion));
 $("estimate-task").addEventListener("click", async () => {
@@ -95,7 +113,7 @@ $("estimate-task").addEventListener("click", async () => {
   $("estimate-result").classList.remove("hidden");
   $("estimate-result").textContent = "Анализирую объём задачи и возможность делегирования.";
   try {
-    taskEstimate = await api("/api/tasks/estimate", { method: "POST", body: JSON.stringify({ title, description: $("task-description").value }) });
+    taskEstimate = await api("/api/tasks/estimate", { method: "POST", body: JSON.stringify({ title, description: $("task-description").value, project_id: $("task-project").value || null, life_area_id: $("task-life-area").value || null, direction_id: $("task-direction").value || null }) });
     taskEstimate.base_minutes = taskEstimate.minutes;
     const delegation = ({full:"Можно поручить ИИ почти целиком",partial:"ИИ выполнит часть работы, тебе останется проверить результат",manual:"Нужно твоё участие или действие вне приложения"})[taskEstimate.delegation];
     const steps = (taskEstimate.steps || []).map(step => "<li>" + escapeHtml(step.title) + " — " + duration(step.minutes) + "</li>").join("");
