@@ -96,8 +96,8 @@ export async function onRequestPost({request,env}){
    project_id:allowed.project_id.has(t.project_id)?t.project_id:null,
    life_area_id:allowed.life_area_id.has(t.life_area_id)?t.life_area_id:null,
    parent_index:Number.isInteger(t.parent_index)&&t.parent_index>=0&&t.parent_index<i?t.parent_index:null
-  })).filter(t=>t.title);
-  if(!tasks.length)throw new Error("No usable tasks");
+  }));
+  if(!tasks.length||tasks.some(task=>!task.title))throw new Error("Some tasks have no title");
   for(const task of tasks){
    if(task.project_id){
     const project=projects.results.find(x=>x.id===task.project_id);
