@@ -7,7 +7,7 @@ export async function onRequestGet({ request, env }) {
   const [buckets, allocations, expenses] = await Promise.all([
     env.DB.prepare("SELECT * FROM income_buckets WHERE user_id=? AND active=1 ORDER BY sort_order,title").bind(user.id).all(),
     env.DB.prepare("SELECT bucket_id,SUM(amount) amount FROM income_bucket_allocations WHERE user_id=? GROUP BY bucket_id").bind(user.id).all(),
-    env.DB.prepare("SELECT bucket_id,SUM(amount) amount FROM expenses WHERE user_id=? AND bucket_id IS NOT NULL GROUP BY bucket_id").bind(user.id).all()
+    env.DB.prepare("SELECT bucket_id,SUM(amount) amount FROM (SELECT bucket_id,amount FROM expenses WHERE user_id=? AND bucket_id IS NOT NULL UNION ALL SELECT bucket_id,amount FROM debt_payments WHERE user_id=? AND bucket_id IS NOT NULL UNION ALL SELECT bucket_id,amount FROM obligation_payments WHERE user_id=? AND bucket_id IS NOT NULL) GROUP BY bucket_id").bind(user.id,user.id,user.id).all()
   ]);
   const rows = calculateBucketBalances(buckets.results, allocations.results, expenses.results);
   const percentageTotal = rows.reduce((sum, row) => sum + Number(row.percentage), 0);
