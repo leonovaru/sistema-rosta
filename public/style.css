@@ -211,3 +211,9 @@
 .sleep-edit-form button{justify-self:start}
 .sleep-entry>small{display:block;margin-top:8px;color:var(--muted,#687080)}
 @media(max-width:620px){.sleep-edit-form{grid-template-columns:1fr}.sleep-edit-form .sleep-note{grid-column:auto}.sleep-actions .button{flex:1 1 100%}}
+
+
+.sleep-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+.sleep-stat{display:grid;gap:4px;padding:12px;border:1px solid var(--line,#ddd);border-radius:10px;background:var(--surface,#fff)}
+.sleep-stat span,.sleep-stat small{font-size:.82rem;color:var(--muted,#687080)}
+.sleep-stat strong{font-size:1.2rem;font-variant-numeric:tabular-nums}
