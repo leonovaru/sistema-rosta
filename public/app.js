@@ -1264,7 +1264,7 @@ async function boot() {
       try{await api("/api/sleep",{method:"POST",body:JSON.stringify({action:"wake",source:"push"})});}
       catch(error){$("sleep-status").textContent="Не удалось автоматически подтвердить пробуждение. Нажмите «Подтвердить пробуждение» после восстановления соединения.";}
     }
-    await refreshWakeNotificationStatus().catch(()=>{}); await loadDashboardData(); await loadFinance(); await loadProfitability(); await loadRevenuePlan(); await loadRevenueScenarios(); await loadSalesPlan(); await loadAnalytics(); await loadWorkspace(); await loadCharity(); await loadDreams(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadSleep().catch(err=>{ $("sleep-status").textContent="Не удалось загрузить записи сна: "+err.message; }); await loadPlanner();
+    await refreshWakeNotificationStatus().catch(()=>{}); await loadDashboardData(); await loadFinance(); await loadProfitability(); await loadRevenuePlan(); await loadRevenueScenarios(); await loadSalesPlan(); await loadDeals(); await loadAnalytics(); await loadWorkspace(); await loadCharity(); await loadDreams(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadSleep().catch(err=>{ $("sleep-status").textContent="Не удалось загрузить записи сна: "+err.message; }); await loadPlanner();
   } catch { showAuth(); }
 }
 boot();
