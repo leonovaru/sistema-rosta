@@ -75,10 +75,10 @@ async function loadTasks() {
   renderTasks();
 }
 function renderTasks() {
-  const now = new Date(localToday + "T12:00:00");
-  const day = now.getDay() || 7;
-  const monday = new Date(now); monday.setDate(now.getDate() - day + 1);
-  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+  const now = new Date(localToday + "T00:00:00Z");
+  const day = now.getUTCDay() || 7;
+  const monday = new Date(now); monday.setUTCDate(now.getUTCDate() - day + 1);
+  const sunday = new Date(monday); sunday.setUTCDate(monday.getUTCDate() + 6);
   const mondayKey = monday.toISOString().slice(0,10), sundayKey = sunday.toISOString().slice(0,10);
   const visible = allTasks.filter(task => {
     if (taskFilter === "all") return true;
