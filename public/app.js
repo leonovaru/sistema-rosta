@@ -1,7 +1,10 @@
 const $ = id => document.getElementById(id);
 let authMode = "login";
 let directions = [];
-let userSettings = { monthly_target: 300000, timezone: "Europe/Moscow" };\nlet allTasks = [];\nlet taskFilter = "today";\nlet localToday = "";
+let userSettings = { monthly_target: 300000, timezone: "Europe/Moscow" };
+let allTasks = [];
+let taskFilter = "today";
+let localToday = "";
 
 const money = n => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(n || 0)) + " ₽";
 async function api(path, options = {}) {
@@ -55,7 +58,8 @@ async function loadDirections() {
       <small>${target ? "Осталось: " + money(gap) + " · " + Math.round(actual/target*100) + "% цели" : "Установите месячную цель"}</small>
     </article>`;
   }).join("");
-  $("income-direction").innerHTML = '<option value="">Без привязки</option>' + directions.map(d => `<option value="${d.id}">${escapeHtml(d.title)}</option>`).join("");\n  $("task-direction").innerHTML = '<option value="">Без привязки</option>' + directions.map(d => `<option value="${d.id}">${escapeHtml(d.title)}</option>`).join("");
+  $("income-direction").innerHTML = '<option value="">Без привязки</option>' + directions.map(d => `<option value="${d.id}">${escapeHtml(d.title)}</option>`).join("");
+  $("task-direction").innerHTML = '<option value="">Без привязки</option>' + directions.map(d => `<option value="${d.id}">${escapeHtml(d.title)}</option>`).join("");
   document.querySelectorAll("[data-save-direction]").forEach(button => button.addEventListener("click", async () => {
     const d = directions.find(item => item.id === button.dataset.saveDirection);
     const input = document.querySelector(`[data-direction-target="${button.dataset.saveDirection}"]`);
@@ -103,6 +107,7 @@ async function loadIncome() {
   $("actual").textContent = money(data.month_total);
   $("income-recent").textContent = data.entries.length ? "Последнее: " + money(data.entries[0].amount) + " · " + data.entries[0].received_on : "Поступлений пока нет";
   $("income-date").value = data.today;
+  localToday = data.today; $("task-date").value = data.today;
   return data;
 }
 async function loadSettings(actual) {
