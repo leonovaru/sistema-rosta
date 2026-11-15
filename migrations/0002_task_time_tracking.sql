@@ -1,0 +1,2 @@
+ALTER TABLE tasks ADD COLUMN actual_minutes INTEGER;
+ALTER TABLE tasks ADD COLUMN ai_plan TEXT NOT NULL DEFAULT '';
