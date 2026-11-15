@@ -197,3 +197,17 @@
 .daily-load-row>div{display:grid;gap:3px}.daily-load-row small{color:var(--muted,#687386);font-size:.76rem}
 .daily-load-row.overloaded{background:#fff0ed;outline:1px solid #e7a39a}.daily-load-row.overloaded strong{color:#a83225;font-size:.78rem}
 @media(max-width:680px){.daily-load-row{grid-template-columns:1fr 1fr;gap:6px}.daily-load-row>div{grid-column:1/-1}.daily-load-row>strong{grid-column:1/-1}}
+
+
+.sleep-panel{margin-top:16px}
+.sleep-actions{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 8px}
+.sleep-history{display:grid;gap:10px;margin-top:12px}
+.sleep-entry{padding:12px;border:1px solid var(--line,#ddd);border-radius:11px;background:var(--surface,#fff)}
+.sleep-entry-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px}
+.sleep-entry-head b{font-variant-numeric:tabular-nums}
+.sleep-edit-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:8px 0}
+.sleep-edit-form label{display:grid;gap:4px;font-size:.82rem}
+.sleep-edit-form .sleep-note{grid-column:1/-1}
+.sleep-edit-form button{justify-self:start}
+.sleep-entry>small{display:block;margin-top:8px;color:var(--muted,#687080)}
+@media(max-width:620px){.sleep-edit-form{grid-template-columns:1fr}.sleep-edit-form .sleep-note{grid-column:auto}.sleep-actions .button{flex:1 1 100%}}
