@@ -6,3 +6,6 @@ pages_build_output_dir = "./public"
 binding = "DB"
 database_name = "sistema-rosta-db"
 database_id = "REPLACE_WITH_CLOUDFLARE_D1_DATABASE_ID"
+
+[ai]
+binding = "AI"
