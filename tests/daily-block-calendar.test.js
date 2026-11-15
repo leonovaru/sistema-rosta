@@ -75,3 +75,13 @@ test("summarizes fit, priority coverage, free time and unchanged day assignments
  assert.equal(priority.overloaded_days,1);
  assert.equal(priority.cross_day_moves,0);
 });
+
+test("exposes uninterrupted windows around meetings with suggested use by duration",()=>{
+ const [day]=buildDailyBlockPlans([{date:"2026-11-16",gross_capacity_minutes:300,available_minutes:240,tasks:[{title:"Работа",minutes:60}]}],{
+  startTime:"09:00",calendarEvents:[{event_type:"meeting",status:"planned",start_at:"2026-11-16T10:00",end_at:"2026-11-16T11:00"}]
+ });
+ assert.deepEqual(day.free_windows,[
+  {start_time:"09:00",end_time:"10:00",minutes:60,suggested_use:"Задача средней длительности"},
+  {start_time:"11:00",end_time:"14:00",minutes:180,suggested_use:"Длинная задача без переключений"}
+ ]);
+});
