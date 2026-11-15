@@ -1036,13 +1036,47 @@ function averageSleepMinutes(sessions,days){
  const values=period.map(s=>sleepDuration(s.fell_asleep_at,s.woke_at,s.asleep_timezone||s.timezone,s.wake_timezone||s.timezone)).filter(v=>v!==null);
  return {minutes:values.length?Math.round(values.reduce((a,b)=>a+b,0)/values.length):null,count:values.length,incompleteCount:period.length-values.length};
 }
+function averageSleepClock(sessions,days,timeField,timezoneField){
+ const today=sleepLocalDate(),start=shiftDate(today,-(days-1));
+ const records=sessions.filter(s=>s.sleep_date>=start&&s.sleep_date<=today&&s[timeField]);
+ const minutes=records.map(s=>{const value=s[timeField];if(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(value))return null;const [h,m]=value.slice(11).split(":").map(Number);return h<24&&m<60?h*60+m:null;}).filter(v=>v!==null);
+ if(!minutes.length)return {time:null,count:0,variation:null};
+ const angles=minutes.map(v=>v/1440*2*Math.PI),x=angles.reduce((a,b)=>a+Math.cos(b),0),y=angles.reduce((a,b)=>a+Math.sin(b),0);
+ const mean=((Math.atan2(y,x)/(2*Math.PI)*1440)%1440+1440)%1440;
+ const distances=minutes.map(v=>{const d=Math.abs(v-mean);return Math.min(d,1440-d);});
+ return {time:Math.round(mean)%1440,count:minutes.length,variation:Math.round(distances.reduce((a,b)=>a+b,0)/distances.length)};
+}
+function sleepDurationVariability(sessions,days){
+ const today=sleepLocalDate(),start=shiftDate(today,-(days-1));
+ const values=sessions.filter(s=>s.sleep_date>=start&&s.sleep_date<=today).map(s=>sleepDuration(s.fell_asleep_at,s.woke_at,s.asleep_timezone||s.timezone,s.wake_timezone||s.timezone)).filter(v=>v!==null);
+ if(values.length<2)return {minutes:null,count:values.length};
+ const mean=values.reduce((a,b)=>a+b,0)/values.length;
+ return {minutes:Math.round(Math.sqrt(values.reduce((sum,v)=>sum+(v-mean)**2,0)/values.length)),count:values.length};
+}
+function sleepClockLabel(minutes){
+ if(minutes===null)return "Недостаточно данных";
+ const value=((minutes%1440)+1440)%1440;
+ return String(Math.floor(value/60)).padStart(2,"0")+":"+String(value%60).padStart(2,"0");
+}
 function sleepDurationLabel(minutes){
  if(minutes===null)return "Недостаточно данных";
  const h=Math.floor(minutes/60),m=minutes%60;return h+" ч"+(m?" "+m+" мин":"");
 }
 function renderSleep(){
- const stats7=averageSleepMinutes(sleepSessions,7),stats30=averageSleepMinutes(sleepSessions,30);
- $("sleep-summary").innerHTML=[{label:"7 дней",stats:stats7},{label:"30 дней",stats:stats30}].map(({label,stats})=>'<div class="sleep-stat"><span>Средний сон · '+label+'</span><strong>'+(stats.count?sleepDurationLabel(stats.minutes):"Недостаточно данных")+'</strong><small>'+stats.count+' полных ночей'+(stats.incompleteCount?' · '+stats.incompleteCount+' неполных':'')+'</small></div>').join("")+'<p class="fine">В среднем учитываются только записи с временем засыпания и пробуждения. Пропущенные дни не считаются нулевым сном.</p>';
+ const periods=[{label:"7 дней",days:7},{label:"30 дней",days:30}];
+ const cards=periods.map(({label,days})=>{
+  const duration=averageSleepMinutes(sleepSessions,days);
+  const asleep=averageSleepClock(sleepSessions,days,"fell_asleep_at","asleep_timezone");
+  const wake=averageSleepClock(sleepSessions,days,"woke_at","wake_timezone");
+  const durationSpread=sleepDurationVariability(sleepSessions,days);
+  const metric=(name,value,detail)=>'<div class="sleep-stat"><span>'+name+'</span><strong>'+value+'</strong><small>'+detail+'</small></div>';
+  return metric("Средняя продолжительность · "+label,duration.count?sleepDurationLabel(duration.minutes):"Недостаточно данных",duration.count+" полных ночей"+(duration.incompleteCount?" · "+duration.incompleteCount+" неполных":""))
+   +metric("Среднее засыпание · "+label,sleepClockLabel(asleep.time),asleep.count+" отметок")
+   +metric("Среднее пробуждение · "+label,sleepClockLabel(wake.time),wake.count+" отметок")
+   +metric("Разброс времени засыпания · "+label,asleep.variation===null?"Недостаточно данных":sleepDurationLabel(asleep.variation),asleep.count+" отметок · среднее отклонение по кругу суток")
+   +metric("Разброс длительности · "+label,durationSpread.minutes===null?"Недостаточно данных":sleepDurationLabel(durationSpread.minutes),durationSpread.count+" полных ночей · стандартное отклонение");
+ }).join("");
+ $("sleep-summary").innerHTML=cards+'<p class="fine">В расчётах используются только фактические отметки. Время засыпания и пробуждения сравнивается по местным часам каждой записи; разброс продолжительности считается только для полных ночей. Для оценки регулярности нужно хотя бы две отметки. Пропущенные дни не считаются нулевым сном.</p>';
  const today=sleepLocalDate(),yesterday=shiftDate(today,-1);
  const current=sleepSessions.find(s=>s.sleep_date===today||s.sleep_date===yesterday);
  const status=$("sleep-status");
