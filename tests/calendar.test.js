@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { expandRecurringEvents, isValidCalendarDate, isValidCalendarDateTime } from "../functions/_lib/calendar.js";
+import { expandRecurringEvents, createSleepCalendarEvents, isValidCalendarDate, isValidCalendarDateTime } from "../functions/_lib/calendar.js";
 
 test("daily overnight series includes the occurrence that began yesterday", () => {
   const events = expandRecurringEvents([{
@@ -50,4 +50,34 @@ test("validates real calendar dates and wall-clock times, not only their string 
   assert.equal(isValidCalendarDateTime("2026-11-15T24:00"),false);
   assert.equal(isValidCalendarDateTime("2026-11-15T12:60"),false);
   assert.equal(isValidCalendarDateTime("2026-02-30T12:00"),false);
+});
+
+test("sleep sessions become read-only calendar events in the workspace timezone", () => {
+  const events = createSleepCalendarEvents([{
+    id:"night-1",sleep_date:"2026-11-14",
+    fell_asleep_at:"2026-11-14T23:00",asleep_timezone:"Europe/Moscow",
+    woke_at:"2026-11-15T07:00",wake_timezone:"Europe/Moscow",timezone:"Europe/Moscow"
+  }],"2026-11-14T00:00","2026-11-16T00:00","Europe/Amsterdam");
+  assert.equal(events.length,1);
+  assert.equal(events[0].start_at,"2026-11-14T21:00");
+  assert.equal(events[0].end_at,"2026-11-15T05:00");
+  assert.equal(events[0].event_type,"sleep");
+  assert.equal(events[0].is_sleep_session,true);
+});
+
+test("sleep calendar projection does not duplicate an overlapping manual sleep event", () => {
+  const session = [{
+    id:"night-2",sleep_date:"2026-11-14",fell_asleep_at:"2026-11-14T23:00",
+    woke_at:"2026-11-15T07:00",timezone:"Europe/Moscow"
+  }];
+  const manual = [{event_type:"sleep",status:"planned",start_at:"2026-11-14T22:30",end_at:"2026-11-15T07:30"}];
+  assert.deepEqual(createSleepCalendarEvents(session,"2026-11-14T00:00","2026-11-16T00:00","Europe/Moscow",manual),[]);
+});
+
+test("incomplete or ambiguous sleep sessions are not projected into the calendar", () => {
+  const events = createSleepCalendarEvents([
+    {id:"incomplete",sleep_date:"2026-11-14",fell_asleep_at:"2026-11-14T23:00",woke_at:null,timezone:"Europe/Moscow"},
+    {id:"ambiguous",sleep_date:"2026-10-25",fell_asleep_at:"2026-10-25T02:30",asleep_timezone:"Europe/Amsterdam",woke_at:"2026-10-25T07:00",wake_timezone:"Europe/Amsterdam"}
+  ],"2026-10-24T00:00","2026-10-26T00:00","Europe/Amsterdam");
+  assert.deepEqual(events,[]);
 });
