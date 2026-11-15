@@ -19,7 +19,7 @@ test("allocates tasks in chronological free slots and never crosses a gap", () =
   const result = allocateTaskSlots([
     { task_id: "a", title: "Первая", minutes: 60 },
     { task_id: "b", title: "Вторая", minutes: 45 },
-    { task_id: "c", title: "Третья", minutes: 30 }
+    { task_id: "c", title: "Третья", minutes: 50 }
   ], [{ start: 540, end: 600 }, { start: 660, end: 750 }], "2026-11-15");
   assert.deepEqual(result.items.map(item => [item.task_id, item.scheduled, item.start_at, item.end_at]), [
     ["a", true, "2026-11-15T09:00", "2026-11-15T10:00"],
