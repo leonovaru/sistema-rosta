@@ -2,13 +2,14 @@ import { addDays, addPeriod } from "./finance.js";
 const positive=value=>{const n=Number(value);return Number.isFinite(n)&&n>0?n:0;};
 function dateValid(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const d=new Date(value+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}
 function monthDays(month){return new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0,12)).getUTCDate();}
-export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,planned=[],obligations=[],debts=[],variableExpensesByMonth=[],reserves=[],irregularExpenses=[]}){
+export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,planned=[],obligations=[],debts=[],variableExpensesByMonth=[],reserves=[],irregularExpenses=[],variableRecurringEvents=[]}){
  if(!dateValid(today))throw new Error("Invalid forecast date");
  const end=addDays(today,horizonDays),events=[];
  for(const row of planned){
   if(!dateValid(row.expected_date)||row.expected_date<today||row.expected_date>end)continue;
   events.push({id:row.id||null,date:row.expected_date,type:row.flow_type,title:row.title,amount:positive(row.amount),source:"planned",direction_title:row.direction_title||null});
  }
+ for(const row of variableRecurringEvents){if(dateValid(row.date)&&row.date>=today&&row.date<=end)events.push({...row,amount:positive(row.amount),type:"expense",source:"variable_recurring"});}
  for(const row of obligations){
   let due=row.due_date,guard=0;
   while(due&&due<=end&&guard++<120){
