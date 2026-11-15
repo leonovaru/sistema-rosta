@@ -992,21 +992,40 @@ function sleepLocalDate(){
  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:userSettings.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
  const v=Object.fromEntries(parts.map(p=>[p.type,p.value]));return v.year+"-"+v.month+"-"+v.day;
 }
-function sleepDuration(start,end){
- if(!start||!end)return null;const a=new Date(start),b=new Date(end);
- return Number.isFinite(a.getTime())&&Number.isFinite(b.getTime())&&b>a?Math.round((b-a)/60000):null;
+function sleepWallTimeEpoch(value,timezone){
+ if(!value)return null;
+ const [date,time]=value.split("T"),[year,month,day]=date.split("-").map(Number),[hour,minute]=time.split(":").map(Number);
+ const target=Date.UTC(year,month-1,day,hour,minute);let guess=target;
+ for(let i=0;i<4;i++){
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(guess));
+  const v=Object.fromEntries(parts.map(p=>[p.type,p.value]));
+  const represented=Date.UTC(Number(v.year),Number(v.month)-1,Number(v.day),Number(v.hour),Number(v.minute));
+  guess+=target-represented;
+ }
+ return guess;
+}
+function sleepDuration(start,end,timezone="Europe/Moscow"){
+ if(!start||!end)return null;
+ try{const a=sleepWallTimeEpoch(start,timezone),b=sleepWallTimeEpoch(end,timezone);return b>a?Math.round((b-a)/60000):null;}catch{return null;}
+}
+function averageSleepMinutes(sessions,days){
+ const today=sleepLocalDate(),cutoff=Date.parse(shiftDate(today,-(days-1))+"T00:00:00Z");
+ const values=sessions.filter(s=>Date.parse(s.sleep_date+"T00:00:00Z")>=cutoff).map(s=>sleepDuration(s.fell_asleep_at,s.woke_at,s.timezone)).filter(v=>v!==null);
+ return values.length?{minutes:Math.round(values.reduce((a,b)=>a+b,0)/values.length),count:values.length}:null;
 }
 function sleepDurationLabel(minutes){
  if(minutes===null)return "Недостаточно данных";
  const h=Math.floor(minutes/60),m=minutes%60;return h+" ч"+(m?" "+m+" мин":"");
 }
 function renderSleep(){
+ const stats7=averageSleepMinutes(sleepSessions,7),stats30=averageSleepMinutes(sleepSessions,30);
+ $("sleep-summary").innerHTML='<div class="sleep-stat"><span>Средний сон · 7 дней</span><strong>'+(stats7?sleepDurationLabel(stats7.minutes):"Недостаточно данных")+'</strong><small>'+(stats7?stats7.count+" ночей":"Нужны записи засыпание + пробуждение")+'</small></div><div class="sleep-stat"><span>Средний сон · 30 дней</span><strong>'+(stats30?sleepDurationLabel(stats30.minutes):"Недостаточно данных")+'</strong><small>'+(stats30?stats30.count+" ночей":"Нужны записи засыпание + пробуждение")+'</small></div>';
  const today=sleepLocalDate(),yesterday=shiftDate(today,-1);
  const current=sleepSessions.find(s=>s.sleep_date===today||s.sleep_date===yesterday);
  const status=$("sleep-status");
  status.textContent=current?(current.woke_at?"Пробуждение зафиксировано: "+current.woke_at.slice(11,16):"Ночь начата "+(current.went_to_bed_at?current.went_to_bed_at.slice(11,16):"без отметки времени")+" · пробуждение ещё не подтверждено"):"Пока нет отметок за текущую ночь.";
  $("sleep-history").innerHTML=sleepSessions.length?sleepSessions.map(s=>{
-  const durationMinutes=sleepDuration(s.fell_asleep_at,s.woke_at);
+  const durationMinutes=sleepDuration(s.fell_asleep_at,s.woke_at,s.timezone);
   return '<article class="sleep-entry"><div class="sleep-entry-head"><strong>Ночь '+escapeHtml(s.sleep_date)+'</strong><b>'+sleepDurationLabel(durationMinutes)+'</b></div><form class="sleep-edit-form" data-sleep-edit="'+escapeHtml(s.id)+'"><label>Легла<input type="datetime-local" name="went_to_bed_at" value="'+escapeHtml(s.went_to_bed_at||"")+'"></label><label>Уснула примерно<input type="datetime-local" name="fell_asleep_at" value="'+escapeHtml(s.fell_asleep_at||"")+'"></label><label>Проснулась<input type="datetime-local" name="woke_at" value="'+escapeHtml(s.woke_at||"")+'"></label><label class="sleep-note">Заметка<input name="note" maxlength="1000" value="'+escapeHtml(s.note||"")+'"></label><button class="button ghost" type="submit">Сохранить исправления</button></form><button type="button" class="button ghost" data-sleep-delete="'+escapeHtml(s.id)+'">Удалить запись</button><small class="fine">Пробуждение: '+(s.woke_at?escapeHtml(s.woke_at.slice(11,16)):"не отмечено")+' · засыпание: '+(s.fell_asleep_at?escapeHtml(s.fell_asleep_at.slice(11,16)):"не указано")+'</small></article>';
  }).join(""):'<p class="muted">Здесь появится история сна.</p>';
 }
