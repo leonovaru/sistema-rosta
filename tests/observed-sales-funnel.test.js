@@ -21,3 +21,13 @@ test("ignores malformed event payloads and missing client references",()=>{
  const result=buildObservedSalesFunnel({interactionRows:[{direction_id:"d",client_id:null}],dealEventRows:[{direction_id:"d",client_id:"c1",changes_json:"bad"}]});
  assert.deepEqual(result,[]);
 });
+
+test("does not count stage changes outside the contacted-client cohort",()=>{
+ const result=buildObservedSalesFunnel({interactionRows:[{direction_id:"d",client_id:"contacted"}],dealEventRows:[
+  {direction_id:"d",client_id:"uncontacted",changes_json:'[{"field":"stage","to":"won"}]'}
+ ]})[0];
+ assert.equal(result.observed_contacted_clients,1);
+ assert.equal(result.qualified_clients,0);
+ assert.equal(result.won_clients,0);
+ assert.equal(result.observed_contact_to_lead_percent,0);
+});
