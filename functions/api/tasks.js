@@ -52,13 +52,19 @@ export async function onRequestPost({ request, env }) {
     const project=await env.DB.prepare("SELECT client_id,direction_id FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first();
     if ((clientId && clientId!==project.client_id) || (directionId && directionId!==project.direction_id)) return json({error:"Клиент и направление должны соответствовать выбранному проекту"},400);
   }
+  let inherited = null;
   if (parentTaskId) {
-    const parent=await env.DB.prepare("SELECT id,project_id,life_area_id FROM tasks WHERE id=? AND user_id=?").bind(parentTaskId,user.id).first();
-    if ((projectId && projectId!==parent.project_id) || (lifeAreaId && lifeAreaId!==parent.life_area_id)) return json({error:"Подзадача должна относиться к той же области, что и родительская задача"},400);
+    inherited=await env.DB.prepare("SELECT id,project_id,life_area_id,client_id,direction_id FROM tasks WHERE id=? AND user_id=?").bind(parentTaskId,user.id).first();
+    if (!inherited) return json({error:"Родительская задача не найдена"},404);
+    if ((projectId && projectId!==inherited.project_id) || (lifeAreaId && lifeAreaId!==inherited.life_area_id) || (clientId && clientId!==inherited.client_id) || (directionId && directionId!==inherited.direction_id)) return json({error:"Подзадача должна относиться к той же области, что и родительская задача"},400);
   }
+  const finalDirectionId=directionId || inherited?.direction_id || null;
+  const finalClientId=clientId || inherited?.client_id || null;
+  const finalProjectId=projectId || inherited?.project_id || null;
+  const finalLifeAreaId=lifeAreaId || inherited?.life_area_id || null;
   const id = newId();
   await env.DB.prepare("INSERT INTO tasks (id,user_id,direction_id,client_id,project_id,life_area_id,parent_task_id,title,description,due_date,priority,estimated_minutes,ai_plan) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    .bind(id,user.id,directionId,clientId,projectId,lifeAreaId,parentTaskId,title,description,dueDate,["low","medium","high"].includes(body?.priority)?body.priority:"medium",estimated,String(body?.ai_plan||"").slice(0,3000)).run();
+    .bind(id,user.id,finalDirectionId,finalClientId,finalProjectId,finalLifeAreaId,parentTaskId,title,description,dueDate,["low","medium","high"].includes(body?.priority)?body.priority:"medium",estimated,String(body?.ai_plan||"").slice(0,3000)).run();
   return json({ ok: true, id }, 201);
 }
 
