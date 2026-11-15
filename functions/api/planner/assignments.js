@@ -29,7 +29,7 @@ export async function onRequestPut({request,env}){
   seenTasks.add(taskId);
   const task=await env.DB.prepare("SELECT id,status,due_date,estimated_minutes,actual_minutes FROM tasks WHERE id=? AND user_id=?").bind(taskId,user.id).first();
   if(!task||!["todo","doing"].includes(task.status))return json({error:"Одна из задач не найдена или уже не активна"},404);
-  const remaining=Math.max(0,Number(task.estimated_minutes||0)-(task.status==="doing"?Number(task.actual_minutes||0):0));
+  const remaining=Math.max(0,Number(task.estimated_minutes||0)-Math.max(0,Number(task.actual_minutes||0)));
   if(!remaining)return json({error:"У задачи нет оставшегося оценённого времени"},400);
   const seenDates=new Set();let total=0;const rows=[];
   for(const allocation of schedule.allocations){
