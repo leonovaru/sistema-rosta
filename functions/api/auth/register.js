@@ -44,7 +44,8 @@ export async function onRequestPost({ request, env }) {
       const results = await env.DB.batch([
         env.DB.prepare("INSERT INTO users (id,email,password_hash,password_salt) SELECT ?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM users)").bind(id, email, passwordHash, salt),
         env.DB.prepare("INSERT INTO settings (user_id,monthly_target,timezone) VALUES (?,300000,'Europe/Moscow')").bind(id),
-        ...DIRECTIONS.map((title, i) => env.DB.prepare("INSERT INTO directions (id,user_id,title,sort_order) VALUES (?,?,?,?)").bind(newId(), id, title, i))
+        ...DIRECTIONS.map((title, i) => env.DB.prepare("INSERT INTO directions (id,user_id,title,sort_order) VALUES (?,?,?,?)").bind(newId(), id, title, i)),
+        ...INCOME_BUCKETS.map(([title, percentage, type], i) => env.DB.prepare("INSERT INTO income_buckets (id,user_id,title,percentage,bucket_type,sort_order) VALUES (?,?,?,?,?,?)").bind(newId(), id, title, percentage, type, i))
       ]);
       if (!results[0]?.meta?.changes) return json({ error: "Личный аккаунт уже создан. Регистрация закрыта." }, 403);
     }
