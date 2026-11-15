@@ -10,7 +10,8 @@ export function buildDealDateForecast(deals=[],{cycleByDirection=new Map(),first
   const cycle=deal.direction_id?cycleByDirection.get(deal.direction_id):null;
   const sample=Number(cycle?.contact_to_won_sample)||0,averageDays=Number(cycle?.avg_contact_to_won_days);
   const manualClose=deal.expected_close_date||null;
-  const estimatedClose=!manualClose&&firstContact&&sample>=minimumSample&&Number.isFinite(averageDays)?addDays(firstContact,averageDays):null;
+  const isOpen=!["won","lost"].includes(deal.stage);
+  const estimatedClose=isOpen&&!manualClose&&firstContact&&sample>=minimumSample&&Number.isFinite(averageDays)?addDays(firstContact,averageDays):null;
   return {...deal,estimated_close_date:manualClose||estimatedClose,close_date_is_estimated:Boolean(estimatedClose),close_date_estimate_source:manualClose?"manual":estimatedClose?"observed_sales_cycle":"not_available",sales_cycle_sample:sample,sales_cycle_average_days:Number.isFinite(averageDays)?averageDays:null};
  });
 }
