@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f5f6fa">
+  <title>Система роста</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar"><div class="brand"><span class="brand-mark">↗</span><span>Система роста</span></div><div id="userbar" class="userbar hidden"><span id="user-email"></span><button id="logout" class="button ghost">Выйти</button></div></header>
+    <main>
+      <section id="auth-view" class="auth-layout">
+        <div class="intro"><p class="eyebrow">ЛИЧНАЯ СИСТЕМА УПРАВЛЕНИЯ</p><h1>Превращай планы<br>в устойчивый доход.</h1><p class="muted">Восемь направлений, понятные приоритеты и движение к финансовой цели — в одном месте.</p><div class="goal-preview"><span>Месячная цель</span><strong>300 000 ₽</strong><small>От идеи до первых продаж — шаг за шагом</small></div></div>
+        <div class="panel auth-panel"><div class="tabs"><button class="tab active" data-tab="login">Войти</button><button class="tab" data-tab="register">Создать аккаунт</button></div><form id="auth-form"><label>Email<input id="email" type="email" autocomplete="email" required maxlength="254"></label><label>Пароль<input id="password" type="password" autocomplete="current-password" required minlength="10"></label><button class="button primary full" id="auth-submit">Войти</button><p id="auth-error" class="error" role="alert"></p></form><p class="fine">Данные доступны только после входа в аккаунт.</p></div>
+      </section>
+      <section id="app-view" class="hidden">
+        <div class="welcome"><div><p class="eyebrow">ТВОЯ РАБОЧАЯ ПАНЕЛЬ</p><h1>Добро пожаловать!</h1><p class="muted">Сначала главное — что приближает к доходу.</p></div><div class="date-pill" id="today"></div></div>
+        <div class="metrics"><article class="metric"><span>Цель на месяц</span><strong id="target">300 000 ₽</strong></article><article class="metric"><span>Получено в этом месяце</span><strong id="actual">0 ₽</strong></article><article class="metric"><span>Осталось до цели</span><strong id="gap">300 000 ₽</strong></article><article class="metric"><span>Прогноз на месяц</span><strong id="forecast">—</strong></article></div>
+        <div class="main-grid">
+          <section class="panel"><div class="section-head"><div><p class="eyebrow">ФОКУС</p><h2>Задачи</h2></div><span class="count" id="task-count">0</span></div><form id="task-form" class="inline-form"><input id="task-title" placeholder="Следующий конкретный шаг…" required maxlength="240"><button class="button primary">Добавить</button></form><div id="tasks" class="task-list"></div></section>
+          <section class="panel"><div class="section-head"><div><p class="eyebrow">ДЕНЬГИ</p><h2>Добавить доход</h2></div></div><form id="income-form" class="stack-form"><label>Сумма, ₽<input id="income-amount" type="number" min="1" step="0.01" required placeholder="Например, 15000"></label><label>Направление<select id="income-direction"></select></label><label>Дата<input id="income-date" type="date" required></label><label>Комментарий<input id="income-note" maxlength="500" placeholder="За что поступление"></label><button class="button primary">Записать поступление</button></form><div id="income-recent" class="income-recent"></div></section>
+        </div>
+        <section class="panel directions-panel"><div class="section-head"><div><p class="eyebrow">ПОРТФЕЛЬ</p><h2>Направления дохода</h2></div><span class="muted">8 потоков</span></div><div id="directions" class="directions-grid"></div></section>
+      </section>
+    </main>
+    <footer>Система роста · ранняя версия</footer>
+  </div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
