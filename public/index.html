@@ -119,6 +119,24 @@
             <div class="revenue-plan-actions"><span id="revenue-plan-share-note" class="fine"></span><button type="button" class="button primary" id="save-revenue-plan">Сохранить распределение</button></div>
             <section class="scenario-section"><div class="section-head"><div><p class="eyebrow">СЦЕНАРИИ РОСТА</p><h3>Три варианта достижения цели</h3></div><button type="button" class="button ghost" id="refresh-revenue-scenarios">Обновить сценарии</button></div><div id="revenue-scenarios" class="scenario-grid"></div><p id="revenue-scenarios-note" class="fine"></p></section>
             <section class="sales-plan-section"><div class="section-head"><div><p class="eyebrow">ВОРОНКА КЛИЕНТОВ</p><h3>План продаж и действий на неделю</h3></div><button type="button" class="button ghost" id="refresh-sales-plan">Пересчитать</button></div><p class="fine">Настрой конверсии для каждого направления. Первоначальные 40% и 20% — только стартовые допущения, не фактическая статистика.</p><div id="sales-plan-directions" class="sales-plan-grid"></div><div class="revenue-plan-actions"><span id="sales-plan-note" class="fine"></span><button type="button" class="button primary" id="save-sales-plan">Сохранить конверсии</button></div></section>
+            <section class="deals-section">
+              <div class="section-head"><div><p class="eyebrow">ФАКТИЧЕСКАЯ ВОРОНКА</p><h3>Сделки и ожидаемые поступления</h3></div><button type="button" class="button ghost" id="refresh-deals">Обновить</button></div>
+              <form id="deal-form" class="deal-form">
+                <label>Название сделки<input id="deal-title" required maxlength="180" placeholder="Например, аудит процессов"></label>
+                <div class="deal-form-grid">
+                  <label>Клиент<select id="deal-client"><option value="">Без клиента</option></select></label>
+                  <label>Направление<select id="deal-direction" required></select></label>
+                  <label>Сумма, ₽<input id="deal-amount" type="number" min="0.01" max="100000000" step="0.01" required></label>
+                  <label>Этап<select id="deal-stage"><option value="contact">Первичный контакт</option><option value="negotiation">Переговоры</option><option value="proposal">Предложение отправлено</option><option value="awaiting_payment">Ожидает оплаты</option><option value="won">Выиграна</option><option value="lost">Проиграна</option></select></label>
+                  <label>Вероятность, %<input id="deal-probability" type="number" min="0" max="100" step="1" value="20"></label>
+                  <label>Ожидаемая дата оплаты<input id="deal-date" type="date"></label>
+                </div>
+                <label>Комментарий<input id="deal-notes" maxlength="1500" placeholder="Следующий шаг, договорённости"></label>
+                <button class="button primary" type="submit">Добавить сделку</button>
+              </form>
+              <div id="deals-summary" class="analytics-metrics"></div><div id="deals-list" class="analytics-list"></div>
+              <p class="fine">Взвешенный прогноз = сумма сделки × вероятность. Выигранные сделки учитываются отдельно; они не заменяют фактические поступления в финансовом учёте.</p>
+            </section>
           </section>
           <p class="fine">Погашение долгов и оплата обязательных платежей учитываются отдельно. Не записывай их повторно как обычные расходы. Проценты по долгам пока фиксируются справочно и не начисляются автоматически.</p>
           <section class="debt-management-section">
