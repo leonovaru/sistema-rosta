@@ -53,7 +53,8 @@ export async function onRequestPost({request,env}){
     if(!LOCAL_DATE_TIME.test(wakeAt)||wakeAt.slice(0,10)!==today)return json({error:"Время пробуждения должно относиться к сегодняшней дате"},400);
     let row=await env.DB.prepare("SELECT * FROM sleep_sessions WHERE user_id=? AND woke_at IS NULL AND sleep_date IN (?,?) ORDER BY sleep_date DESC LIMIT 1").bind(user.id,today,shiftDate(today,-1)).first();
     if(!row)row=await ensureSession(env,user.id,shiftDate(today,-1),timezone);
-    await env.DB.prepare("UPDATE sleep_sessions SET woke_at=?,wake_date=?,wake_source=?,wake_confidence='exact',timezone=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(wakeAt,today,body?.source==="push"?"push":"app",timezone,row.id,user.id).run();
+    if(row.woke_at)return json({ok:true,duplicate:true,session:row});
+        await env.DB.prepare("UPDATE sleep_sessions SET woke_at=?,wake_date=?,wake_source=?,wake_confidence='exact',timezone=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(wakeAt,today,body?.source==="push"?"push":"app",timezone,row.id,user.id).run();
     return json({ok:true,session:await env.DB.prepare("SELECT * FROM sleep_sessions WHERE id=? AND user_id=?").bind(row.id,user.id).first()});
   }
   if(action==="edit"){
