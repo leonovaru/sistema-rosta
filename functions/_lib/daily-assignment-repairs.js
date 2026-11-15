@@ -14,7 +14,14 @@ export function buildDailyAssignmentRepairs(week,allocations=[],tasks=[]){
  const affected=new Set(issues.map(item=>String(item.task_id)));
  if(!affected.size)return {schedules:[],proposals:[],unresolved:[]};
  const taskMap=new Map((tasks||[]).map(task=>[String(task.id),task]));
- // Completed, cancelled, deleted, and otherwise inactive tasks can leave historical\n // allocation rows behind. They are not candidates for a schedule repair.\n for(const taskId of [...affected]){\n  const task=taskMap.get(taskId);\n  if(!task||!["todo","doing"].includes(task.status))affected.delete(taskId);\n }\n if(!affected.size)return {schedules:[],proposals:[],unresolved:[]};\n const rowsByTask=new Map();
+ // Completed, cancelled, deleted, and otherwise inactive tasks can leave historical
+ // allocation rows behind. They are not candidates for a schedule repair.
+ for(const taskId of [...affected]){
+  const task=taskMap.get(taskId);
+  if(!task||!["todo","doing"].includes(task.status))affected.delete(taskId);
+ }
+ if(!affected.size)return {schedules:[],proposals:[],unresolved:[]};
+ const rowsByTask=new Map();
  for(const row of allocations||[]){
   const id=String(row.task_id);
   if(!affected.has(id))continue;
