@@ -8,7 +8,7 @@ const nativeFetch = globalThis.fetch;
 const nativeCrypto = globalThis.crypto;
 const b64u = value => Buffer.from(value).toString("base64url");
 
-async function makeEnv(fetchImpl, subscriptionCount = 1) {
+async function makeEnv(fetchImpl, subscriptionCount = 1, timezone = "Europe/Moscow") {
   const pair = await webcrypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
   const privateJwk = await webcrypto.subtle.exportKey("jwk", pair.privateKey);
   const publicJwk = await webcrypto.subtle.exportKey("jwk", pair.publicKey);
@@ -27,7 +27,7 @@ async function makeEnv(fetchImpl, subscriptionCount = 1) {
       let values = [];
       const statement = {
         bind(...args) { values = args; return statement; },
-        async all() { return { results: subscriptions.slice() }; },
+        async all() { return { results: subscriptions.map(row => ({ ...row, timezone })) }; },
         async first() {
           if (sql.includes("SELECT id,status FROM push_deliveries")) {
             const row = deliveries.get(values[0] + "|" + values[1]);
@@ -139,5 +139,42 @@ test("an expired device subscription is removed without blocking other devices",
     assert.equal(rows.length, 2);
     assert.equal(rows.find(row => row.subscriptionId === "sub-1").status, "failed");
     assert.equal(rows.find(row => row.subscriptionId === "sub-2").status, "sent");
+  } finally { globalThis.fetch = nativeFetch; }
+});
+
+
+test("scheduler waits for 06:00 in the current account timezone", async () => {
+  let sends = 0;
+  const env = await makeEnv(async () => { sends++; return new Response(null, { status: 201 }); }, 1, "Europe/Amsterdam");
+  globalThis.fetch = env._fetch;
+  try {
+    await withFixedTime("2026-11-15T03:00:00.000Z", async () => {
+      await worker.scheduled({}, env, {});
+    });
+    assert.equal(sends, 0);
+    assert.equal(env._deliveries.size, 0);
+    await withFixedTime("2026-11-15T05:00:00.000Z", async () => {
+      await worker.scheduled({}, env, {});
+    });
+    assert.equal(sends, 1);
+    const delivery = [...env._deliveries.values()][0];
+    assert.equal(delivery.localDate, "2026-11-15");
+    assert.equal(delivery.timezone, "Europe/Amsterdam");
+    assert.equal(delivery.status, "sent");
+  } finally { globalThis.fetch = nativeFetch; }
+});
+
+test("each registered device receives its own delivery for the same local date", async () => {
+  let sends = 0;
+  const env = await makeEnv(async () => { sends++; return new Response(null, { status: 201 }); }, 2);
+  globalThis.fetch = env._fetch;
+  try {
+    await withFixedTime("2026-11-15T03:00:00.000Z", async () => {
+      await worker.scheduled({}, env, {});
+    });
+    assert.equal(sends, 2);
+    const rows = [...env._deliveries.values()];
+    assert.equal(rows.length, 2);
+    assert.ok(rows.every(row => row.status === "sent" && row.localDate === "2026-11-15"));
   } finally { globalThis.fetch = nativeFetch; }
 });
