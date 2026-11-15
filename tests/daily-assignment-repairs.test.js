@@ -61,3 +61,22 @@ test("an unresolved repair does not reserve partial capacity from a later feasib
  assert.equal(result.unresolved.length,1);
  assert.equal(result.unresolved[0].task_id,"a");
 });
+
+test("coordinates capacity across multiple affected tasks without double counting old shares",()=>{
+ const week=baseWeek();
+ week.daily_assignment_issues=[{task_id:"a",type:"stale"},{task_id:"b",type:"stale"}];
+ week.days[0].available_minutes=90;
+ week.days[0].tasks=[{id:"a",minutes:30},{id:"b",minutes:30}];
+ const result=buildDailyAssignmentRepairs(week,[
+  {task_id:"a",allocation_date:"2026-11-16",minutes:30},
+  {task_id:"b",allocation_date:"2026-11-16",minutes:30}
+ ],[
+  {...task,estimated_minutes:60,actual_minutes:0,due_date:"2026-11-16"},
+  {id:"b",title:"Вторая задача",status:"todo",estimated_minutes:30,actual_minutes:0,due_date:"2026-11-16"}
+ ]);
+ assert.deepEqual(result.schedules,[
+  {task_id:"a",allocations:[{date:"2026-11-16",minutes:60}]},
+  {task_id:"b",allocations:[{date:"2026-11-16",minutes:30}]}
+ ]);
+ assert.equal(result.unresolved.length,0);
+});
