@@ -21,7 +21,10 @@ function validKey(value, length) {
 export async function onRequestGet({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error: "Необходим вход" }, 401);
-  const row = await env.DB.prepare("SELECT id FROM push_subscriptions WHERE user_id=? LIMIT 1").bind(user.id).first();
+  const endpoint = url.searchParams.get("endpoint");
+  const row = endpoint
+    ? await env.DB.prepare("SELECT id FROM push_subscriptions WHERE user_id=? AND endpoint=? LIMIT 1").bind(user.id, endpoint).first()
+    : await env.DB.prepare("SELECT id FROM push_subscriptions WHERE user_id=? LIMIT 1").bind(user.id).first();
   return json({
     supported: Boolean(env.PUSH_VAPID_PUBLIC_KEY),
     public_key: env.PUSH_VAPID_PUBLIC_KEY || null,
