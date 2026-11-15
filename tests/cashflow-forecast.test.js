@@ -39,3 +39,18 @@ test("variable expense forecast switches to the next month's budget",()=>{
  assert.equal(x.summary.variable_expenses,1000+2000*2);
  assert.equal(x.summary.ending_balance,0);
 });
+
+test("reserves reduce spendable money without being counted as cash expenses",()=>{
+ const x=buildCashflowForecast({today:"2026-11-01",horizonDays:9,startingBalance:50000,reserves:[{title:"Ремонт",target_amount:30000,current_amount:10000,monthly_contribution:6000,active:1}]});
+ assert.equal(x.summary.ending_balance,50000);
+ assert.equal(x.summary.existing_reserves,10000);
+ assert.equal(x.summary.new_reserve_allocations,2000);
+ assert.equal(x.summary.available_ending_balance,38000);
+ assert.equal(x.summary.total_expenses,0);
+ assert.equal(x.days[0].available_balance,39400);
+});
+test("reserve contributions stop when the target is fully funded",()=>{
+ const x=buildCashflowForecast({today:"2026-11-01",horizonDays:30,startingBalance:10000,reserves:[{title:"Фонд",target_amount:1200,current_amount:1000,monthly_contribution:600,active:1}]});
+ assert.equal(x.summary.new_reserve_allocations,200);
+ assert.equal(x.summary.available_ending_balance,8800);
+});
