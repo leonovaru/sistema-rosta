@@ -1,4 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
+import { isProjectSelectable } from "../_lib/workspace-entity-availability.js";
 
 async function invalidateTodayPlan(env, userId) {
   const settings = await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(userId).first();
@@ -58,7 +59,8 @@ export async function onRequestPost({ request, env }) {
     if (!(await owned(env,table,id,user.id))) return json({ error: label+" не найдены" },404);
   }
   if (projectId) {
-    const project=await env.DB.prepare("SELECT client_id,direction_id FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first();
+    const project=await env.DB.prepare("SELECT client_id,direction_id,status FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first();
+    if(!isProjectSelectable(project))return json({error:"Нельзя создавать задачи в архивном проекте"},409);
     if ((clientId && clientId!==project.client_id) || (directionId && directionId!==project.direction_id)) return json({error:"Клиент и направление должны соответствовать выбранному проекту"},400);
   }
   let inherited = null;
