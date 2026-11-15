@@ -71,3 +71,5 @@
 .sales-plan-numbers span{display:flex;justify-content:space-between;gap:8px}
 .sales-plan-card button:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:800px){.sales-plan-grid{grid-template-columns:1fr}.sales-plan-inputs{grid-template-columns:1fr 1fr}}
+
+.debt-management-section{margin:20px 0;padding:20px;background:#fafaff;border:1px solid #e8e6fa;border-radius:16px}.debt-forecast-controls{display:grid;grid-template-columns:1fr 180px;gap:12px;max-width:620px}.debt-forecast-controls label{margin-bottom:12px}.debt-management-section h4{font-size:13px;margin:18px 0 8px}@media(max-width:520px){.debt-forecast-controls{grid-template-columns:1fr}}
