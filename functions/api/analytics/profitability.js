@@ -1,6 +1,7 @@
 import { json, requireUser } from "../../_lib/auth.js";
 import { buildProfitability, attachObservedSalesMetrics } from "../../_lib/profitability.js";
 import { buildObservedSalesFunnel } from "../../_lib/observed-sales-funnel.js";
+import { buildTimeAllocationRecommendations } from "../../_lib/time-allocation.js";
 import { localDateForInstant } from "../../_lib/work-time-overlap.js";
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(v){if(!DATE.test(v))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
@@ -33,5 +34,8 @@ export async function onRequestGet({request,env}){
  const result=buildProfitability({incomeRows:income.results,expenseRows:expenses.results,taskRows:tasks.results,openTaskRows:trackedRows});
  const funnel=buildObservedSalesFunnel({interactionRows:interactions.results,dealEventRows:dealEvents.results});
  const directions=attachObservedSalesMetrics(result.directions,funnel);
- return json({period:{from,to,timezone},funnel_period_days:90,summary:result.summary,directions});
+ const requestedHours=Number(url.searchParams.get("available_hours")||5);
+ if(!Number.isFinite(requestedHours)||requestedHours<=0||requestedHours>80)return json({error:"Укажи от 0 до 80 дополнительных часов"},400);
+ const time_allocation=buildTimeAllocationRecommendations(directions,requestedHours);
+ return json({period:{from,to,timezone},funnel_period_days:90,summary:result.summary,directions,time_allocation});
 }
