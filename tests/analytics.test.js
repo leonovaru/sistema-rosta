@@ -13,5 +13,5 @@ test("task analytics groups work by income stream, project, personal area and mo
  const a=buildTaskAnalytics(rows);assert.equal(a.by_direction[0].title,"Аудит");assert.equal(a.by_direction[0].tasks,2);assert.equal(a.by_project[0].title,"Клиент А");assert.equal(a.by_life_area.find(x=>x.title==="Дом").tasks,2);assert.deepEqual(a.by_month.map(x=>x.id),["2026-10","2026-11"]);
 });
 test("time analytics sums tracked sessions and calendar time by event type",()=>{
- const a=buildTimeAnalytics([{tracked_minutes:125}], [{event_type:"work",events:2,planned_minutes:120,actual_minutes:150},{event_type:"sleep",events:1,planned_minutes:480,actual_minutes:0}]);assert.equal(a.tracked_minutes,125);assert.equal(a.calendar_by_type[0].event_type,"work");assert.equal(a.calendar_by_type[0].actual_minutes,150);
+ const a=buildTimeAnalytics([{tracked_minutes:125}], [{event_type:"work",events:2,planned_minutes:120,actual_minutes:150},{event_type:"sleep",events:1,planned_minutes:480,actual_minutes:0}]);assert.equal(a.tracked_minutes,125);assert.equal(a.calendar_by_type.find(x=>x.event_type==="work").actual_minutes,150);assert.equal(a.calendar_by_type.find(x=>x.event_type==="sleep").planned_minutes,480);
 });
