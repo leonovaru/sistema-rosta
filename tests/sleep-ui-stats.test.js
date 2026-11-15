@@ -45,3 +45,59 @@ test("sleep statistics report zero complete nights without treating them as zero
   ], 7);
   assert.deepEqual(result, { minutes: null, count: 0, incompleteCount: 1 });
 });
+
+const clockMatch = app.match(/function averageSleepClock\(sessions,days,timeField\)\{([\s\S]*?)\n\}/);
+assert.ok(clockMatch, "averageSleepClock must remain available for sleep analytics");
+function runClock(sessions, days, field = "fell_asleep_at", today = "2026-11-15") {
+  const sleepLocalDate = () => today;
+  const shiftDate = (date, offset) => {
+    const value = new Date(date + "T12:00:00Z");
+    value.setUTCDate(value.getUTCDate() + offset);
+    return value.toISOString().slice(0, 10);
+  };
+  return new Function("sessions", "days", "timeField", "sleepLocalDate", "shiftDate", clockMatch[1])(
+    sessions, days, field, sleepLocalDate, shiftDate
+  );
+}
+test("average sleep clock handles times around midnight using circular mean", () => {
+  const result = runClock([
+    { sleep_date: "2026-11-14", fell_asleep_at: "2026-11-14T23:50" },
+    { sleep_date: "2026-11-15", fell_asleep_at: "2026-11-15T00:10" }
+  ], 7);
+  assert.equal(result.time, 0);
+  assert.equal(result.count, 2);
+  assert.equal(result.variation, 10);
+});
+test("average sleep clock ignores invalid values and does not invent a mean for opposite times", () => {
+  const result = runClock([
+    { sleep_date: "2026-11-14", fell_asleep_at: "2026-11-14T06:00" },
+    { sleep_date: "2026-11-15", fell_asleep_at: "2026-11-15T18:00" },
+    { sleep_date: "2026-11-15", fell_asleep_at: "bad" }
+  ], 7);
+  assert.equal(result.time, null);
+  assert.equal(result.count, 2);
+  assert.equal(result.variation, null);
+});
+const variabilityMatch = app.match(/function sleepDurationVariability\(sessions,days\)\{([\s\S]*?)\n\}/);
+assert.ok(variabilityMatch, "sleepDurationVariability must remain available for sleep analytics");
+function runVariability(sessions, days, today = "2026-11-15") {
+  const sleepLocalDate = () => today;
+  const shiftDate = (date, offset) => {
+    const value = new Date(date + "T12:00:00Z");
+    value.setUTCDate(value.getUTCDate() + offset);
+    return value.toISOString().slice(0, 10);
+  };
+  const sleepDuration = (start, end) => start && end ? Number(start) : null;
+  return new Function("sessions", "days", "sleepLocalDate", "shiftDate", "sleepDuration", variabilityMatch[1])(
+    sessions, days, sleepLocalDate, shiftDate, sleepDuration
+  );
+}
+test("sleep duration variability is standard deviation and requires at least two full nights", () => {
+  assert.deepEqual(runVariability([
+    { sleep_date: "2026-11-14", fell_asleep_at: "400", woke_at: "yes" },
+    { sleep_date: "2026-11-15", fell_asleep_at: "500", woke_at: "yes" }
+  ], 7), { minutes: 50, count: 2 });
+  assert.deepEqual(runVariability([
+    { sleep_date: "2026-11-15", fell_asleep_at: "400", woke_at: "yes" }
+  ], 7), { minutes: null, count: 1 });
+});
