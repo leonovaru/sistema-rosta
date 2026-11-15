@@ -41,3 +41,18 @@ test("does not split a task across windows and explains when no window fits",()=
  assert.equal(day.unmatched_window_tasks[0].task_id,"long");
  assert.match(day.unmatched_window_tasks[0].reason,/самое длинное — 60 мин/);
 });
+
+test("keeps the task order selected by the planning scenario",()=>{
+ const [day]=buildTaskWindowRecommendations([{date:"2026-11-16",tasks:[
+  {id:"priority",title:"Самая приоритетная",minutes:30,priority_score:100,urgency_days:0},
+  {id:"focus",title:"Сложная задача",minutes:45,priority_score:30,urgency_days:5,cognitive_load:"high"}
+ ],blocks:[
+  {type:"focus",task_id:"focus",start_time:"09:00",end_time:"09:45"},
+  {type:"focus",task_id:"priority",start_time:"10:00",end_time:"10:30"}
+ ],free_windows:[
+  {start_time:"09:00",end_time:"10:00",minutes:60},
+  {start_time:"13:00",end_time:"13:40",minutes:40}
+ ]}]);
+ assert.equal(day.task_window_recommendations[0].task_id,"focus");
+ assert.equal(day.task_window_recommendations[1].task_id,"priority");
+});
