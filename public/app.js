@@ -158,6 +158,31 @@ async function loadRevenueScenarios(){
  $("revenue-scenarios-note").textContent="Нагрузка рассчитана по фактическим поступлениям и времени завершённых задач за последние 90 дней. Если истории нет, оценка времени не подменяется догадкой. Доступное время — 5 рабочих дней по установленной дневной ёмкости.";
 }
 $("refresh-revenue-scenarios").addEventListener("click",async()=>{const b=$("refresh-revenue-scenarios");b.disabled=true;try{await loadRevenueScenarios();}catch(err){alert(err.message);}finally{b.disabled=false;}});
+
+let salesPlanData=null;
+async function loadSalesPlan(){
+ salesPlanData=await api("/api/finance/sales-plan");
+ const host=$("sales-plan-directions");
+ host.innerHTML=salesPlanData.directions.map(d=>'<article class="sales-plan-card"><div class="sales-plan-title"><b>'+escapeHtml(d.title)+'</b><span>Осталось до цели: '+money(d.remaining_target)+'</span></div><div class="sales-plan-inputs"><label>Контакт → обращение, %<input type="number" min="0" max="100" step="1" data-sales-response="'+escapeHtml(d.direction_id)+'" value="'+d.contact_to_lead_percent+'"></label><label>Обращение → продажа, %<input type="number" min="0" max="100" step="1" data-sales-close="'+escapeHtml(d.direction_id)+'" value="'+d.lead_to_sale_percent+'"></label></div><div class="sales-plan-numbers"><span>Продаж: <b>'+(d.sales_required===null?'укажи средний чек':d.sales_required)+'</b></span><span>Обращений: <b>'+(d.qualified_leads_required===null?'—':d.qualified_leads_required)+'</b></span><span>Первичных контактов: <b>'+(d.outreach_required===null?'—':d.outreach_required)+'</b></span></div><p class="fine">'+(d.assumptions_default?'Используются стартовые допущения 40% и 20%. Измени их на свои показатели.':'Используются сохранённые тобой конверсии.')+'</p><button type="button" class="button ghost" data-sales-create="'+escapeHtml(d.direction_id)+'" '+(d.outreach_required===null||d.outreach_required===0?'disabled':'')+'>Добавить задачи на неделю</button></article>').join('');
+ $("sales-plan-note").textContent="Расчёт строится от оставшейся цели, среднего чека и двух конверсий. Это модель воронки, а не обещание результата. Уточняй проценты по фактической статистике.";
+}
+$("save-sales-plan").addEventListener("click",async()=>{
+ const b=$("save-sales-plan");b.disabled=true;
+ try{const rows=salesPlanData.directions.map(d=>({direction_id:d.direction_id,contact_to_lead_percent:document.querySelector('[data-sales-response="'+d.direction_id+'"]').value,lead_to_sale_percent:document.querySelector('[data-sales-close="'+d.direction_id+'"]').value}));await api("/api/finance/sales-plan",{method:"POST",body:JSON.stringify({directions:rows})});await loadSalesPlan();}
+ catch(err){alert(err.message);}finally{b.disabled=false;}
+});
+$("sales-plan-directions").addEventListener("click",async e=>{
+ const b=e.target.closest("[data-sales-create]");if(!b)return;
+ const d=salesPlanData.directions.find(x=>x.direction_id===b.dataset.salesCreate);if(!d)return;
+ if(!confirm("Создать задачи на эту неделю для направления «"+d.title+"»?"))return;
+ b.disabled=true;
+ try{
+  const actions=d.weekly_actions.filter(x=>x.count!==null&&x.count>0);
+  for(const action of actions)await api("/api/tasks",{method:"POST",body:JSON.stringify({title:action.title+" — "+d.title,description:"Недельный ориентир по финансовому плану: "+action.count+". Требуемый объём рассчитан по заданным конверсиям. Отмечай фактические контакты и результаты в заметках.",direction_id:d.direction_id,due_date:localToday,priority:"high",estimated_minutes:Math.max(30,Math.min(240,action.count*10))})});
+  b.textContent="Задачи добавлены";await loadTasks();await loadPlanner();
+ }catch(err){alert(err.message);b.disabled=false;}
+});
+$("refresh-sales-plan").addEventListener("click",async()=>{const b=$("refresh-sales-plan");b.disabled=true;try{await loadRevenuePlan();await loadSalesPlan();}catch(err){alert(err.message);}finally{b.disabled=false;}});
 $("refresh-revenue-plan").addEventListener("click",async()=>{try{await loadRevenuePlan();}catch(err){alert(err.message);}});
 $("save-revenue-plan").addEventListener("click",async()=>{
  const b=$("save-revenue-plan");b.disabled=true;
@@ -568,7 +593,7 @@ async function boot() {
   try {
     const { user } = await api("/api/auth/me");
     if (!user) return showAuth();
-    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadProfitability(); await loadAnalytics(); await loadWorkspace(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
+    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadProfitability(); await loadRevenuePlan(); await loadRevenueScenarios(); await loadSalesPlan(); await loadAnalytics(); await loadWorkspace(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
   } catch { showAuth(); }
 }
 boot();
