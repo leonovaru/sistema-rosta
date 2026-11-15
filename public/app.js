@@ -223,7 +223,7 @@ function renderCalendar() {
       const items=calendarEvents.filter(e=>{
         const start=e.start_at.slice(0,10)<calendarSelected?0:e.start_at.slice(0,10)>calendarSelected?1440:Number(e.start_at.slice(11,13))*60+Number(e.start_at.slice(14,16));
         const end=e.end_at.slice(0,10)>calendarSelected?1440:e.end_at.slice(0,10)<calendarSelected?0:Number(e.end_at.slice(11,13))*60+Number(e.end_at.slice(14,16));
-        return start<hour*60+60&&end>hour*60;
+        return Math.max(0,Math.floor(start/60))===hour&&end>hour*60;
       });
       cells.push('<div class="calendar-hour-row"><span class="calendar-hour-label">'+pad2(hour)+':00</span><div class="calendar-hour-events">'+items.map(e=>'<button type="button" class="calendar-hour-event '+eventColors[e.event_type]+'" data-edit-event="'+e.id+'">'+(e.start_at.slice(0,10)<calendarSelected?'↳ ':eventTime(e.start_at)+' ')+escapeHtml(e.title)+'</button>').join("")+'</div></div>');
     }
