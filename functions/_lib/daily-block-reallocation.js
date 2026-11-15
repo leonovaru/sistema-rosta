@@ -1,57 +1,54 @@
 import { buildDailyBlockPlans } from "./daily-block-plans.js";
 
-function remainingByTask(plan){
- return new Map((plan?.unallocated||[]).map(item=>[String(item.task_id),Number(item.minutes)||0]));
+function remainingByTask(plan){return new Map((plan?.unallocated||[]).map(item=>[String(item.task_id),Number(item.minutes)||0]));}
+function scheduledByTask(plan){
+ const result=new Map();
+ for(const block of plan?.blocks||[])if(block.type==="focus"&&block.task_id!=null)result.set(String(block.task_id),(result.get(String(block.task_id))||0)+Number(block.minutes||0));
+ return result;
 }
 function priorityRank(task){return task.priority==="high"?3:task.priority==="medium"?2:1;}
-function taskOrder(a,b){
- return priorityRank(b)-priorityRank(a)||(Number(b.priority_score)||0)-(Number(a.priority_score)||0)||String(a.due_date||"9999").localeCompare(String(b.due_date||"9999"));
-}
-function planDay(day,tasks,options){
- return buildDailyBlockPlans([{...day,tasks}],options)[0]||{unallocated:[],blocks:[],focus_minutes:0,break_minutes:0};
-}
+function taskOrder(a,b){return priorityRank(b)-priorityRank(a)||(Number(b.priority_score)||0)-(Number(a.priority_score)||0)||String(a.due_date||"9999").localeCompare(String(b.due_date||"9999"));}
+function planDay(day,tasks,options){return buildDailyBlockPlans([{...day,tasks}],options)[0]||{unallocated:[],blocks:[]};}
 
 /**
- * Proposes whole-task moves to later working days. It never changes input data.
- * A destination is accepted only when the moved task fits completely and no
- * previously scheduled destination task becomes less schedulable.
+ * Suggests moving a daily allocation (not the whole task) to a later working day.
+ * No task dates or persistent assignments are changed.
  */
 export function buildDailyReallocationProposals(days=[],options={}){
  const projected=(days||[]).map(day=>({...day,tasks:(day.tasks||[]).map(task=>({...task}))}));
- const proposals=[],moved=new Set();
+ const proposals=[];
  for(let sourceIndex=0;sourceIndex<projected.length;sourceIndex++){
   const source=projected[sourceIndex];
-  let sourcePlan=planDay(source,source.tasks,options);
+  const sourcePlan=planDay(source,source.tasks,options);
   const overflowIds=new Set((sourcePlan.unallocated||[]).map(item=>String(item.task_id)));
-  const candidates=source.tasks.filter(task=>overflowIds.has(String(task.id))&&task.id!=null&&!moved.has(String(task.id))&&task.priority!=="high"&&Number(task.minutes)>0).sort(taskOrder);
+  const candidates=source.tasks.filter(task=>task.id!=null&&overflowIds.has(String(task.id))&&task.priority!=="high"&&Number(task.minutes)>0).sort(taskOrder);
   for(const task of candidates){
    const dueDate=task.due_date?String(task.due_date).slice(0,10):null;
-   let selected=null;
-   const destinations=projected.slice(sourceIndex+1).filter(day=>day.working_day&&day.date>source.date&&(!dueDate||day.date<=dueDate));
-   for(const destination of destinations){
+   const allocationMinutes=Number(task.minutes);
+   for(const destination of projected.slice(sourceIndex+1)){
+    if(!destination.working_day||destination.date<=source.date||(dueDate&&destination.date>dueDate))continue;
     const baseline=planDay(destination,destination.tasks,options);
-    const baselineRemaining=remainingByTask(baseline);
-    const candidateTasks=[...destination.tasks,{...task}].sort(taskOrder);
+    const baselineRemaining=remainingByTask(baseline),baselineScheduled=scheduledByTask(baseline);
+    const existing=destination.tasks.find(item=>String(item.id)===String(task.id));
+    const candidateTasks=destination.tasks.map(item=>String(item.id)===String(task.id)?{...item,minutes:Number(item.minutes||0)+allocationMinutes}:{...item});
+    if(!existing)candidateTasks.push({...task,minutes:allocationMinutes});
+    candidateTasks.sort(taskOrder);
     const candidatePlan=planDay(destination,candidateTasks,options);
-    const afterRemaining=remainingByTask(candidatePlan);
-    const movedRemaining=Number(afterRemaining.get(String(task.id))||0);
-    if(movedRemaining>0)continue;
-    const worsened=destination.tasks.some(existing=>Number(afterRemaining.get(String(existing.id))||0)>Number(baselineRemaining.get(String(existing.id))||0));
+    const afterRemaining=remainingByTask(candidatePlan),afterScheduled=scheduledByTask(candidatePlan);
+    const scheduledIncrease=(afterScheduled.get(String(task.id))||0)-(baselineScheduled.get(String(task.id))||0);
+    if(scheduledIncrease<allocationMinutes)continue;
+    const worsened=destination.tasks.some(item=>Number(afterRemaining.get(String(item.id))||0)>Number(baselineRemaining.get(String(item.id))||0));
     if(worsened)continue;
-    selected={destination,candidateTasks};
+    source.tasks=source.tasks.filter(item=>String(item.id)!==String(task.id));
+    destination.tasks=candidateTasks;
+    proposals.push({
+     task_id:task.id,title:task.title||"Задача",from:source.date,to:destination.date,
+     minutes:allocationMinutes,due_date:dueDate,priority:task.priority||"medium",
+     cognitive_load:task.cognitive_load||"medium",
+     reason:"Эта дневная часть задачи не помещается в исходный день; в выбранном дне она помещается без вытеснения уже распределённых задач."
+    });
     break;
    }
-   if(!selected)continue;
-   source.tasks=source.tasks.filter(item=>String(item.id)!==String(task.id));
-   selected.destination.tasks=selected.candidateTasks;
-   moved.add(String(task.id));
-   proposals.push({
-    task_id:task.id,title:task.title||"Задача",from:source.date,to:selected.destination.date,
-    minutes:Number(task.minutes),due_date:dueDate,priority:task.priority||"medium",
-    cognitive_load:task.cognitive_load||"medium",
-    reason:"В исходном дне задача не помещается целиком; в выбранном дне она помещается без вытеснения уже распределённых задач."
-   });
-   sourcePlan=planDay(source,source.tasks,options);
   }
  }
  const remaining=[];
