@@ -65,7 +65,7 @@ export async function onRequestPost({request,env}){
   }));
   if(prepared.some(t=>!t.title))return json({error:"У каждой задачи должно быть название. Проверь пустые строки в черновике."},400);
   if(prepared.some(t=>t.parent_index!==null&&t.parent_index>=prepared.length))return json({error:"Проверь связь подзадач с родительскими задачами."},400);
-  if(!prepared.length)return json({error:"Не найдено задач для сохранения"},400);
+  if(!prepared.length&&!workspaceItems.length)return json({error:"Не найдено изменений для сохранения"},400);
   const statements=[];
   let created=0,updated=0,createdClients=0,createdProjects=0;
   const newClientIds=[],newProjectIds=[];
