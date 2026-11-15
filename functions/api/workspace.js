@@ -4,7 +4,7 @@ import { calculateProjectWorkload } from "../_lib/project-workload.js";
 import { calculateCalendarBusyMinutes, calculateCalendarBusyByDay } from "../_lib/calendar-capacity.js";
 import { calculateProjectDailyLoad } from "../_lib/project-daily-load.js";
 import { expandRecurringEvents } from "../_lib/calendar.js";
-import { isClientSelectable, isDirectionSelectable } from "../_lib/workspace-entity-availability.js";
+import { isClientSelectable, isDirectionSelectable, canRestoreProject } from "../_lib/workspace-entity-availability.js";
 import { restoredClientStatus, restoredProjectStatus } from "../_lib/workspace-entity-restore.js";
 
 const DEFAULT_AREAS = [
