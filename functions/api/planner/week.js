@@ -15,6 +15,7 @@ import { buildDailyBlockPlans, buildDailyBlockScenarios } from "../../_lib/daily
 import { buildDailyReallocationProposals } from "../../_lib/daily-block-reallocation.js";
 import { applySavedDailyTaskAllocations } from "../../_lib/daily-task-assignments.js";
 import { buildDailyAssignmentRepairs } from "../../_lib/daily-assignment-repairs.js";
+import { buildRemainingDailyPlan } from "../../_lib/remaining-daily-plan.js";
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day;}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 export async function onRequestGet({request,env}){
@@ -55,6 +56,7 @@ export async function onRequestGet({request,env}){
  week.daily_block_preferences={focus_minutes:focusMinutes,break_minutes:breakMinutes,prep_before_minutes:prepBeforeMinutes,buffer_after_minutes:bufferAfterMinutes};
  const dailyBlockOptions={focusMinutes,breakMinutes,startTime:url.searchParams.get("start_time")||"09:00",prepBeforeMinutes,bufferAfterMinutes,calendarEvents:events};
  week.daily_block_plans=buildDailyBlockPlans(week.days,dailyBlockOptions);
+ week.today_remaining_plan=configured?buildRemainingDailyPlan({days:week.days,calendarEvents:events,now:new Date().toISOString(),timeZone:timezone,startTime:dailyBlockOptions.startTime,focusMinutes,breakMinutes,prepBeforeMinutes,bufferAfterMinutes}):null;
  week.daily_block_scenarios=buildDailyBlockScenarios(week.days,dailyBlockOptions);
  week.daily_reallocation_proposals=buildDailyReallocationProposals(week.days,dailyBlockOptions);
  return json({week});
