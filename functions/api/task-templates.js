@@ -2,6 +2,7 @@ import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { recurringTaskDates } from "../_lib/recurring-tasks.js";
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
+function validDate(value){if(!DATE.test(value))return false;const date=new Date(value+"T12:00:00Z");return !Number.isNaN(date.getTime())&&date.toISOString().slice(0,10)===value;}
 function todayInZone(timezone){
  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
  const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));
@@ -50,8 +51,8 @@ export async function onRequestPost({request,env}){
  const estimated=b.estimated_minutes==null||b.estimated_minutes===""?null:Math.round(Number(b.estimated_minutes));
  if(!title||title.length>240)return json({error:"Укажи название задачи (до 240 символов)"},400);
  if(!["daily","weekly","monthly"].includes(recurrence))return json({error:"Выбери повторение"},400);
- if(!DATE.test(startDate)||Number.isNaN(Date.parse(startDate+"T12:00:00Z")))return json({error:"Проверь дату начала"},400);
- if(endDate&&(!DATE.test(endDate)||endDate<startDate))return json({error:"Дата окончания не может быть раньше начала"},400);
+ if(!validDate(startDate))return json({error:"Проверь дату начала"},400);
+ if(endDate&&(!validDate(endDate)||endDate<startDate))return json({error:"Дата окончания не может быть раньше начала"},400);
  if(estimated!==null&&(!Number.isInteger(estimated)||estimated<5||estimated>10000))return json({error:"Проверь оценку времени"},400);
  for(const [table,value,label] of [["life_areas",lifeAreaId,"Личная область"],["directions",directionId,"Направление"]]){
   if(value&&!await env.DB.prepare(`SELECT id FROM ${table} WHERE id=? AND user_id=? AND ${table==="life_areas"?"active=1":"active=1"}`).bind(value,user.id).first())return json({error:label+" не найдены"},404);
