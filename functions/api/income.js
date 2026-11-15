@@ -1,4 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
+import { allocateIncome } from "../_lib/income-buckets.js";
 
 function dateInZone(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -30,8 +31,14 @@ export async function onRequestPost({ request, env }) {
     const owns = await env.DB.prepare("SELECT id FROM directions WHERE id=? AND user_id=?").bind(directionId,user.id).first();
     if (!owns) return json({ error: "Направление не найдено" }, 404);
   }
+  const buckets = await env.DB.prepare("SELECT id,percentage,active FROM income_buckets WHERE user_id=? AND active=1 ORDER BY sort_order").bind(user.id).all();
+  let allocations;
+  try { allocations = allocateIncome(amount, buckets.results); }
+  catch { return json({ error: "Сначала настрой корзины так, чтобы распределение составляло 100%" }, 409); }
   const id = newId();
-  await env.DB.prepare("INSERT INTO income_entries (id,user_id,direction_id,amount,received_on,note) VALUES (?,?,?,?,?,?)")
-    .bind(id,user.id,directionId,amount,date,String(body?.note || "").slice(0,500)).run();
-  return json({ ok: true, id }, 201);
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO income_entries (id,user_id,direction_id,amount,received_on,note) VALUES (?,?,?,?,?,?)").bind(id,user.id,directionId,amount,date,String(body?.note || "").slice(0,500)),
+    ...allocations.map(row => env.DB.prepare("INSERT INTO income_bucket_allocations (id,user_id,income_id,bucket_id,percentage,amount) VALUES (?,?,?,?,?,?)").bind(newId(),user.id,id,row.bucket_id,row.percentage,row.amount))
+  ]);
+  return json({ ok: true, id, allocations }, 201);
 }
