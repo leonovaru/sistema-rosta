@@ -25,3 +25,10 @@ test("allows custom focus and break durations within safe bounds",()=>{
  assert.equal(day.focus_minutes,70);
  assert.equal(day.break_minutes,5);
 });
+
+test("uses user-selected focus and break durations",()=>{
+ const [day]=buildDailyBlockPlans([{date:"2026-11-16",available_minutes:90,planned_task_minutes:70,tasks:[{id:"a",title:"Работа",minutes:70}]}],{focusMinutes:35,breakMinutes:5});
+ assert.deepEqual(day.blocks.map(block=>[block.type,block.minutes]),[["focus",35],["break",5],["focus",35]]);
+ assert.equal(day.focus_minutes,70);
+ assert.equal(day.break_minutes,5);
+});
