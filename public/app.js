@@ -258,6 +258,12 @@ async function loadCategoryBudget(){
   const width=x.planned>0?Math.min(100,x.actual/x.planned*100):0;
   return '<article class="finance-row"><div class="budget-category-main"><b>'+escapeHtml(x.category)+'</b><small>Факт '+money(x.actual)+' · '+status+'</small>'+(x.planned!==null?'<div class="progress"><span style="width:'+width+'%"></span></div>':'')+'</div><strong>'+(x.planned===null?"—":money(x.planned))+'</strong>'+(x.planned!==null?'<button class="button ghost" data-budget-delete="'+escapeHtml(x.category)+'">×</button>':'')+'</article>';
  }).join(""):'<p class="muted">Пока нет расходов и бюджетов за этот месяц.</p>';
+ const insights=data.insights||[];
+ const repeated=insights.filter(x=>x.repeated_overrun);
+ $("budget-insights").innerHTML=insights.length?'<h4>Повторяющиеся превышения бюджета за 3 месяца</h4><p class="fine">Если лимит превышался минимум в двух месяцах из трёх, предлагаю пересмотреть его по фактическим расходам. Рекомендация не применяется автоматически.</p>'+insights.map(x=>{
+  const months=x.months.map(m=>'<span>'+m.month+': '+money(m.actual)+(m.budget===null?' · без плана':' / '+money(m.budget))+'</span>').join(' · ');
+  return '<article class="finance-row"><div><b>'+escapeHtml(x.category)+'</b><small>'+months+'</small><small>Средний факт: '+money(x.average_actual)+' · превышений: '+x.over_budget_months+' из '+x.months_with_budget+' месяцев</small></div>'+(x.repeated_overrun?'<div><strong>Предлагаемый лимит: '+money(x.suggested_budget)+'</strong><button class="button ghost" data-budget-suggest="'+escapeHtml(x.category)+'" data-budget-amount="'+x.suggested_budget+'">Установить на выбранный месяц</button></div>':'<span class="muted">Повторного превышения нет</span>')+'</article>';
+ }).join(""):'<p class="muted">Для анализа нужны расходы или бюджеты за предыдущие три полных месяца.</p>';
 }
 $("budget-month").addEventListener("change",()=>loadCategoryBudget().catch(err=>alert(err.message)));
 $("budget-form").addEventListener("submit",async e=>{
@@ -268,6 +274,12 @@ $("budget-form").addEventListener("submit",async e=>{
 $("budget-categories").addEventListener("click",async e=>{
  const b=e.target.closest("[data-budget-delete]");if(!b)return;
  try{await api("/api/finance/budget",{method:"DELETE",body:JSON.stringify({month:$("budget-month").value,category:b.dataset.budgetDelete})});await loadCategoryBudget();}
+ catch(err){alert(err.message);}
+});
+$("budget-insights").addEventListener("click",async e=>{
+ const b=e.target.closest("[data-budget-suggest]");if(!b)return;
+ if(!confirm("Установить рекомендованный лимит "+money(b.dataset.budgetAmount)+" для категории «"+b.dataset.budgetSuggest+"» на выбранный месяц?"))return;
+ try{await api("/api/finance/budget",{method:"POST",body:JSON.stringify({month:$("budget-month").value,category:b.dataset.budgetSuggest,planned_amount:b.dataset.budgetAmount})});await loadCategoryBudget();}
  catch(err){alert(err.message);}
 });
 async function loadFinance() {
