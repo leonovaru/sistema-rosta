@@ -16,7 +16,7 @@ test("attributes a project session to its explicitly targeted project, not its d
 test("uses the user's local start day and ignores sessions outside the week or without duration",()=>{
  const result=attachWeeklyActualTime(week(),[
   {started_at:"2026-11-15T22:30:00.000Z",duration_minutes:20,life_area_id:"home"},
-  {started_at:"2026-11-22T22:30:00.000Z",duration_minutes:40,life_area_id:"home"},
+  {started_at:"2026-11-22T20:30:00.000Z",duration_minutes:40,life_area_id:"home"},
   {started_at:"2026-11-18T08:00:00.000Z",duration_minutes:null,life_area_id:"home"}
  ],"Europe/Moscow");
  assert.equal(result.actual_time.tracked_minutes,60);
