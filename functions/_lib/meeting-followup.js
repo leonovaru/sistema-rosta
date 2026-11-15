@@ -17,3 +17,7 @@ export function listMeetingFollowups(meetings=[],today=""){
   return {meeting_id:meeting.id||null,meeting_title:meeting.title||"Встреча",meeting_date:meeting.meeting_date||null,agreement_index:index,task:agreement.task||"",assignee:agreement.assignee||null,task_id:agreement.task_id||null,task_title:agreement.task_title||null,task_status:status,due_date:dueDate,task_missing:!agreement.task_id,overdue:Boolean(agreement.task_id&&status!=="done"&&dueDate&&today&&dueDate<today),completed:status==="done"};
  })).filter(item=>!item.completed);
 }
+
+export function listMeetingOpenQuestions(meetings=[]){
+ return (Array.isArray(meetings)?meetings:[]).flatMap(meeting=>(Array.isArray(meeting.open_questions)?meeting.open_questions:[]).map(question=>({meeting_id:meeting.id||null,meeting_title:meeting.title||"Встреча",meeting_date:meeting.meeting_date||null,question})));
+}
