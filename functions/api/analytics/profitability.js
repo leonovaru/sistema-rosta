@@ -1,5 +1,5 @@
 import { json, requireUser } from "../../_lib/auth.js";
-import { buildProfitability } from "../../_lib/profitability.js";
+import { buildProfitability, attachObservedSalesMetrics } from "../../_lib/profitability.js";
 import { buildObservedSalesFunnel } from "../../_lib/observed-sales-funnel.js";
 import { localDateForInstant } from "../../_lib/work-time-overlap.js";
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
@@ -32,7 +32,6 @@ export async function onRequestGet({request,env}){
  const trackedRows=[...trackedByDirection.values()].map(row=>({direction_id:row.direction_id,direction_title:row.direction_title,active_tasks:row.activeTaskIds.size,tracked_minutes:row.tracked_minutes}));
  const result=buildProfitability({incomeRows:income.results,expenseRows:expenses.results,taskRows:tasks.results,openTaskRows:trackedRows});
  const funnel=buildObservedSalesFunnel({interactionRows:interactions.results,dealEventRows:dealEvents.results});
- const funnelByDirection=new Map(funnel.map(x=>[x.direction_id,x]));
- const directions=result.directions.map(x=>({...x,...(funnelByDirection.get(x.direction_id)||{observed_contacted_clients:0,qualified_clients:0,won_clients:0,observed_contact_to_lead_percent:null,observed_lead_to_sale_percent:null,avg_contact_to_negotiation_days:null,contact_to_negotiation_sample:0,avg_contact_to_proposal_days:null,contact_to_proposal_sample:0,avg_contact_to_won_days:null,contact_to_won_sample:0})}));
+ const directions=attachObservedSalesMetrics(result.directions,funnel);
  return json({period:{from,to,timezone},funnel_period_days:90,summary:result.summary,directions});
 }
