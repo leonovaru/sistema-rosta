@@ -374,7 +374,7 @@ $("debt-form").addEventListener("submit",async e=>{
 });
 $("obligation-form").addEventListener("submit",async e=>{
   e.preventDefault();
-  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation",title:$("obligation-title").value,amount:$("obligation-amount").value,due_date:$("obligation-date").value,frequency:$("obligation-frequency").value})});$("obligation-form").reset();await loadFinance();}
+  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation",title:$("obligation-title").value,amount:$("obligation-amount").value,due_date:$("obligation-date").value,frequency:$("obligation-frequency").value,category:$("obligation-category").value})});$("obligation-form").reset();await loadFinance();}
   catch(err){alert(err.message);}
 });
 $("debt-payment-form").addEventListener("submit",async e=>{
