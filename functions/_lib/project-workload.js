@@ -23,8 +23,10 @@ export function calculateProjectWorkload(projects = [], today, capacity = null) 
     const limit = addDays(today, days);
     const due = active.filter(project => project.deadline && project.deadline >= today && project.deadline <= limit);
     const estimated_minutes=due.reduce((sum, project) => sum + Math.max(0, Number(project.open_estimated_minutes) || 0), 0);
-    const capacity_minutes=configured?countWorkingDays(days)*Number(capacity.daily_capacity_minutes):null;
-    return { days, projects: due.length, estimated_minutes, unestimated_tasks: due.reduce((sum, project) => sum + Math.max(0, Number(project.unestimated_open_tasks) || 0), 0), capacity_minutes, load_percent:capacity_minutes>0?Math.round(estimated_minutes/capacity_minutes*100):null, over_capacity:capacity_minutes!==null&&estimated_minutes>capacity_minutes };
+    const gross_capacity_minutes=configured?countWorkingDays(days)*Number(capacity.daily_capacity_minutes):null;
+    const calendar_busy_minutes=configured?Math.max(0,Number(capacity.calendar_busy_by_horizon?.[[7,14,30].indexOf(days)])||0):null;
+    const capacity_minutes=configured?Math.max(0,gross_capacity_minutes-calendar_busy_minutes):null;
+    return { days, projects: due.length, estimated_minutes, unestimated_tasks: due.reduce((sum, project) => sum + Math.max(0, Number(project.unestimated_open_tasks) || 0), 0), gross_capacity_minutes, calendar_busy_minutes, capacity_minutes, load_percent:capacity_minutes>0?Math.round(estimated_minutes/capacity_minutes*100):estimated_minutes>0?null:0, over_capacity:capacity_minutes!==null&&estimated_minutes>capacity_minutes };
   });
   const enriched = projects.map(project => {
     const deadline = project.deadline || null;
