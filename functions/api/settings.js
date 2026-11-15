@@ -4,6 +4,10 @@ export async function onRequestGet({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error: "Необходим вход" }, 401);
   const settings = await env.DB.prepare("SELECT monthly_target,timezone,daily_capacity_minutes,work_capacity_configured,working_days_json FROM settings WHERE user_id=?").bind(user.id).first();
+  if (settings) {
+    try { settings.working_days=JSON.parse(settings.working_days_json||"[]"); } catch { settings.working_days=[]; }
+    settings.work_capacity_configured=Number(settings.work_capacity_configured)===1;
+  }
   return json({ settings });
 }
 
