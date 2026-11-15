@@ -1,6 +1,7 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
 import { expandRecurringEvents } from "../../_lib/calendar.js";
 import { mergeMinuteIntervals, intersectMinuteIntervals, allocateTaskSlots } from "../../_lib/planner-scheduling.js";
+import { orderPlannerTasks, normalizePlannerItems } from "../../_lib/planner-priorities.js";
 
 function localDate(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(new Date());
@@ -21,7 +22,7 @@ function fallbackPlan(tasks, capacity) {
   const sorted = [...tasks].sort((a,b) => {
     const overdueA = a.due_date && a.due_date < a.today ? 1 : 0;
     const overdueB = b.due_date && b.due_date < b.today ? 1 : 0;
-    return overdueB-overdueA || priority[b.priority]-priority[a.priority] ||
+    return Number(b.status === "doing")-Number(a.status === "doing") || overdueB-overdueA || priority[b.priority]-priority[a.priority] ||
       (a.due_date || "9999").localeCompare(b.due_date || "9999");
   });
   let used = 0;
@@ -104,11 +105,12 @@ export async function onRequestPost({ request, env }) {
   const tasksResult = await env.DB.prepare(`
     SELECT t.id,t.title,t.description,t.status,t.priority,t.due_date,t.estimated_minutes,d.title AS direction_title,d.target_month AS direction_target
     FROM tasks t LEFT JOIN directions d ON d.id=t.direction_id
-    WHERE t.user_id=? AND t.status IN ('todo','doing','waiting')
-    ORDER BY t.due_date IS NULL,t.due_date
+    WHERE t.user_id=? AND t.status IN ('todo','doing','waiting') AND (t.due_date IS NULL OR t.due_date<=?)
+    ORDER BY CASE t.status WHEN 'doing' THEN 0 ELSE 1 END,t.due_date IS NULL,t.due_date,
+      CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END
     LIMIT 60
-  `).bind(user.id).all();
-  const tasks = tasksResult.results.map(task => ({ ...task, today }));
+  `).bind(user.id,today).all();
+  const tasks = orderPlannerTasks(tasksResult.results.map(task => ({ ...task, today })), today);
   const monthStart = today.slice(0,7) + "-01";
   const actualRow = await env.DB.prepare("SELECT COALESCE(SUM(amount),0) AS actual FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=?").bind(user.id,monthStart,today).first();
   const day = Number(today.slice(8,10));
@@ -134,16 +136,8 @@ export async function onRequestPost({ request, env }) {
       });
       const parsed = parseJson(response?.response);
       if (!parsed || !Array.isArray(parsed.items)) throw new Error("Invalid planner response");
-      const byId = new Map(tasks.map(task => [task.id,task]));
-      const items = Array.isArray(parsed?.items) ? parsed.items.slice(0,7).map(item => {
-        const task = byId.get(String(item.task_id));
-        if (!task) return null;
-        const minutes = Math.max(5,Math.min(capacity,Math.round(Number(item.minutes)||task.estimated_minutes||30)));
-        return { task_id:task.id,title:task.title,minutes,reason:String(item.reason||"Приоритет на сегодня").slice(0,240) };
-      }).filter(Boolean) : [];
-      let used = 0;
-      const bounded = [];
-      for (const item of items) { if (used+item.minutes<=capacity) { bounded.push(item); used+=item.minutes; } }
+      const bounded = normalizePlannerItems(parsed.items, tasks, capacity);
+      const used = bounded.reduce((sum, item) => sum + item.minutes, 0);
       plan = { headline:String(parsed.headline||"План на сегодня").slice(0,180),focus:String(parsed.focus||"Двигай самые важные задачи").slice(0,400),items:bounded,total_minutes:used,reserve_minutes:capacity-used };
       source = "ai";
     } catch { /* безопасно используем алгоритмический план */ }
