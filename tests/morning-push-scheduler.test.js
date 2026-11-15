@@ -9,6 +9,7 @@ const nativeCrypto = globalThis.crypto;
 const b64u = value => Buffer.from(value).toString("base64url");
 
 async function makeEnv(fetchImpl, subscriptionCount = 1, timezone = "Europe/Moscow") {
+  let currentTimezone = timezone;
   const pair = await webcrypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
   const privateJwk = await webcrypto.subtle.exportKey("jwk", pair.privateKey);
   const publicJwk = await webcrypto.subtle.exportKey("jwk", pair.publicKey);
@@ -27,7 +28,7 @@ async function makeEnv(fetchImpl, subscriptionCount = 1, timezone = "Europe/Mosc
       let values = [];
       const statement = {
         bind(...args) { values = args; return statement; },
-        async all() { return { results: subscriptions.map(row => ({ ...row, timezone })) }; },
+        async all() { return { results: subscriptions.map(row => ({ ...row, timezone: currentTimezone })) }; },
         async first() {
           if (sql.includes("SELECT id,status FROM push_deliveries")) {
             const row = deliveries.get(values[0] + "|" + values[1]);
@@ -76,6 +77,7 @@ async function makeEnv(fetchImpl, subscriptionCount = 1, timezone = "Europe/Mosc
     VAPID_SUBJECT: "mailto:push@example.test",
     _deliveries: deliveries,
     _subscriptions: subscriptions,
+    _setTimezone(value) { currentTimezone = value; },
     _fetch: fetchImpl
   };
 }
@@ -176,5 +178,26 @@ test("each registered device receives its own delivery for the same local date",
     const rows = [...env._deliveries.values()];
     assert.equal(rows.length, 2);
     assert.ok(rows.every(row => row.status === "sent" && row.localDate === "2026-11-15"));
+  } finally { globalThis.fetch = nativeFetch; }
+});
+
+
+test("scheduler uses the updated timezone setting on its next run", async () => {
+  let sends = 0;
+  const env = await makeEnv(async () => { sends++; return new Response(null, { status: 201 }); }, 1, "Europe/Amsterdam");
+  globalThis.fetch = env._fetch;
+  try {
+    await withFixedTime("2026-11-15T03:00:00.000Z", async () => {
+      await worker.scheduled({}, env, {});
+    });
+    assert.equal(sends, 0);
+    env._setTimezone("Europe/Moscow");
+    await withFixedTime("2026-11-15T03:05:00.000Z", async () => {
+      await worker.scheduled({}, env, {});
+    });
+    assert.equal(sends, 1);
+    const delivery = [...env._deliveries.values()][0];
+    assert.equal(delivery.timezone, "Europe/Moscow");
+    assert.equal(delivery.localDate, "2026-11-15");
   } finally { globalThis.fetch = nativeFetch; }
 });
