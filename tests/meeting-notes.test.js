@@ -34,3 +34,24 @@ test("meeting project determines its linked client and prevents contradictory at
  assert.deepEqual(normalizeMeetingLinks("foreign","c2",projects,clients),{project_id:null,client_id:"c2"});
  assert.deepEqual(normalizeMeetingLinks("p1",null,projects,clients),{project_id:"p1",client_id:"c1"});
 });
+
+import { summarizeMeetingFollowup } from "../functions/_lib/meeting-followup.js";
+
+test("meeting follow-up summary counts pending, completed, overdue commitments and open questions",()=>{
+ const summary=summarizeMeetingFollowup([
+  {agreements:[
+   {task_id:"t1",task_status:"done",due_date:"2026-11-01"},
+   {task_id:"t2",task_status:"doing",task_due_date:"2026-11-10"},
+   {task_id:"t3",task_status:"todo",due_date:"2026-11-20"},
+   {task:"Задача без созданной задачи"}
+  ],open_questions:["Уточнить бюджет","Согласовать дату"]},
+  {agreements:[{task_id:"t4",task_status:"waiting",due_date:"2026-11-12"}],open_questions:[]}
+ ],"2026-11-15");
+ assert.deepEqual(summary,{agreements_total:5,linked_tasks:4,completed:1,overdue:2,pending:4,open_questions:2});
+});
+
+test("meeting follow-up summary does not mark undated commitments overdue",()=>{
+ const summary=summarizeMeetingFollowup([{agreements:[{task_id:"t1",task_status:"todo"}],open_questions:[]}],"2026-11-15");
+ assert.equal(summary.overdue,0);
+ assert.equal(summary.pending,1);
+});
