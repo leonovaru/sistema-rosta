@@ -14,6 +14,14 @@ function addDays(date,days) {
   const value=new Date(date+"T12:00:00Z");value.setUTCDate(value.getUTCDate()+days);
   return value.toISOString().slice(0,10);
 }
+function addPeriod(date,frequency) {
+  if(frequency==="weekly")return addDays(date,7);
+  if(frequency!=="monthly")return null;
+  const [year,month,day]=date.split("-").map(Number);
+  const next=new Date(Date.UTC(year,month,1,12));
+  const last=new Date(Date.UTC(next.getUTCFullYear(),next.getUTCMonth()+1,0,12)).getUTCDate();
+  return next.getUTCFullYear()+"-"+String(next.getUTCMonth()+1).padStart(2,"0")+"-"+String(Math.min(day,last)).padStart(2,"0");
+}
 export async function onRequestGet({request,env}) {
   const user=await requireUser(request,env);
   if(!user)return json({error:"Необходим вход"},401);
@@ -29,7 +37,8 @@ export async function onRequestGet({request,env}) {
     env.DB.prepare("SELECT p.*,d.title AS debt_title FROM debt_payments p JOIN debts d ON d.id=p.debt_id WHERE p.user_id=? ORDER BY p.paid_on DESC,p.created_at DESC LIMIT 30").bind(user.id).all()
   ]);
   const debtBalance=debtRows.results.filter(x=>x.status==="open").reduce((sum,x)=>sum+Number(x.balance),0);
-  const upcoming=obligations.results.filter(x=>x.due_date<=next30);\n  const upcomingTotal=upcoming.reduce((sum,x)=>sum+Number(x.amount),0);
+  const upcoming=obligations.results.filter(x=>x.due_date<=next30);
+  const upcomingTotal=upcoming.reduce((sum,x)=>sum+Number(x.amount),0);
   const incomeTotal=Number(income?.total||0),expenseTotal=Number(expenses?.total||0),debtPaid=Number(debtPayments?.total||0);
   return json({today,month_start:monthStart,summary:{income:incomeTotal,expenses:expenseTotal,debt_payments:debtPaid,net:incomeTotal-expenseTotal-debtPaid,debt_balance:debtBalance,upcoming_obligations:upcomingTotal},debts:debtRows.results,expenses:expenseRows.results,obligations:obligations.results,upcoming_obligations:upcoming,debt_payments:paymentRows.results});
 }
