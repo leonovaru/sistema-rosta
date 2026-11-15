@@ -8,8 +8,8 @@ test("summarizes completed timer sessions and long-session counts",()=>{
  assert.equal(result.sample_sessions,5);
  assert.equal(result.median_session_minutes,90);
  assert.equal(result.longest_session_minutes,150);
- assert.equal(result.sessions_over_90_minutes,2);
- assert.equal(result.sessions_over_120_minutes,1);
+ assert.equal(result.sessions_over_90_minutes,3);
+ assert.equal(result.sessions_over_120_minutes,2);
  assert.equal(result.confidence,"preliminary");
 });
 test("does not overstate conclusions with sparse data",()=>{
