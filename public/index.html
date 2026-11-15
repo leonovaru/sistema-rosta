@@ -269,6 +269,12 @@
             <label>Распознанный текст — можно исправить вручную<textarea id="voice-transcript" rows="3" maxlength="6000" placeholder="Например: По проекту Решай360 проверь диагностику седьмого класса до пятницы. Затем обнови список задач."></textarea></label>
             <div class="voice-controls"><button type="button" class="button primary" id="voice-analyze">Разобрать и распределить</button><span class="fine">Нужен интернет и поддерживаемый браузер. Если микрофон недоступен, можно вставить текст.</span></div>
             <div id="voice-preview" class="voice-preview hidden" aria-live="polite"></div>
+            <div class="meeting-capture panel-subsection">
+              <div class="section-head"><div><p class="eyebrow">ПОСЛЕ РАЗГОВОРА</p><h3>Протокол встречи</h3></div><span class="fine">Решения отдельно от идей</span></div>
+              <p class="fine">Надиктуй или вставь итоги встречи в поле выше, затем нажми «Разобрать как встречу». Система выделит решения, договорённости, предложения и открытые вопросы.</p>
+              <button type="button" class="button secondary" id="meeting-analyze">Разобрать как встречу</button>
+              <div id="meeting-preview" class="voice-preview hidden" aria-live="polite"></div>
+            </div>
           </section>
           <form id="task-form" class="task-create">
             <input id="task-title" placeholder="Следующий конкретный шаг…" required maxlength="240">
