@@ -27,7 +27,7 @@ export async function onRequestGet({request,env}) {
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM debt_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?").bind(user.id,monthStart,today).first(),
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM obligation_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?").bind(user.id,monthStart,today).first(),
     env.DB.prepare("SELECT * FROM debts WHERE user_id=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, balance DESC").bind(user.id).all(),
-    env.DB.prepare("SELECT * FROM expenses WHERE user_id=? ORDER BY spent_on DESC,created_at DESC LIMIT 100").bind(user.id).all(),
+    env.DB.prepare("SELECT e.*,d.title AS direction_title FROM expenses e LEFT JOIN directions d ON d.id=e.direction_id AND d.user_id=e.user_id WHERE e.user_id=? ORDER BY e.spent_on DESC,e.created_at DESC LIMIT 100").bind(user.id).all(),
     env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 ORDER BY due_date LIMIT 100").bind(user.id).all(),
     env.DB.prepare("SELECT p.*,d.title AS debt_title FROM debt_payments p JOIN debts d ON d.id=p.debt_id WHERE p.user_id=? ORDER BY p.paid_on DESC,p.created_at DESC LIMIT 30").bind(user.id).all()
   ]);
@@ -44,7 +44,9 @@ export async function onRequestPost({request,env}) {
   if(action==="expense"){
     const amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.spent_on||"");
     if(!amount||!title||title.length>180||!validDate(date))return json({error:"Проверь название, сумму и дату расхода"},400);
-    await env.DB.prepare("INSERT INTO expenses (id,user_id,category,title,amount,spent_on,note) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500)).run();
+    const directionId=body.direction_id?String(body.direction_id):null;
+    if(directionId&&!await env.DB.prepare("SELECT id FROM directions WHERE id=? AND user_id=?").bind(directionId,user.id).first())return json({error:"Направление дохода не найдено"},404);
+    await env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note) VALUES (?,?,?,?,?,?,?,?)").bind(id,user.id,directionId,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500)).run();
     return json({ok:true,id},201);
   }
   if(action==="debt"){
