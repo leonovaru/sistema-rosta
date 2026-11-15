@@ -70,17 +70,17 @@ export async function onRequestPost({request,env}){
   const statements=[];
   let created=0,updated=0,createdClients=0,createdProjects=0,updatedProjects=0;
   const newClientIds=[],newProjectIds=[],newProjectMeta=new Map();
-  for(const item of workspaceItems.filter(x=>x.type==="client")){
+  for(const item of workspaceItems.filter(x=>x.type==="client"&&x.include!==false)){
    const name=String(item.name||"").trim().slice(0,160);
    if(!name)return json({error:"У нового клиента должно быть название"},400);
    const directionId=allowed.direction_id.has(item.direction_id)?item.direction_id:null;
    const duplicate=await env.DB.prepare("SELECT id FROM clients WHERE user_id=? AND lower(name)=lower(?) AND status!='closed'").bind(user.id,name).first();
    if(duplicate)return json({error:"Клиент «"+name+"» уже существует. Выбери его в распределении задач."},409);
-   const id=newId();newClientIds.push(id);
+   const id=newId();newClientIds[workspaceItems.filter(x=>x.type==="client").indexOf(item)]=id;
    statements.push(env.DB.prepare("INSERT INTO clients (id,user_id,direction_id,name,contact,status,notes) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,directionId,name,String(item.contact||"").slice(0,240),"lead",String(item.notes||"").slice(0,3000)));
    createdClients++;
   }
-  for(const item of workspaceItems.filter(x=>x.type==="project_update")){
+  for(const item of workspaceItems.filter(x=>x.type==="project_update"&&x.include!==false)){
    const projectId=String(item.project_id||"");
    const current=await env.DB.prepare("SELECT id,client_id,direction_id FROM projects WHERE id=? AND user_id=? AND status NOT IN ('done','archived')").bind(projectId,user.id).first();
    if(!current)return json({error:"Проект для изменения больше не найден или уже закрыт. Повтори разбор."},409);
@@ -105,7 +105,7 @@ export async function onRequestPost({request,env}){
    statements.push(env.DB.prepare("UPDATE projects SET "+sets.join(",")+" WHERE id=? AND user_id=?").bind(...values));
    updatedProjects++;
   }
-  for(const item of workspaceItems.filter(x=>x.type==="project")){
+  for(const item of workspaceItems.filter(x=>x.type==="project"&&x.include!==false)){
    const title=String(item.title||"").trim().slice(0,180);
    if(!title)return json({error:"У нового проекта должно быть название"},400);
    const clientId=Number.isInteger(item.client_draft_index)&&newClientIds[item.client_draft_index]?newClientIds[item.client_draft_index]:(allowed.client_id.has(item.client_id)?item.client_id:null);
@@ -114,7 +114,7 @@ export async function onRequestPost({request,env}){
    if(client?.direction_id&&directionId&&client.direction_id!==directionId)return json({error:"Проект и клиент должны относиться к одному направлению"},400);
    const duplicate=await env.DB.prepare("SELECT id FROM projects WHERE user_id=? AND lower(title)=lower(?) AND status NOT IN ('done','archived')").bind(user.id,title).first();
    if(duplicate)return json({error:"Проект «"+title+"» уже существует. Выбери его в распределении задач."},409);
-   const id=newId();newProjectIds.push(id);newProjectMeta.set(id,{client_id:clientId,direction_id:directionId});
+   const id=newId();newProjectIds[workspaceItems.filter(x=>x.type==="project").indexOf(item)]=id;newProjectMeta.set(id,{client_id:clientId,direction_id:directionId});
    statements.push(env.DB.prepare("INSERT INTO projects (id,user_id,client_id,direction_id,title,description,expected_result,deadline,budget,status) VALUES (?,?,?,?,?,?,?,?,?,?)")
     .bind(id,user.id,clientId,directionId,title,String(item.description||"").slice(0,5000),String(item.expected_result||"").slice(0,2000),safeDate(item.deadline),"0","draft"));
    createdProjects++;
@@ -179,7 +179,7 @@ export async function onRequestPost({request,env}){
   const allowed={direction_id:new Set(dirs.results.map(x=>x.id)),client_id:new Set(clients.results.map(x=>x.id)),project_id:new Set(projects.results.map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
   const clarifyingQuestions=Array.isArray(parsed.clarifying_questions)?parsed.clarifying_questions.slice(0,5).map(x=>String(x).slice(0,300)):[];
   const existingById=new Map(existingTasks.results.map(task=>[task.id,task]));
-  const workspaceItems=(Array.isArray(parsed.workspace_items)?parsed.workspace_items:[]).slice(0,8).map(item=>item.type==="client"?{type:"client",name:String(item.name||"").trim().slice(0,160),direction_id:allowed.direction_id.has(item.direction_id)?item.direction_id:null,contact:String(item.contact||"").slice(0,240),notes:String(item.notes||"").slice(0,3000)}:item.type==="project"?{type:"project",title:String(item.title||"").trim().slice(0,180),description:String(item.description||"").slice(0,5000),expected_result:String(item.expected_result||"").slice(0,2000),deadline:safeDate(item.deadline),client_id:allowed.client_id.has(item.client_id)?item.client_id:null,client_draft_index:Number.isInteger(item.client_draft_index)&&item.client_draft_index>=0?item.client_draft_index:null,direction_id:allowed.direction_id.has(item.direction_id)?item.direction_id:null}:item.type==="project_update"&&projects.results.some(p=>p.id===item.project_id)?{type:"project_update",project_id:item.project_id,project_title:projects.results.find(p=>p.id===item.project_id)?.title||"Проект",changes:Object.fromEntries(Object.entries(item.changes||{}).filter(([key])=>["title","description","expected_result","deadline","status","client_id","direction_id"].includes(key)).map(([key,value])=>[key,key==="client_id"?(allowed.client_id.has(value)?value:null):key==="direction_id"?(allowed.direction_id.has(value)?value:null):key==="deadline"?(value===null?null:safeDate(value)):value]))}:null).filter(Boolean);
+  const workspaceItems=(Array.isArray(parsed.workspace_items)?parsed.workspace_items:[]).slice(0,8).map(item=>item.type==="client"?{type:"client",name:String(item.name||"").trim().slice(0,160),direction_id:allowed.direction_id.has(item.direction_id)?item.direction_id:null,contact:String(item.contact||"").slice(0,240),notes:String(item.notes||"").slice(0,3000)}:item.type==="project"?{type:"project",include:item.include!==false,title:String(item.title||"").trim().slice(0,180),description:String(item.description||"").slice(0,5000),expected_result:String(item.expected_result||"").slice(0,2000),deadline:safeDate(item.deadline),client_id:allowed.client_id.has(item.client_id)?item.client_id:null,client_draft_index:Number.isInteger(item.client_draft_index)&&item.client_draft_index>=0?item.client_draft_index:null,direction_id:allowed.direction_id.has(item.direction_id)?item.direction_id:null}:item.type==="project_update"&&projects.results.some(p=>p.id===item.project_id)?{type:"project_update",include:item.include!==false,project_id:item.project_id,project_title:projects.results.find(p=>p.id===item.project_id)?.title||"Проект",changes:Object.fromEntries(Object.entries(item.changes||{}).filter(([key])=>["title","description","expected_result","deadline","status","client_id","direction_id"].includes(key)).map(([key,value])=>[key,key==="client_id"?(allowed.client_id.has(value)?value:null):key==="direction_id"?(allowed.direction_id.has(value)?value:null):key==="deadline"?(value===null?null:safeDate(value)):value]))}:null).filter(Boolean);
   const tasks=(Array.isArray(parsed.tasks)?parsed.tasks:[]).slice(0,15).map((t,i)=>({
    title:String(t.title||"").trim().slice(0,240),description:String(t.description||"").trim().slice(0,2000),
    due_date:safeDate(t.due_date),priority:["low","medium","high"].includes(t.priority)?t.priority:"medium",
