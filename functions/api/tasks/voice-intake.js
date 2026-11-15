@@ -150,7 +150,7 @@ export async function onRequestPost({request,env}){
    }
    if(task.parent_index!==null&&task.parent_index>=tasks.length)task.parent_index=null;
   }
-  return json({ok:true,source:"ai",summary:String(parsed.summary||"Задачи разобраны").slice(0,500),tasks,clarifying_questions:clarifyingQuestions,existing_tasks:existingTasks.results});
+  return json({ok:true,source:"ai",summary:String(parsed.summary||"Задачи разобраны").slice(0,500),tasks,clarifying_questions:clarifyingQuestions,existing_tasks:existingTasks.results,project_context:projectContext});
  }catch{
   return json({error:"Не удалось надёжно разобрать диктовку. Попробуй переформулировать её или добавь задачу вручную.",transcript},502);
  }
