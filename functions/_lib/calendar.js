@@ -1,3 +1,5 @@
+import { resolveSleepWallTime } from "./sleep.js";
+
 export function isValidCalendarDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
@@ -60,4 +62,47 @@ export function expandRecurringEvents(rows, from, to) {
     }
   }
   return expanded.sort((a,b) => a.start_at.localeCompare(b.start_at));
+}
+
+function formatCalendarWallTime(epoch, timezone) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }).formatToParts(new Date(epoch));
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return value.year + "-" + value.month + "-" + value.day + "T" + value.hour + ":" + value.minute;
+}
+
+export function createSleepCalendarEvents(sessions = [], from, to, timezone = "Europe/Moscow", manualEvents = []) {
+  const events = [];
+  for (const session of sessions) {
+    if (!session.fell_asleep_at || !session.woke_at) continue;
+    const startEpoch = resolveSleepWallTime(session.fell_asleep_at, session.asleep_timezone || session.timezone || timezone);
+    const endEpoch = resolveSleepWallTime(session.woke_at, session.wake_timezone || session.timezone || timezone);
+    if (startEpoch === null || endEpoch === null || endEpoch <= startEpoch) continue;
+    const startAt = formatCalendarWallTime(startEpoch, timezone);
+    const endAt = formatCalendarWallTime(endEpoch, timezone);
+    if (startAt >= to || endAt <= from) continue;
+    const duplicate = manualEvents.some(event => event.event_type === "sleep" &&
+      event.status !== "cancelled" && event.start_at < endAt && event.end_at > startAt);
+    if (duplicate) continue;
+    events.push({
+      id: "sleep-session-" + session.id,
+      title: "Сон",
+      event_type: "sleep",
+      mode: "none",
+      start_at: startAt,
+      end_at: endAt,
+      actual_start_at: null,
+      actual_end_at: null,
+      status: "completed",
+      repeat_rule: "none",
+      repeat_until: null,
+      location: "",
+      notes: session.note || "",
+      is_sleep_session: true,
+      sleep_session_id: session.id
+    });
+  }
+  return events.sort((a, b) => a.start_at.localeCompare(b.start_at));
 }
