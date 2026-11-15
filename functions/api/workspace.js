@@ -166,7 +166,7 @@ export async function onRequestPatch({request,env}) {
     if(current.status==="closed"&&nextStatus!=="closed")return json({error:"Для восстановления клиента используй отдельное действие «Восстановить»"},409);
     const r=await env.DB.prepare("UPDATE clients SET name=?,contact=?,closed_previous_status=CASE WHEN ?='closed' AND status!='closed' THEN status ELSE closed_previous_status END,status=?,notes=?,updated_at=datetime('now') WHERE id=? AND user_id=?")
       .bind(name,String(b.contact||"").slice(0,240),nextStatus,nextStatus,String(b.notes||"").slice(0,3000),id,user.id).run();
-    if(!r.meta.changes)return json({error:"Клиент не найден"},404);
+    if(!r.meta.changes){const exists=await env.DB.prepare("SELECT id FROM clients WHERE id=? AND user_id=?").bind(id,user.id).first();return exists?json({error:"Сначала поставьте на паузу активный таймер по этому клиенту или его проектам"},409):json({error:"Клиент не найден"},404);}
   } else if(type==="project") {
     const title=String(b.title||"").trim();
     if(!title||title.length>180)return json({error:"Проверь название проекта"},400);
@@ -176,7 +176,7 @@ export async function onRequestPatch({request,env}) {
     if(current.status==="archived"&&nextStatus!=="archived")return json({error:"Для восстановления проекта используй отдельное действие «Восстановить»"},409);
     const r=await env.DB.prepare("UPDATE projects SET title=?,description=?,expected_result=?,deadline=?,budget=?,cost_budget=?,archived_previous_status=CASE WHEN ?='archived' AND status!='archived' THEN status ELSE archived_previous_status END,status=?,updated_at=datetime('now') WHERE id=? AND user_id=?")
       .bind(title,String(b.description||"").slice(0,5000),String(b.expected_result||"").slice(0,2000),b.deadline||null,Math.max(0,Number(b.budget)||0),Math.max(0,Number(b.cost_budget)||0),nextStatus,nextStatus,id,user.id).run();
-    if(!r.meta.changes)return json({error:"Проект не найден"},404);
+    if(!r.meta.changes){const exists=await env.DB.prepare("SELECT id FROM projects WHERE id=? AND user_id=?").bind(id,user.id).first();return exists?json({error:"Сначала поставьте на паузу активный таймер по этому проекту"},409):json({error:"Проект не найден"},404);}
   } else if(type==="life_area") {
     const title=String(b.title||"").trim();
     if(!title||title.length>100)return json({error:"Проверь название области"},400);
