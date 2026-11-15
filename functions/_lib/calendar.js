@@ -9,7 +9,7 @@ export function expandRecurringEvents(rows, from, to) {
   for (const row of rows) {
     const baseStart = row.start_at.slice(0,10);
     const baseEnd = row.end_at.slice(0,10);
-    const durationDays = Math.round((Date.parse(baseEnd+"T"+row.end_at.slice(11)+"Z") - Date.parse(baseStart+"T"+row.start_at.slice(11)+"Z")) / 86400000);
+    const endOffsetDays = Math.round((Date.parse(baseEnd+"T00:00:00Z") - Date.parse(baseStart+"T00:00:00Z")) / 86400000);
     const rule = row.repeat_rule || "none";
     const dates = [];
     if (rule === "none") dates.push(baseStart);
@@ -18,12 +18,12 @@ export function expandRecurringEvents(rows, from, to) {
       const step = rule === "daily" ? 1 : 7;
       let date = baseStart, guard = 0;
       while (date <= until && date < toDate && guard++ < 500) {
-        if (date >= fromDate || shiftDate(date, durationDays) >= fromDate) dates.push(date);
+        if (date >= fromDate || shiftDate(date, endOffsetDays) >= fromDate) dates.push(date);
         date = shiftDate(date, step);
       }
     }
     for (const date of dates) {
-      const endDate = shiftDate(date, durationDays);
+      const endDate = shiftDate(date, endOffsetDays);
       const startAt = date + row.start_at.slice(10);
       const endAt = endDate + row.end_at.slice(10);
       if (startAt >= to || endAt <= from) continue;
