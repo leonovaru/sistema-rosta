@@ -54,11 +54,14 @@ export function buildDailyAssignmentRepairs(week,allocations=[],tasks=[]){
   for(const date of preferred)place(date,oldByDate.get(date)||0);
   for(const date of candidates.filter(date=>!oldByDate.has(date)))place(date,left);
   if(left>0)for(const date of preferred)place(date,left);
-  for(const [date,minutes] of allocated){next.push({date,minutes});reserved.set(date,(reserved.get(date)||0)+minutes);}
+  for(const [date,minutes] of allocated)next.push({date,minutes});
   if(left>0){
    unresolved.push({task_id:taskId,title:task.title||"Задача",minutes:left,reason:"Не найдено достаточно свободного времени до дедлайна без перегрузки других задач."});
    continue;
   }
+  // Reserve capacity only after the whole repair is feasible. A failed proposal
+  // must not consume capacity needed by a later independent repair. 
+  for(const [date,minutes] of allocated)reserved.set(date,(reserved.get(date)||0)+minutes);
   const oldSorted=oldRows.filter(row=>row.minutes>0).sort((a,b)=>a.date.localeCompare(b.date));
   const nextSorted=next.sort((a,b)=>a.date.localeCompare(b.date));
   const oldMap=new Map();for(const row of oldSorted)oldMap.set(row.date,(oldMap.get(row.date)||0)+row.minutes);
