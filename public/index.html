@@ -58,6 +58,21 @@
             <div class="cashflow-opening"><label>Сколько денег сейчас доступно, ₽<input id="cashflow-opening-balance" type="number" min="0" step="0.01" value="0"></label><button type="button" class="button ghost" id="save-opening-balance">Сохранить остаток</button><small class="fine">Это стартовая сумма для прогноза, не доход и не прибыль.</small></div>
             <div class="analytics-metrics" id="cashflow-summary"></div><div id="variable-expense-forecast" class="finance-list"></div>
             <section class="category-budget-section">
+              <div class="section-head"><div><p class="eyebrow">ФИНАНСОВАЯ ЗАЩИТА</p><h3>Резервы и крупные расходы</h3></div></div>
+              <p class="fine">Откладываемая сумма считается недоступной для повседневных трат, но не записывается как расход и не уменьшает фактический денежный остаток. Разовые крупные покупки добавляй выше в план денежных потоков с конкретной датой.</p>
+              <div id="reserve-summary" class="analytics-metrics"></div>
+              <form id="reserve-form" class="finance-form">
+                <label>На что копим<input id="reserve-title" maxlength="160" required placeholder="Ремонт, техника, ветеринарный резерв"></label>
+                <label>Целевая сумма, ₽<input id="reserve-target" type="number" min="0.01" step="0.01" required></label>
+                <label>Уже отложено, ₽<input id="reserve-current" type="number" min="0" step="0.01" value="0"></label>
+                <label>Откладывать в месяц, ₽<input id="reserve-monthly" type="number" min="0" step="0.01" value="0"></label>
+                <label>Желаемая дата<input id="reserve-date" type="date"></label>
+                <label>Комментарий<input id="reserve-purpose" maxlength="500" placeholder="Для чего нужен резерв"></label>
+                <button class="button primary">Создать резерв</button>
+              </form>
+              <div id="cash-reserves" class="finance-list"></div>
+            </section>
+            <section class="category-budget-section">
               <div class="section-head"><div><p class="eyebrow">БЮДЖЕТ И КОНТРОЛЬ</p><h3>План и факт расходов по категориям</h3></div><label>Месяц<input id="budget-month" type="month"></label></div>
               <form id="budget-form" class="finance-form">
                 <label>Категория<input id="budget-category" list="budget-category-options" maxlength="80" required placeholder="Продукты, транспорт, связь"></label>
