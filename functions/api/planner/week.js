@@ -14,6 +14,7 @@ import { buildRecoveryInsights } from "../../_lib/recovery-insights.js";
 import { buildDailyBlockPlans, buildDailyBlockScenarios } from "../../_lib/daily-block-plans.js";
 import { buildDailyReallocationProposals } from "../../_lib/daily-block-reallocation.js";
 import { applySavedDailyTaskAllocations } from "../../_lib/daily-task-assignments.js";
+import { buildDailyAssignmentRepairs } from "../../_lib/daily-assignment-repairs.js";
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day;}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 export async function onRequestGet({request,env}){
@@ -37,6 +38,7 @@ export async function onRequestGet({request,env}){
  const configured=Number(settings?.work_capacity_configured)===1&&workingDays.length>0&&Number(settings?.daily_capacity_minutes)>0;
  const week=buildWeeklyWorkload({today,workingDays,dailyCapacityMinutes:settings?.daily_capacity_minutes,configured,calendarDays,calendarEvents:events,tasks:taskRows.results,targets:targetRows.results});
  applySavedDailyTaskAllocations(week,allocationRows.results,taskRows.results);
+ week.daily_assignment_repairs=buildDailyAssignmentRepairs(week,allocationRows.results,taskRows.results);
  attachWeeklyTaskPriority(week,taskRows.results,today);
  attachWeeklyActualTime(week,timeRows.results,timezone,targetRows.results);
  week.estimate_accuracy=buildEstimateAccuracy(completedRows.results);
