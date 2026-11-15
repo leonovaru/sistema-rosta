@@ -17,3 +17,11 @@ test("negative cash days are surfaced instead of hidden by a positive final bala
  const x=buildCashflowForecast({today:"2026-11-15",horizonDays:10,startingBalance:100,obligations:[{due_date:"2026-11-16",frequency:"once",amount:200,title:"Bill"}],planned:[{expected_date:"2026-11-20",flow_type:"income",amount:500,title:"Payment"}]});
  assert.deepEqual(x.summary.negative_days,["2026-11-16","2026-11-17","2026-11-18","2026-11-19"]);assert.equal(x.summary.ending_balance,400);
 });
+
+test("planned forecast events retain identifiers for safe deletion",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:5,planned:[{id:"plan-1",expected_date:"2026-11-16",flow_type:"income",title:"Client",amount:100}]});
+ assert.equal(x.events[0].id,"plan-1");
+});
+test("invalid calendar dates are rejected",()=>{
+ assert.throws(()=>buildCashflowForecast({today:"2026-02-30"}));
+});
