@@ -61,3 +61,12 @@ test("ignores historical allocations for completed tasks without reporting stale
  assert.deepEqual(week.daily_assignment_issues,[]);
  assert.deepEqual(week.days[0].tasks,[]);
 });
+
+test("uses recorded actual time for todo tasks after they are reopened",()=>{
+ const week={days:[{date:"2026-11-16",working_day:true,available_minutes:120,planned_task_minutes:60,tasks:[{id:"a",title:"A",minutes:60}]}]};
+ applySavedDailyTaskAllocations(week,[{task_id:"a",allocation_date:"2026-11-16",minutes:75}],
+ [{id:"a",title:"A",status:"todo",estimated_minutes:120,actual_minutes:45,due_date:"2026-11-16"}]);
+ assert.equal(week.daily_assignments_applied,1);
+ assert.equal(week.days[0].tasks[0].minutes,75);
+ assert.deepEqual(week.daily_assignment_issues,[]);
+});
