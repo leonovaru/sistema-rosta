@@ -37,7 +37,7 @@ test("does not apply a saved schedule when the task estimate or actual progress 
  assert.match(week.daily_assignment_issues[0].reason,/актуальный остаток/);
 });
 test("does not apply saved assignments after the deadline or on a non-working day",()=>{
- const week={days:[{date:"2026-11-16",working_day:false,available_minutes:0,planned_task_minutes:0,tasks:[]}]};
+ const week={days:[{date:"2026-11-16",working_day:true,available_minutes:30,planned_task_minutes:0,tasks:[]}]};
  applySavedDailyTaskAllocations(week,[{task_id:"a",allocation_date:"2026-11-16",minutes:60}],
  [{id:"a",title:"A",status:"todo",estimated_minutes:60,actual_minutes:0,due_date:"2026-11-15"}]);
  assert.equal(week.daily_assignments_applied,0);
