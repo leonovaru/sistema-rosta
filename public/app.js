@@ -221,10 +221,10 @@ $("estimate-task").addEventListener("click", async () => {
 });
 ["task-title","task-description"].forEach(id => $(id).addEventListener("input", () => { taskEstimate = null; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; }));
 
-window.__dismissedCrossDayMoves=window.__dismissedCrossDayMoves||new Set();
+if(!window.__dismissedCrossDayMoves){let rejected=[];try{rejected=JSON.parse(localStorage.getItem("dismissedCrossDayMoves")||"[]");}catch{}window.__dismissedCrossDayMoves=new Set(Array.isArray(rejected)?rejected:[]);}
 document.addEventListener("click",event=>{
  const button=event.target.closest("[data-reject-cross-day]");if(!button)return;
- window.__dismissedCrossDayMoves.add(button.dataset.rejectCrossDay);button.closest(".cross-day-move")?.remove();
+ window.__dismissedCrossDayMoves.add(button.dataset.rejectCrossDay);try{localStorage.setItem("dismissedCrossDayMoves",JSON.stringify([...window.__dismissedCrossDayMoves]));}catch{}button.closest(".cross-day-move")?.remove();
 });
 document.addEventListener("click",async event=>{
  const button=event.target.closest("[data-confirm-cross-day]");if(!button)return;
