@@ -7,6 +7,7 @@ let taskTimerState = { active_timer:null, totals:[] };
 let taskFilter = "today";
 let localToday = "";
 let taskEstimate = null;
+let estimateAccuracyData = null;
 let currentDayPlan = null;
 let calendarEvents = [];
 let calendarAnchor = new Date();
@@ -62,6 +63,30 @@ $("logout").addEventListener("click", async () => {
     alert("Не удалось безопасно завершить выход: "+error.message+"\nСеанс оставлен открытым. Проверьте соединение и повторите попытку.");
   }finally{button.disabled=false;}
 });
+function suggestAdjustedEstimate(baseMinutes, accuracy, scopeKey = null) {
+ const base=Number(baseMinutes);if(!Number.isFinite(base)||base<5||base>10000)return null;
+ const scoped=scopeKey?(accuracy?.by_area||[]).find(row=>row.key===scopeKey):null;
+ const source=scoped?.recommended_estimate_multiplier!=null?scoped:accuracy?.overall;
+ if(!source||source.recommended_estimate_multiplier==null||source.sample_count<(accuracy?.minimum_samples||3))return null;
+ const multiplier=Number(source.recommended_estimate_multiplier);if(!Number.isFinite(multiplier)||multiplier<=0)return null;
+ return {base_minutes:Math.round(base),suggested_minutes:Math.max(5,Math.min(10000,Math.round(base*multiplier/5)*5)),multiplier,sample_count:source.sample_count,scope:source===scoped?"specific":"overall",title:source===scoped?scoped.title:"вся история задач"};
+}
+function currentEstimateScopeKey(){const project=$("task-project")?.value,area=$("task-life-area")?.value,direction=$("task-direction")?.value;return project?"project:"+project:area?"life:"+area:direction?"direction:"+direction:null;}
+function renderHistoricalEstimateSuggestion(){
+ const result=$("estimate-result");if(!result||!taskEstimate)return;
+ const old=result.querySelector(".estimate-history-suggestion");if(old)old.remove();
+ const suggestion=suggestAdjustedEstimate(taskEstimate.base_minutes??taskEstimate.minutes,estimateAccuracyData,currentEstimateScopeKey());if(!suggestion)return;
+ const applied=taskEstimate.historical_adjustment?.suggested_minutes===taskEstimate.minutes;
+ const panel=document.createElement("div");panel.className="estimate-history-suggestion";
+ panel.innerHTML='<p><b>Поправка по факту выполненных задач</b><br>Для '+escapeHtml(suggestion.title)+': ×'+suggestion.multiplier+' на основе '+suggestion.sample_count+' завершённых задач. '+duration(suggestion.base_minutes)+' → <b>'+duration(suggestion.suggested_minutes)+'</b>.</p><button type="button" class="button ghost" data-apply-history-estimate '+(applied?'disabled':'')+'>'+(applied?'Поправка применена':'Применить историческую поправку')+'</button><small class="fine">Предложение не меняет оценку автоматически. Без достаточной выборки исходная оценка сохраняется.</small>';
+ result.appendChild(panel);
+}
+$("estimate-result").addEventListener("click",event=>{
+ if(!event.target.closest("[data-apply-history-estimate]")||!taskEstimate)return;
+ const suggestion=suggestAdjustedEstimate(taskEstimate.base_minutes??taskEstimate.minutes,estimateAccuracyData,currentEstimateScopeKey());if(!suggestion)return;
+ taskEstimate.base_minutes=suggestion.base_minutes;taskEstimate.minutes=suggestion.suggested_minutes;taskEstimate.historical_adjustment=suggestion;renderHistoricalEstimateSuggestion();
+});
+["task-project","task-life-area","task-direction"].forEach(id=>$(id).addEventListener("change",renderHistoricalEstimateSuggestion));
 $("estimate-task").addEventListener("click", async () => {
   const title = $("task-title").value.trim();
   if (!title) { alert("Сначала введи название задачи."); $("task-title").focus(); return; }
@@ -71,9 +96,11 @@ $("estimate-task").addEventListener("click", async () => {
   $("estimate-result").textContent = "Анализирую объём задачи и возможность делегирования.";
   try {
     taskEstimate = await api("/api/tasks/estimate", { method: "POST", body: JSON.stringify({ title, description: $("task-description").value }) });
+    taskEstimate.base_minutes = taskEstimate.minutes;
     const delegation = ({full:"Можно поручить ИИ почти целиком",partial:"ИИ выполнит часть работы, тебе останется проверить результат",manual:"Нужно твоё участие или действие вне приложения"})[taskEstimate.delegation];
     const steps = (taskEstimate.steps || []).map(step => "<li>" + escapeHtml(step.title) + " — " + duration(step.minutes) + "</li>").join("");
     $("estimate-result").innerHTML = "<strong>Оценка: " + duration(taskEstimate.range_min) + "–" + duration(taskEstimate.range_max) + "</strong><p>" + escapeHtml(taskEstimate.rationale || "") + "</p><p><b>" + delegation + "</b></p><p>" + escapeHtml(taskEstimate.delegation_reason || "") + "</p>" + (steps ? "<ul>"+steps+"</ul>" : "") + "<small>" + (taskEstimate.source === "ai" ? "Оценка ИИ" : "Черновая алгоритмическая оценка") + (taskEstimate.note ? " · "+escapeHtml(taskEstimate.note) : "") + "</small>";
+    renderHistoricalEstimateSuggestion();
 
   } catch (err) { taskEstimate = null; $("estimate-result").textContent = err.message; }
   finally { button.disabled = false; button.textContent = "Оценить время и делегирование с ИИ"; }
@@ -1019,6 +1046,7 @@ function renderDayPlan() {
 }
 async function loadWeeklyWorkload(){
  const [data,targetData]=await Promise.all([api("/api/planner/week"),api("/api/planner/targets")]),week=data.week,s=week.summary;
+ estimateAccuracyData=week.estimate_accuracy||null;renderHistoricalEstimateSuggestion();
  const dayNames=["Вс","Пн","Вт","Ср","Чт","Пт","Сб"];
  const summary=[["Ёмкость недели",week.configured?duration(s.gross_capacity_minutes):"не настроена"],["Занято календарём",week.configured?duration(s.calendar_busy_minutes):"—"],["Доступно для работы",week.configured?duration(s.available_minutes):"—"],["Задачи со сроком",s.tasks_with_deadline_count+" · "+duration(s.estimated_task_minutes)],["Фактически учтено",duration(week.actual_time?.tracked_minutes||0)+" · "+(week.actual_time?.sessions||0)+" сессий"],["Просрочено",s.overdue_task_count],["Без оценки",s.unestimated_task_count]];
  const metrics=summary.map(([label,value])=>'<article><span>'+label+'</span><b>'+value+'</b></article>').join("");
