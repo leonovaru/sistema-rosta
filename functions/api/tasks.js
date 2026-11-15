@@ -1,9 +1,25 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 
+async function owned(env, table, id, userId) {
+  if (!id) return true;
+  return Boolean(await env.DB.prepare(`SELECT id FROM ${table} WHERE id=? AND user_id=?`).bind(id,userId).first());
+}
+
 export async function onRequestGet({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error: "Необходим вход" }, 401);
-  const { results } = await env.DB.prepare("SELECT t.*, d.title AS direction_title FROM tasks t LEFT JOIN directions d ON d.id=t.direction_id WHERE t.user_id=? ORDER BY CASE t.status WHEN 'doing' THEN 0 WHEN 'todo' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END, t.due_date IS NULL, t.due_date, t.created_at DESC").bind(user.id).all();
+  const { results } = await env.DB.prepare(`
+    SELECT t.*, d.title AS direction_title, c.name AS client_name,
+      p.title AS project_title, a.title AS life_area_title
+    FROM tasks t
+    LEFT JOIN directions d ON d.id=t.direction_id
+    LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id
+    LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id
+    LEFT JOIN life_areas a ON a.id=t.life_area_id AND a.user_id=t.user_id
+    WHERE t.user_id=?
+    ORDER BY CASE t.status WHEN 'doing' THEN 0 WHEN 'todo' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END,
+      t.due_date IS NULL,t.due_date,t.created_at DESC
+  `).bind(user.id).all();
   const { results: steps } = await env.DB.prepare("SELECT id,task_id,title,estimated_minutes,status,sort_order FROM task_steps WHERE user_id=? ORDER BY task_id,sort_order").bind(user.id).all();
   const byTask = new Map();
   for (const step of steps) {
@@ -21,17 +37,28 @@ export async function onRequestPost({ request, env }) {
   const description = String(body?.description || "").trim().slice(0,2000);
   if (!title || title.length > 240) return json({ error: "Введите название задачи (до 240 символов)" }, 400);
   const directionId = body?.direction_id ? String(body.direction_id) : null;
+  const clientId = body?.client_id ? String(body.client_id) : null;
+  const projectId = body?.project_id ? String(body.project_id) : null;
+  const lifeAreaId = body?.life_area_id ? String(body.life_area_id) : null;
+  const parentTaskId = body?.parent_task_id ? String(body.parent_task_id) : null;
   const dueDate = body?.due_date ? String(body.due_date) : null;
   if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return json({ error: "Проверьте срок задачи" }, 400);
   const estimated = body?.estimated_minutes == null ? null : Math.round(Number(body.estimated_minutes));
   if (estimated !== null && (!Number.isInteger(estimated) || estimated < 5 || estimated > 10000)) return json({ error: "Проверьте оценку времени" }, 400);
-  if (directionId) {
-    const owns = await env.DB.prepare("SELECT id FROM directions WHERE id=? AND user_id=?").bind(directionId, user.id).first();
-    if (!owns) return json({ error: "Направление не найдено" }, 404);
+  for (const [table,id,label] of [["directions",directionId,"Направление"],["clients",clientId,"Клиент"],["projects",projectId,"Проект"],["life_areas",lifeAreaId,"Личная область"],["tasks",parentTaskId,"Родительская задача"]]) {
+    if (!(await owned(env,table,id,user.id))) return json({ error: label+" не найдены" },404);
+  }
+  if (projectId) {
+    const project=await env.DB.prepare("SELECT client_id,direction_id FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first();
+    if ((clientId && clientId!==project.client_id) || (directionId && directionId!==project.direction_id)) return json({error:"Клиент и направление должны соответствовать выбранному проекту"},400);
+  }
+  if (parentTaskId) {
+    const parent=await env.DB.prepare("SELECT id,project_id,life_area_id FROM tasks WHERE id=? AND user_id=?").bind(parentTaskId,user.id).first();
+    if ((projectId && projectId!==parent.project_id) || (lifeAreaId && lifeAreaId!==parent.life_area_id)) return json({error:"Подзадача должна относиться к той же области, что и родительская задача"},400);
   }
   const id = newId();
-  await env.DB.prepare("INSERT INTO tasks (id,user_id,direction_id,title,description,due_date,priority,estimated_minutes,ai_plan) VALUES (?,?,?,?,?,?,?,?,?)")
-    .bind(id, user.id, directionId, title, description, dueDate, ["low","medium","high"].includes(body?.priority) ? body.priority : "medium", estimated, String(body?.ai_plan || "").slice(0,3000)).run();
+  await env.DB.prepare("INSERT INTO tasks (id,user_id,direction_id,client_id,project_id,life_area_id,parent_task_id,title,description,due_date,priority,estimated_minutes,ai_plan) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .bind(id,user.id,directionId,clientId,projectId,lifeAreaId,parentTaskId,title,description,dueDate,["low","medium","high"].includes(body?.priority)?body.priority:"medium",estimated,String(body?.ai_plan||"").slice(0,3000)).run();
   return json({ ok: true, id }, 201);
 }
 
