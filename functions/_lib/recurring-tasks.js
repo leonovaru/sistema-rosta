@@ -15,9 +15,9 @@ export function recurringTaskDates(template,from,to){
   let date=shiftDate(start,firstOffset);
   while(date<=to&&date<=until&&dates.length<8){dates.push(date);date=shiftDate(date,7);}
  }else if(rule==="monthly"){
-  const [y,m,d]=start.split("-").map(Number);
-  let cursor=new Date(Date.UTC(y,m-1,1,12)),fromDate=new Date(from+"T12:00:00Z");
-  while(cursor<fromDate)cursor.setUTCMonth(cursor.getUTCMonth()+1);
+  const [y,m,d]=start.split("-").map(Number),[fy,fm]=from.split("-").map(Number);
+  const cursorYear=Math.max(y,fy),cursorMonth=cursorYear===y?Math.max(m,fm):fm;
+  let cursor=new Date(Date.UTC(cursorYear,cursorMonth-1,1,12));
   for(let i=0;i<14;i++){
    const date=monthDate(cursor.getUTCFullYear(),cursor.getUTCMonth(),d);
    if(date>to||date>until)break;
