@@ -164,3 +164,6 @@
 .meeting-followup-list li{margin:8px 0}
 .meeting-followup-list li small{display:block;color:var(--muted,#687080);margin-top:2px}
 .meeting-followup-list li.is-overdue{color:var(--danger,#b42318)}
+
+
+.client-portfolio-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0 14px}.client-portfolio-summary>div,.client-portfolio-metrics>span{display:grid;gap:4px;padding:10px;border:1px solid var(--line,#ddd);border-radius:9px;background:var(--surface-muted,#f8f9fb);min-width:0}.client-portfolio-summary small,.client-portfolio-metrics small{font-size:.78rem;color:var(--muted,#687080)}.client-portfolio-summary b,.client-portfolio-metrics b{font-size:1rem;overflow-wrap:anywhere}.client-portfolio-summary .warning,.client-portfolio-metrics .warning{border-color:var(--danger,#c44);color:var(--danger,#b42318)}.client-portfolio-card{gap:9px}.client-portfolio-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:3px 0}.client-portfolio-metrics .warning b{color:var(--danger,#b42318)}@media(max-width:620px){.client-portfolio-summary,.client-portfolio-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
