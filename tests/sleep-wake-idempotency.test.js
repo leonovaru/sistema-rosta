@@ -75,3 +75,52 @@ test("repeated wake confirmations on one local day return the first record", asy
   assert.equal(env.wakeUpdates, 1);
   assert.equal(env.sessions.length, 1);
 });
+
+
+test("rejects impossible wall-clock values for bedtime and wake actions", async () => {
+  const env = createEnv();
+  const RealDate = globalThis.Date;
+  const fixedNow = new RealDate("2026-11-15T05:15:00.000Z").getTime();
+  globalThis.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [fixedNow])); }
+    static now() { return fixedNow; }
+  };
+  const request = action => new Request("https://app.example.test/api/sleep", {
+    method: "POST",
+    headers: { "Cookie": "sr_session=test-session", "Content-Type": "application/json" },
+    body: JSON.stringify(action)
+  });
+  try {
+    const bed = await onRequestPost({ request: request({ action: "bed", at: "2026-11-15T24:00" }), env });
+    const wake = await onRequestPost({ request: request({ action: "wake", at: "2026-11-15T08:75" }), env });
+    assert.equal(bed.status, 400);
+    assert.equal(wake.status, 400);
+  } finally {
+    globalThis.Date = RealDate;
+  }
+});
+
+test("rejects a wake time earlier than the recorded sleep time", async () => {
+  const env = createEnv();
+  env.sessions[0].fell_asleep_at = "2026-11-15T09:00";
+  const RealDate = globalThis.Date;
+  const fixedNow = new RealDate("2026-11-15T05:15:00.000Z").getTime();
+  globalThis.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [fixedNow])); }
+    static now() { return fixedNow; }
+  };
+  try {
+    const response = await onRequestPost({
+      request: new Request("https://app.example.test/api/sleep", {
+        method: "POST",
+        headers: { "Cookie": "sr_session=test-session", "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "wake", source: "app", at: "2026-11-15T08:15" })
+      }),
+      env
+    });
+    assert.equal(response.status, 400);
+    assert.equal(env.wakeUpdates, 0);
+  } finally {
+    globalThis.Date = RealDate;
+  }
+});
