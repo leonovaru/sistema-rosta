@@ -95,7 +95,7 @@ test("does not propose repairs for completed tasks with historical saved allocat
 test("recalculates reopened todo tasks from estimate minus recorded actual time",()=>{
  const week=baseWeek();
  const result=buildDailyAssignmentRepairs(week,[{task_id:"a",allocation_date:"2026-11-16",minutes:100}],
- [{id:"a",title:"Повторно открытая задача",status:"todo",estimated_minutes:120,actual_minutes:45,due_date:"2026-11-16"}]);
+ [{id:"a",title:"Повторно открытая задача",status:"todo",estimated_minutes:120,actual_minutes:45,due_date:"2026-11-18"}]);
  assert.equal(result.proposals[0].new_minutes,75);
  assert.equal(result.schedules[0].allocations.reduce((sum,row)=>sum+row.minutes,0),75);
 });
