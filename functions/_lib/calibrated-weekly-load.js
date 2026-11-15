@@ -12,7 +12,7 @@ export function buildCalibratedWeeklyLoad(week,accuracy){
    const row=rows.get(keyFor(task));
    const source=row?.recommended_estimate_multiplier!=null?row:overall;
    const multiplier=source?.recommended_estimate_multiplier!=null&&source.sample_count>=(accuracy?.minimum_samples||3)?Number(source.recommended_estimate_multiplier):1;
-   return {...task,calibrated_minutes:Math.max(0,Math.round(Number(task.minutes||0)*multiplier/5)*5),calibration_multiplier:multiplier,calibration_samples:source?.sample_count||0};
+   return {...task,calibrated_minutes:Math.max(0,Math.round(Number(task.minutes||0)*multiplier)),calibration_multiplier:multiplier,calibration_samples:source?.sample_count||0};
   });
   const calibrated=tasks.reduce((sum,task)=>sum+task.calibrated_minutes,0);
   return {...day,calibrated_task_minutes:calibrated,calibrated_overloaded:day.working_day&&calibrated>day.available_minutes,calibrated_tasks:tasks};
