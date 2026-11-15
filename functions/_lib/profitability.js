@@ -12,3 +12,14 @@ export function buildProfitability({incomeRows=[],expenseRows=[],taskRows=[],ope
  const hours=total.total_minutes/60;
  return {summary:{...total,hours:Math.round(hours*100)/100,margin_percent:total.revenue?Math.round(total.contribution/total.revenue*1000)/10:null,contribution_per_hour:hours?Math.round(total.contribution/hours*100)/100:null},directions};
 }
+
+export function attachObservedSalesMetrics(directions=[],funnelRows=[]){
+ const byDirection=new Map(funnelRows.map(row=>[row.direction_id,row]));
+ return directions.map(row=>({...row,...(byDirection.get(row.direction_id)||{
+  observed_contacted_clients:0,qualified_clients:0,won_clients:0,
+  observed_contact_to_lead_percent:null,observed_lead_to_sale_percent:null,
+  avg_contact_to_negotiation_days:null,contact_to_negotiation_sample:0,
+  avg_contact_to_proposal_days:null,contact_to_proposal_sample:0,
+  avg_contact_to_won_days:null,contact_to_won_sample:0
+ })}));
+}
