@@ -25,7 +25,7 @@ function derPrivateKey(raw){
 async function vapidToken(endpoint,env){
   const audience=new URL(endpoint).origin,now=Math.floor(Date.now()/1000);
   const header=b64u(enc.encode(JSON.stringify({typ:"JWT",alg:"ES256"})));
-  const payload=b64u(enc.encode(JSON.stringify({aud:audience,exp:now+12*60*60,sub:env.VAPID_SUBJECT||"mailto:admin@example.com"})));
+  const payload=b64u(enc.encode(JSON.stringify({aud:audience,exp:now+12*60*60,sub:env.VAPID_SUBJECT})));
   const unsigned=header+"."+payload;
   const privateKey=await crypto.subtle.importKey("pkcs8",derPrivateKey(unb64u(env.VAPID_PRIVATE_KEY)),{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
   const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},privateKey,enc.encode(unsigned));
@@ -66,24 +66,30 @@ function localClock(date,timezone){
 }
 export default {
   async scheduled(controller,env,ctx){
-    if(!env.DB||!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_KEY)return;
+    if(!env.DB||!env.VAPID_PUBLIC_KEY||!env.VAPID_PRIVATE_KEY||!env.VAPID_SUBJECT)return;
     const {results}=await env.DB.prepare(`SELECT s.id,s.user_id,s.endpoint,s.p256dh,s.auth,COALESCE(st.timezone,'Europe/Moscow') timezone
       FROM push_subscriptions s LEFT JOIN settings st ON st.user_id=s.user_id`).all();
     const now=new Date();
     for(const row of results||[]){
       const local=localClock(now,row.timezone);
-      if(local.hour!=="06"||local.minute!=="00")continue;
+      if(local.hour!=="06"||Number(local.minute)>10)continue;
       const localDate=local.year+"-"+local.month+"-"+local.day;
       const id=crypto.randomUUID();
       const claim=await env.DB.prepare(`INSERT OR IGNORE INTO push_deliveries (id,user_id,local_date,timezone,scheduled_at,status)
         VALUES (?,?,?,?,?,'pending')`).bind(id,row.user_id,localDate,row.timezone,now.toISOString()).run();
-      if(!claim.meta.changes)continue;
+      let deliveryId=id;
+      if(!claim.meta.changes){
+        const existing=await env.DB.prepare("SELECT id,status FROM push_deliveries WHERE user_id=? AND local_date=?").bind(row.user_id,localDate).first();
+        if(!existing||existing.status==="sent")continue;
+        deliveryId=existing.id;
+        await env.DB.prepare("UPDATE push_deliveries SET status='pending',error=NULL WHERE id=?").bind(deliveryId).run();
+      }
       try{
         await sendPush(row,env,{title:"Система роста",body:"Доброе утро! Ты уже проснулась?",tag:"morning-wake-"+localDate,url:"/?wake=1"});
-        await env.DB.prepare("UPDATE push_deliveries SET status='sent',sent_at=? WHERE id=?").bind(new Date().toISOString(),id).run();
+        await env.DB.prepare("UPDATE push_deliveries SET status='sent',sent_at=? WHERE id=?").bind(new Date().toISOString(),deliveryId).run();
       }catch(error){
         const message=String(error?.message||error).slice(0,500);
-        await env.DB.prepare("UPDATE push_deliveries SET status='failed',error=? WHERE id=?").bind(message,id).run();
+        await env.DB.prepare("UPDATE push_deliveries SET status='failed',error=? WHERE id=?").bind(message,deliveryId).run();
         if(message.includes("410")||message.includes("404"))await env.DB.prepare("DELETE FROM push_subscriptions WHERE id=?").bind(row.id).run();
       }
     }
