@@ -242,7 +242,7 @@ function renderTasks() {
   }));
   document.querySelectorAll("[data-save-time]").forEach(button => button.addEventListener("click", async () => {
     const input = document.querySelector('[data-actual-time="' + button.dataset.saveTime + '"]');
-    try { await api("/api/tasks", { method: "PATCH", body: JSON.stringify({ id: button.dataset.saveTime, actual_minutes: input.value === "" ? null : input.value }) }); await loadTasks(); }
+    try { await api("/api/tasks", { method: "PATCH", body: JSON.stringify({ id: button.dataset.saveTime, actual_minutes: input.value === "" ? null : input.value }) }); await loadTasks(); await rebuildDayPlanIfToday(); }
     catch (err) { alert(err.message); }
   }));
   document.querySelectorAll("[data-delegate-task]").forEach(button => button.addEventListener("click", async () => {
