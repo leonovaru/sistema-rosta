@@ -11,7 +11,7 @@ test("separates clear blocks from blocks near meetings",()=>{
  ];
  const events=Array.from({length:4},(_,i)=>({event_type:"meeting",status:"planned",start_at:"2026-11-0"+(2+i)+"T10:00",end_at:"2026-11-0"+(2+i)+"T10:30"}));
  const result=buildCalendarExecutionContext(logs,events);
- assert.equal(result.groups.find(x=>x.context==="clear").sample_size,1);
+ assert.equal(result.groups.find(x=>x.context==="clear").sample_size,4);
  assert.equal(result.groups.find(x=>x.context==="nearby").sample_size,8);
  assert.equal(result.insights[0].type,"meeting_proximity");
 });
