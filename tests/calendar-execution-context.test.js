@@ -7,7 +7,7 @@ test("separates clear blocks from blocks near meetings",()=>{
  const logs=[
   ...Array.from({length:4},(_,i)=>log("2026-11-0"+(2+i),"09:00","09:40","done")),
   ...Array.from({length:4},(_,i)=>log("2026-11-0"+(2+i),"11:00","11:40","skipped")),
-  log("2026-11-06","14:00","14:40","done")
+  ...Array.from({length:4},(_,i)=>log("2026-11-0"+(2+i),"14:00","14:40","done"))
  ];
  const events=[{event_type:"meeting",status:"planned",start_at:"2026-11-02T10:00",end_at:"2026-11-02T10:30"}];
  const result=buildCalendarExecutionContext(logs,events);
