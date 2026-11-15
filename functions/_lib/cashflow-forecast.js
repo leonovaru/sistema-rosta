@@ -31,13 +31,13 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
  const variableByMonth=new Map(variableExpensesByMonth.map(x=>[x.month,positive(x.total)]));
  const activeReserves=reserves.filter(r=>Number(r.active)!==0).map(r=>({title:r.title,remaining:Math.max(0,Number(r.target_amount)-Number(r.current_amount)),saved:positive(r.current_amount),monthly:positive(r.monthly_contribution),targetDate:r.target_date||null}));
  const existingReserved=activeReserves.reduce((sum,r)=>sum+r.saved,0);
- const days=[];let balance=Number(startingBalance)||0,totalVariableExpenses=0,totalNewReserveAllocations=0;
+ const days=[];let balance=Number(startingBalance)||0,totalVariableExpenses=0,totalNewReserveAllocations=0;\n const reserveRates=new Map();
  for(let date=today;date<=end;date=addDays(date,1)){
   const dayEvents=events.filter(e=>e.date===date);
   const income=dayEvents.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0);
   const fixedExpense=dayEvents.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0);
   const month=date.slice(0,7),daysInMonth=monthDays(month),variableExpense=(variableByMonth.get(month)||0)/daysInMonth;
-  const dailyReserve=activeReserves.reduce((sum,r)=>{if(r.targetDate&&date>r.targetDate)return sum;const allocation=Math.min(r.monthly,r.remaining)/daysInMonth;r.remaining=Math.max(0,r.remaining-allocation);return sum+allocation;},0);
+  if(!reserveRates.has(month)){const rates=activeReserves.map(r=>{const amount=r.targetDate&&month+"-01">r.targetDate?0:Math.min(r.monthly,r.remaining);r.remaining=Math.max(0,r.remaining-amount);return {targetDate:r.targetDate,rate:amount/daysInMonth};});reserveRates.set(month,rates);}\n  const dailyReserve=reserveRates.get(month).reduce((sum,r)=>sum+(r.targetDate&&date>r.targetDate?0:r.rate),0);
   const expense=fixedExpense+variableExpense;
   totalNewReserveAllocations+=dailyReserve;totalVariableExpenses+=variableExpense;balance+=income-expense;
   days.push({date,income,expenses:expense,fixed_expenses:fixedExpense,variable_expenses:variableExpense,reserve_allocations:dailyReserve,available_balance:balance-existingReserved-totalNewReserveAllocations,net:income-expense,balance,events:dayEvents});
