@@ -64,7 +64,8 @@ export async function onRequestPost({ request, env }) {
   const tomorrowKey = tomorrow.toISOString().slice(0,10);
   const calendarQuery = await env.DB.prepare("SELECT id,title,event_type,start_at,end_at,actual_start_at,actual_end_at,status,mode,location,repeat_rule,repeat_until FROM calendar_events WHERE user_id=? AND status!='cancelled' AND ((start_at < ? AND end_at > ?) OR (repeat_rule!='none' AND start_at < ? AND repeat_until >= ?)) ORDER BY start_at").bind(user.id,tomorrowKey+"T00:00",today+"T00:00",tomorrowKey+"T00:00",today).all();
   const calendarEvents = expandRecurringEvents(calendarQuery.results,today+"T00:00",tomorrowKey+"T00:00");
-  const sleepQuery = await env.DB.prepare("SELECT * FROM sleep_sessions WHERE user_id=? AND sleep_date>=? AND sleep_date<=? AND fell_asleep_at IS NOT NULL AND woke_at IS NOT NULL").bind(user.id,today,tomorrowKey).all();
+  const yesterday = new Date(today+"T12:00:00Z"); yesterday.setUTCDate(yesterday.getUTCDate()-1);
+  const sleepQuery = await env.DB.prepare("SELECT * FROM sleep_sessions WHERE user_id=? AND sleep_date>=? AND sleep_date<=? AND fell_asleep_at IS NOT NULL AND woke_at IS NOT NULL").bind(user.id,yesterday.toISOString().slice(0,10),tomorrowKey).all();
   const sleepEvents = createSleepCalendarEvents(sleepQuery.results,today+"T00:00",tomorrowKey+"T00:00",timezone,calendarEvents);
   calendarEvents.push(...sleepEvents);
   const busyIntervals = calendarEvents.filter(event => event.event_type !== "work").map(event => {
