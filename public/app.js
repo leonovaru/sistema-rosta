@@ -6,6 +6,7 @@ let allTasks = [];
 let taskFilter = "today";
 let localToday = "";
 let taskEstimate = null;
+let currentDayPlan = null;
 
 const money = n => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(n || 0)) + " ₽";
 const duration = n => { const v = Number(n || 0); return v >= 60 ? (Math.floor(v/60) + " ч" + (v%60 ? " " + v%60 + " мин" : "")) : v + " мин"; };
@@ -173,11 +174,43 @@ async function loadDashboardData() {
   await Promise.all([loadDirections(),loadSettings(income.month_total)]);
 }
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+async function loadPlanner() {
+  try {
+    const [data, settings] = await Promise.all([api("/api/planner/day"), api("/api/settings")]);
+    $("planner-capacity").value = String(settings.settings?.daily_capacity_minutes || 360);
+    $("planner-date").textContent = data.date || "";
+    currentDayPlan = data.plan;
+    renderDayPlan();
+  } catch (err) { $("day-plan").textContent = err.message; }
+}
+function renderDayPlan() {
+  const plan = currentDayPlan;
+  if (!plan) {
+    $("day-plan").innerHTML = '<p class="muted">План ещё не сформирован. Нажми кнопку — ИИ расставит задачи по приоритету и доступному времени.</p>';
+    return;
+  }
+  const items = Array.isArray(plan.items) ? plan.items : [];
+  $("day-plan").innerHTML = '<h3>' + escapeHtml(plan.headline || "План на сегодня") + '</h3><p class="planner-focus">' + escapeHtml(plan.focus || "") + '</p>' +
+    (items.length ? '<ol class="planner-items">' + items.map(item => '<li><div><b>' + escapeHtml(item.title) + '</b><small>' + escapeHtml(item.reason || "") + '</small></div><span>' + duration(item.minutes) + '</span></li>').join("") + '</ol>' : '<p class="muted">Пока нет подходящих незавершённых задач. Добавь конкретные следующие шаги в список задач.</p>') +
+    '<div class="planner-summary"><span>Запланировано: <b>' + duration(plan.total_minutes || 0) + '</b></span><span>Резерв: <b>' + duration(plan.reserve_minutes || 0) + '</b></span><span>Источник: <b>' + (plan.source === "ai" ? "ИИ" : "алгоритм") + '</b></span></div>';
+}
+$("make-day-plan").addEventListener("click", async () => {
+  const button = $("make-day-plan");
+  button.disabled = true; button.textContent = "Составляю план…";
+  try {
+    const capacity = Number($("planner-capacity").value);
+    await api("/api/settings", { method:"PUT", body:JSON.stringify({ monthly_target:userSettings.monthly_target || 300000, timezone:userSettings.timezone || "Europe/Moscow", daily_capacity_minutes:capacity }) });
+    const data = await api("/api/planner/day", { method:"POST", body:JSON.stringify({ available_minutes:capacity }) });
+    currentDayPlan = data.plan; $("planner-date").textContent = data.date; renderDayPlan();
+  } catch (err) { alert(err.message); }
+  finally { button.disabled = false; button.textContent = "Сформировать план дня с ИИ"; }
+});
+
 async function boot() {
   try {
     const { user } = await api("/api/auth/me");
     if (!user) return showAuth();
-    showApp(user.email); await loadDashboardData(); await loadTasks();
+    showApp(user.email); await loadDashboardData(); await loadTasks(); await loadPlanner();
   } catch { showAuth(); }
 }
 boot();
