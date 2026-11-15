@@ -64,9 +64,13 @@ async function sendPush(row,env,payload){
   },body});
   if(!response.ok)throw new Error("Push endpoint returned "+response.status);
 }
-function localClock(date,timezone){
+export function localClock(date,timezone){
   const p=new Intl.DateTimeFormat("en-CA",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(date);
   return Object.fromEntries(p.map(x=>[x.type,x.value]));
+}
+export function isMorningDeliveryWindow(date,timezone){
+  const local=localClock(date,timezone);
+  return local.hour==="06"&&Number(local.minute)>=0&&Number(local.minute)<=10;
 }
 export default {
   async scheduled(controller,env,ctx){
@@ -76,7 +80,7 @@ export default {
     const now=new Date();
     for(const row of results||[]){
       const local=localClock(now,row.timezone);
-      if(local.hour!=="06"||Number(local.minute)>10)continue;
+      if(!isMorningDeliveryWindow(now,row.timezone))continue;
       const localDate=local.year+"-"+local.month+"-"+local.day;
       const id=crypto.randomUUID();
       await env.DB.prepare(`INSERT OR IGNORE INTO push_deliveries (id,user_id,local_date,timezone,scheduled_at,status)
