@@ -12,7 +12,12 @@ export async function onRequestGet({request,env}){
  const settings=await env.DB.prepare("SELECT timezone,starting_balance FROM settings WHERE user_id=?").bind(user.id).first(),today=todayInZone(settings?.timezone||"Europe/Moscow"),url=new URL(request.url),horizon=Number(url.searchParams.get("days")||90);
  if(![30,90].includes(horizon))return json({error:"Период прогноза должен быть 30 или 90 дней"},400);
  const end=addDays(today,horizon),monthStart=today.slice(0,7)+"-01";
- const [expenseHistory,budgets]=await Promise.all([\n  env.DB.prepare("SELECT category,substr(spent_on,1,7) AS month,SUM(amount) AS total FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<? GROUP BY category,substr(spent_on,1,7)").bind(user.id,shiftMonth(monthStart,-3),monthStart).all(),\n  env.DB.prepare("SELECT month,category,planned_amount FROM category_budgets WHERE user_id=? AND month>=? AND month<=?").bind(user.id,today.slice(0,7),addDays(end,0).slice(0,7)).all()\n ]);\n const variableExpenseForecast=buildVariableExpenseForecast(expenseHistory.results,{today});\n const variableExpensesByMonth=buildMonthlyVariableExpenseSchedule({historicalCategories:variableExpenseForecast.categories,budgets:budgets.results,today,horizonDays:horizon});
+ const [expenseHistory,budgets]=await Promise.all([
+  env.DB.prepare("SELECT category,substr(spent_on,1,7) AS month,SUM(amount) AS total FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<? GROUP BY category,substr(spent_on,1,7)").bind(user.id,shiftMonth(monthStart,-3),monthStart).all(),
+  env.DB.prepare("SELECT month,category,planned_amount FROM category_budgets WHERE user_id=? AND month>=? AND month<=?").bind(user.id,today.slice(0,7),addDays(end,0).slice(0,7)).all()
+ ]);
+ const variableExpenseForecast=buildVariableExpenseForecast(expenseHistory.results,{today});
+ const variableExpensesByMonth=buildMonthlyVariableExpenseSchedule({historicalCategories:variableExpenseForecast.categories,budgets:budgets.results,today,horizonDays:horizon});
  const [planned,obligations,debts]=await Promise.all([
   env.DB.prepare("SELECT p.*,d.title direction_title FROM planned_cashflows p LEFT JOIN directions d ON d.id=p.direction_id AND d.user_id=p.user_id WHERE p.user_id=? AND p.status='planned' AND p.expected_date>=? AND p.expected_date<=? ORDER BY p.expected_date").bind(user.id,today,end).all(),
   env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 AND due_date<=? ORDER BY due_date").bind(user.id,end).all(),
