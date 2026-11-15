@@ -45,8 +45,8 @@ export async function onRequestGet({request,env}){
  week.attention_scenarios=buildWeeklyAttentionScenarios(week.days);
  week.daily_rhythm=buildDailyRhythmInsights(rhythmTimeRows.results,sleepRows.results,timezone);
  week.recovery_insights=buildRecoveryInsights(rhythmTimeRows.results,timezone);
- const url=new URL(request.url),focusMinutes=Number(url.searchParams.get("focus_minutes"))||50,breakMinutes=Number(url.searchParams.get("break_minutes"))||10;
- week.daily_block_preferences={focus_minutes:focusMinutes,break_minutes:breakMinutes};
- week.daily_block_plans=buildDailyBlockPlans(week.days,{focusMinutes,breakMinutes,startTime:url.searchParams.get("start_time")||"09:00",calendarEvents:events});
+ const url=new URL(request.url),focusMinutes=Number(url.searchParams.get("focus_minutes"))||50,breakMinutes=Number(url.searchParams.get("break_minutes"))||10,prepBeforeMinutes=Math.max(0,Math.min(120,Number(url.searchParams.get("prep_before_minutes"))||0)),bufferAfterMinutes=Math.max(0,Math.min(120,Number(url.searchParams.get("buffer_after_minutes"))||0));
+ week.daily_block_preferences={focus_minutes:focusMinutes,break_minutes:breakMinutes,prep_before_minutes:prepBeforeMinutes,buffer_after_minutes:bufferAfterMinutes};
+ week.daily_block_plans=buildDailyBlockPlans(week.days,{focusMinutes,breakMinutes,startTime:url.searchParams.get("start_time")||"09:00",prepBeforeMinutes,bufferAfterMinutes,calendarEvents:events});
  return json({week});
 }
