@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
-import { expandRecurringEvents } from "../../_lib/calendar.js";
+import { expandRecurringEvents, isValidCalendarDate, isValidCalendarDateTime } from "../../_lib/calendar.js";
 
 const TYPES = ["meeting","travel","hobby","sleep","work","personal","other"];
 const MODES = ["none","online","offline"];
@@ -28,9 +28,9 @@ function cleanEvent(body) {
   const repeat_until = body?.repeat_until ? String(body.repeat_until) : null;
   if (!title || title.length > 180) return { error:"Укажи название события (до 180 символов)" };
   if (!TYPES.includes(event_type) || !MODES.includes(mode) || !STATUSES.includes(status) || !REPEATS.includes(repeat_rule)) return { error:"Некорректный тип, повторение или статус события" };
-  if (!DATE_TIME.test(start_at) || !DATE_TIME.test(end_at) || end_at <= start_at) return { error:"Проверь дату и время начала и окончания" };
-  if ((actual_start_at && !DATE_TIME.test(actual_start_at)) || (actual_end_at && !DATE_TIME.test(actual_end_at)) || (actual_start_at && actual_end_at && actual_end_at <= actual_start_at)) return { error:"Проверь фактическое время" };
-  if (repeat_rule !== "none" && (!repeat_until || !DATE.test(repeat_until) || repeat_until < start_at.slice(0,10))) return { error:"Для повторяющегося события укажи дату окончания повторения не раньше первого события" };
+  if (!isValidCalendarDateTime(start_at) || !isValidCalendarDateTime(end_at) || end_at <= start_at) return { error:"Проверь дату и время начала и окончания" };
+  if ((actual_start_at && !isValidCalendarDateTime(actual_start_at)) || (actual_end_at && !isValidCalendarDateTime(actual_end_at)) || (actual_start_at && actual_end_at && actual_end_at <= actual_start_at)) return { error:"Проверь фактическое время" };
+  if (repeat_rule !== "none" && (!repeat_until || !isValidCalendarDate(repeat_until) || repeat_until < start_at.slice(0,10))) return { error:"Для повторяющегося события укажи дату окончания повторения не раньше первого события" };
   if (repeat_rule !== "none" && status !== "planned") return { error:"Серию событий можно оставить запланированной. Фактическое время фиксируй отдельным событием на конкретную дату." };
   if (repeat_rule !== "none" && (actual_start_at || actual_end_at)) return { error:"Фактическое время фиксируй отдельным событием на конкретную дату, не в шаблоне серии." };
   return { value:{
@@ -46,7 +46,7 @@ export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
   const from = String(url.searchParams.get("from") || "");
   const to = String(url.searchParams.get("to") || "");
-  if (!DATE_TIME.test(from) || !DATE_TIME.test(to) || to <= from) return json({ error:"Укажи корректный период календаря" },400);
+  if (!isValidCalendarDateTime(from) || !isValidCalendarDateTime(to) || to <= from) return json({ error:"Укажи корректный период календаря" },400);
   const { results } = await env.DB.prepare(`
     SELECT * FROM calendar_events
     WHERE user_id=? AND status!='cancelled'
