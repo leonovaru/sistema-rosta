@@ -5,6 +5,7 @@ import { buildVariableExpenseForecast } from "../../_lib/variable-expense-foreca
 import { buildMonthlyVariableExpenseSchedule } from "../../_lib/monthly-variable-expense-schedule.js";
 import { detectVariableRecurringExpenses } from "../../_lib/variable-recurring-expenses.js";
 import { buildDealCashflowScenarios } from "../../_lib/deal-cashflow-scenarios.js";
+import { buildFinancialRiskActions } from "../../_lib/financial-risk-actions.js";
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(v){if(!DATE.test(v))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
 function shiftMonth(date,delta){const [y,m]=date.slice(0,7).split("-").map(Number),d=new Date(Date.UTC(y,m-1+delta,1,12));return d.toISOString().slice(0,10);}
@@ -34,7 +35,8 @@ export async function onRequestGet({request,env}){
  ]);
  const forecast=buildCashflowForecast({today,horizonDays:horizon,startingBalance:settings?.starting_balance||0,planned:planned.results,obligations:obligations.results,debts:debts.results,variableExpensesByMonth,reserves:reserves.results,irregularExpenses:irregularExpenses.results,variableRecurringEvents:variableRecurring.events});
  const deal_scenarios=buildDealCashflowScenarios({days:forecast.days,deals:deals.results});
- return json({...forecast,deal_scenarios,planned:planned.results,starting_balance:Number(settings?.starting_balance||0),variable_expense_forecast:variableExpenseForecast,variable_expenses_by_month:variableExpensesByMonth,variable_recurring_expenses:variableRecurring.suggestions,reserves:reserves.results,irregular_expenses:irregularExpenses.results});
+ const financial_risk_actions=buildFinancialRiskActions({days:forecast.days,deals:deals.results});
+ return json({...forecast,deal_scenarios,financial_risk_actions,planned:planned.results,starting_balance:Number(settings?.starting_balance||0),variable_expense_forecast:variableExpenseForecast,variable_expenses_by_month:variableExpensesByMonth,variable_recurring_expenses:variableRecurring.suggestions,reserves:reserves.results,irregular_expenses:irregularExpenses.results});
 }
 export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
