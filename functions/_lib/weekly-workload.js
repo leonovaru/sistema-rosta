@@ -8,7 +8,7 @@ function taskArea(task){
  if(task.client_id)return {key:"client:"+task.client_id,title:task.client_name||"Клиент без направления",type:"income"};
  return {key:"unassigned",title:"Не распределено",type:"unassigned"};
 }
-export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0,configured=false,calendarDays=[],calendarEvents=[],tasks=[]}={}){
+export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0,configured=false,calendarDays=[],calendarEvents=[],tasks=[],targets=[]}={}){
  const end=addDays(today,6),working=new Set(workingDays.map(Number));
  const days=Array.from({length:7},(_,i)=>{
   const date=addDays(today,i),isWorking=configured&&working.has(weekday(date));
@@ -27,7 +27,7 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
  const areaGroups=new Map();
  for(const task of active){
   const area=taskArea(task),estimate=Math.max(0,Number(task.estimated_minutes)||0),remaining=task.status==="doing"?Math.max(0,estimate-Math.max(0,Number(task.actual_minutes)||0)):estimate;
-  const row=areaGroups.get(area.key)||{...area,task_count:0,estimated_minutes:0,unestimated_count:0};
+  const row=areaGroups.get(area.key)||{...area,task_count:0,estimated_minutes:0,weekly_estimated_minutes:0,unestimated_count:0,target_minutes:null};
   row.task_count++;row.estimated_minutes+=remaining;
   if(!Number.isFinite(Number(task.estimated_minutes))||Number(task.estimated_minutes)<=0)row.unestimated_count++;
   areaGroups.set(area.key,row);
@@ -37,13 +37,19 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
  const overdue=active.filter(t=>t.due_date&&t.due_date<today);
  const unestimated=active.filter(t=>!Number.isFinite(Number(t.estimated_minutes))||Number(t.estimated_minutes)<=0);
  const waiting=(tasks||[]).filter(t=>t.status==="waiting");
+ for(const target of targets||[]){
+  const key=target.direction_id?"direction:"+target.direction_id:"life:"+target.life_area_id;
+  const type=target.direction_id?"income":"personal";
+  const row=areaGroups.get(key)||{key,title:target.title||"Сфера",type,task_count:0,estimated_minutes:0,weekly_estimated_minutes:0,unestimated_count:0};
+  row.target_minutes=Number(target.target_minutes)||0;areaGroups.set(key,row);
+ }
  for(const task of dueThisWeek){
   const deadline=task.due_date<today?today:task.due_date;
   const eligible=days.filter(d=>d.working_day&&d.date<=deadline);
   const estimate=Math.max(0,Number(task.estimated_minutes)||0);
   const remaining=task.status==="doing"?Math.max(0,estimate-Math.max(0,Number(task.actual_minutes)||0)):estimate;
   if(!eligible.length||!remaining)continue;
-  const base=Math.floor(remaining/eligible.length),remainder=remaining%eligible.length;
+  const base=Math.floor(remaining/eligible.length),remainder=remaining%eligible.length;\n  const area=taskArea(task),areaRow=areaGroups.get(area.key);if(areaRow)areaRow.weekly_estimated_minutes+=remaining;
   eligible.forEach((day,index)=>{
    const share=base+(index<remainder?1:0);
    if(!share)return;
@@ -57,5 +63,5 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
  const busy=days.reduce((sum,d)=>sum+d.calendar_busy_minutes,0);
  const available=days.reduce((sum,d)=>sum+d.available_minutes,0);
  const planned=dueThisWeek.reduce((sum,t)=>sum+(t.status==="doing"?Math.max(0,Number(t.estimated_minutes||0)-Number(t.actual_minutes||0)):Math.max(0,Number(t.estimated_minutes)||0)),0);
- return {from:today,to:end,configured,area_balance:[...areaGroups.values()].sort((a,b)=>b.estimated_minutes-a.estimated_minutes),calendar_balance:[...eventGroups.values()].sort((a,b)=>b.minutes-a.minutes),working_days:[...working].sort((a,b)=>a-b),daily_capacity_minutes:configured?Number(dailyCapacityMinutes):null,summary:{gross_capacity_minutes:gross,calendar_busy_minutes:busy,available_minutes:available,estimated_task_minutes:planned,estimated_task_count:dueThisWeek.filter(t=>Number(t.estimated_minutes)>0).length,tasks_with_deadline_count:dueThisWeek.length,unestimated_task_count:unestimated.length,overdue_task_count:overdue.length,without_deadline_count:noDeadline.length,waiting_task_count:waiting.length,remaining_minutes:available-planned,over_capacity:configured&&planned>available},days,notes:["Включены активные задачи со сроком до конца периода, включая просроченные.","Задачи без срока и задачи в ожидании показаны отдельно и не распределяются по дням.","Рабочая нагрузка распределена предварительно до дедлайна; календарные события не создают и не перемещают задачи."]};
+ return {from:today,to:end,configured,area_balance:[...areaGroups.values()].map(row=>({...row,target_gap_minutes:row.target_minutes===null?null:row.target_minutes-row.weekly_estimated_minutes,target_status:row.target_minutes===null?"not_set":row.weekly_estimated_minutes>row.target_minutes?"above":row.weekly_estimated_minutes<row.target_minutes?"below":"on_target"})).sort((a,b)=>b.weekly_estimated_minutes-a.weekly_estimated_minutes),calendar_balance:[...eventGroups.values()].sort((a,b)=>b.minutes-a.minutes),working_days:[...working].sort((a,b)=>a-b),daily_capacity_minutes:configured?Number(dailyCapacityMinutes):null,summary:{gross_capacity_minutes:gross,calendar_busy_minutes:busy,available_minutes:available,estimated_task_minutes:planned,estimated_task_count:dueThisWeek.filter(t=>Number(t.estimated_minutes)>0).length,tasks_with_deadline_count:dueThisWeek.length,unestimated_task_count:unestimated.length,overdue_task_count:overdue.length,without_deadline_count:noDeadline.length,waiting_task_count:waiting.length,remaining_minutes:available-planned,over_capacity:configured&&planned>available},days,notes:["Включены активные задачи со сроком до конца периода, включая просроченные.","Задачи без срока и задачи в ожидании показаны отдельно и не распределяются по дням.","Рабочая нагрузка распределена предварительно до дедлайна; календарные события не создают и не перемещают задачи."]};
 }
