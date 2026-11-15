@@ -131,7 +131,8 @@ let irregularExpenseData=null;
 async function loadIrregularExpenses(){
  irregularExpenseData=await api("/api/finance/irregular-expenses");
  const labels={once:"один раз",yearly:"ежегодно",quarterly:"раз в квартал"};
- $("irregular-expense-list").innerHTML=irregularExpenseData.items.length?irregularExpenseData.items.map(x=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+escapeHtml(x.category)+' · '+x.next_date+' · '+labels[x.frequency]+' · '+money(x.amount)+'</small>'+(x.notes?'<small>'+escapeHtml(x.notes)+'</small>':'')+'</div><button class="button ghost" data-irregular-delete="'+escapeHtml(x.id)+'">Удалить</button></article>').join(""):'<p class="muted">Нерегулярные расходы пока не добавлены.</p>';
+ const payments=irregularExpenseData.payments||[];
+ $("irregular-expense-list").innerHTML=(irregularExpenseData.items.length?irregularExpenseData.items.map(x=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+escapeHtml(x.category)+' · '+x.next_date+' · '+labels[x.frequency]+' · '+money(x.amount)+(Number(x.active)===0?' · завершён':'')+'</small>'+(x.notes?'<small>'+escapeHtml(x.notes)+'</small>':'')+'</div><div class="finance-actions">'+(Number(x.active)!==0?'<button class="button ghost" data-irregular-paid="'+escapeHtml(x.id)+'">Отметить оплаченным</button>':'')+'<button class="button ghost" data-irregular-delete="'+escapeHtml(x.id)+'">Удалить</button></div></article>').join(""):'<p class="muted">Нерегулярные расходы пока не добавлены.</p>')+(payments.length?'<h4>Последние оплаты</h4>'+payments.slice(0,10).map(p=>'<article class="finance-row"><span>'+p.paid_on+'</span><strong>'+money(p.amount)+'</strong></article>').join(""):'');
 }
 $("irregular-expense-form").addEventListener("submit",async e=>{
  e.preventDefault();
@@ -139,8 +140,15 @@ $("irregular-expense-form").addEventListener("submit",async e=>{
  catch(err){alert(err.message);}
 });
 $("irregular-expense-list").addEventListener("click",async e=>{
+ const paid=e.target.closest("[data-irregular-paid]");
+ if(paid){
+  if(!confirm("Отметить расход оплаченным? Он попадёт в фактические расходы, а для повторяющегося платежа рассчитается следующая дата."))return;
+  try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({action:"paid",id:paid.dataset.irregularPaid,paid_on:financeData?.today||cashflowData?.period?.from})});await loadIrregularExpenses();await loadFinance();await loadCashflowForecast();}
+  catch(err){alert(err.message);}
+  return;
+ }
  const b=e.target.closest("[data-irregular-delete]");if(!b)return;
- if(!confirm("Удалить этот нерегулярный расход?"))return;
+ if(!confirm("Удалить этот нерегулярный расход? История уже совершённых оплат сохранится в расходах."))return;
  try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({action:"delete",id:b.dataset.irregularDelete})});await loadIrregularExpenses();await loadCashflowForecast();}
  catch(err){alert(err.message);}
 });
