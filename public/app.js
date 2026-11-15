@@ -1061,7 +1061,7 @@ function sleepClockLabel(minutes){
  return String(Math.floor(value/60)).padStart(2,"0")+":"+String(value%60).padStart(2,"0");
 }
 function sleepGoalComparison(sessions,days,targetMinutes){
- if(!Number.isInteger(targetMinutes)||targetMinutes<180||targetMinutes>720)return {target:null,average:null,delta:null,count:0,below:0,atOrAbove:0};
+ if(!Number.isInteger(targetMinutes)||targetMinutes<180||targetMinutes>720||targetMinutes%15!==0return {target:null,average:null,delta:null,count:0,below:0,atOrAbove:0};
  const today=sleepLocalDate(),start=shiftDate(today,-(days-1));
  const values=sessions.filter(s=>s.sleep_date>=start&&s.sleep_date<=today).map(s=>sleepDuration(s.fell_asleep_at,s.woke_at,s.asleep_timezone||s.timezone,s.wake_timezone||s.timezone)).filter(v=>v!==null);
  if(!values.length)return {target:targetMinutes,average:null,delta:null,count:0,below:0,atOrAbove:0};
@@ -1139,7 +1139,7 @@ async function saveSleepGoal(value){
 $("sleep-goal-form").addEventListener("submit",async event=>{
  event.preventDefault();
  const value=$("sleep-goal-hours").value;
- if(value!==""&&(!Number.isFinite(Number(value))||Number(value)<3||Number(value)>12)){ $("sleep-goal-status").textContent="Укажите от 3 до 12 часов";return; }
+ if(value!==""&&(!Number.isFinite(Number(value))||Number(value)<3||Number(value)>12||!Number.isInteger(Number(value)*4))){ $("sleep-goal-status").textContent="Укажите от 3 до 12 часов";return; }
  await saveSleepGoal(value);
 });
 $("sleep-goal-clear").addEventListener("click",async()=>{ $("sleep-goal-hours").value="";await saveSleepGoal(""); });
