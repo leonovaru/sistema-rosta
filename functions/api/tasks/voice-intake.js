@@ -10,7 +10,7 @@ function localDate(timeZone){
  const v=Object.fromEntries(parts.map(x=>[x.type,x.value]));
  return v.year+"-"+v.month+"-"+v.day;
 }
-function normalizeTaskTitle(value){return String(value||"").toLocaleLowerCase("ru-RU").replace(/ё/g,"е").replace(/[^\\p{L}\\p{N}]+/gu," ").trim().replace(/\\s+/g," ");}
+function normalizeTaskTitle(value){return String(value||"").toLocaleLowerCase("ru-RU").replace(/ё/g,"е").replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");}
 function taskSimilarity(a,b){const x=new Set(normalizeTaskTitle(a).split(" ").filter(w=>w.length>2)),y=new Set(normalizeTaskTitle(b).split(" ").filter(w=>w.length>2));if(!x.size||!y.size)return 0;const intersection=[...x].filter(w=>y.has(w)).length;return intersection/Math.max(x.size,y.size);}
 function safeDate(value){
  if(!value)return null;
@@ -41,7 +41,6 @@ export async function onRequestPost({request,env}){
    due_date:safeDate(t.due_date),priority:["low","medium","high"].includes(t.priority)?t.priority:"medium",
    estimated_minutes:Number.isInteger(Number(t.estimated_minutes))&&Number(t.estimated_minutes)>=5&&Number(t.estimated_minutes)<=10000?Number(t.estimated_minutes):null,
    parent_index:Number.isInteger(t.parent_index)&&t.parent_index>=0&&t.parent_index<i?t.parent_index:null,
-   possible_duplicate_task_id:existingById.has(t.possible_duplicate_task_id)?t.possible_duplicate_task_id:null
   }));
   if(prepared.some(t=>!t.title))return json({error:"У каждой задачи должно быть название. Проверь пустые строки в черновике."},400);
   if(prepared.some(t=>t.parent_index!==null&&t.parent_index>=prepared.length))return json({error:"Проверь связь подзадач с родительскими задачами."},400);
@@ -71,7 +70,7 @@ export async function onRequestPost({request,env}){
   env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first(),
   env.DB.prepare("SELECT id,title FROM directions WHERE user_id=? ORDER BY sort_order").bind(user.id).all(),
   env.DB.prepare("SELECT id,name,direction_id FROM clients WHERE user_id=? AND status IN ('lead','active','paused')").bind(user.id).all(),
-  env.DB.prepare("SELECT id,title,client_id,direction_id,description,deadline FROM projects WHERE user_id=? AND status NOT IN ('done','archived')").bind(user.id).all(),
+  env.DB.prepare("SELECT id,title,client_id,direction_id,description,expected_result,deadline FROM projects WHERE user_id=? AND status NOT IN ('done','archived')").bind(user.id).all(),
   env.DB.prepare("SELECT id,title,description FROM life_areas WHERE user_id=? ORDER BY title").bind(user.id).all(),
   env.DB.prepare("SELECT id,title,project_id,client_id,direction_id,life_area_id,due_date FROM tasks WHERE user_id=? AND status!='done' ORDER BY created_at DESC LIMIT 150").bind(user.id).all()
  ]);
@@ -82,7 +81,7 @@ export async function onRequestPost({request,env}){
   const response=await env.AI.run("@cf/google/gemma-4-26b-a4b-it",{
    response_format:{type:"json_object"},
    messages:[
-    {role:"system",content:"Ты диспетчер задач личной системы управления. Разбери русскую диктовку в 1–15 конкретных задач. Верни ТОЛЬКО JSON: {summary:string,tasks:[{title:string,description:string,due_date:'YYYY-MM-DD'|null,priority:'low'|'medium'|'high',estimated_minutes:integer|null,direction_id:string|null,client_id:string|null,project_id:string|null,life_area_id:string|null,parent_index:integer|null,possible_duplicate_task_id:string|null}],clarifying_questions:string[]}. Контекст с допустимыми сущностями передан пользователем. Выбирай ID ТОЛЬКО из этого контекста, никогда не придумывай ID. Если проект однозначно найден по смыслу, привяжи задачу к нему и унаследуй его клиента и направление. Если упоминается клиент, выбери только точное/очевидное совпадение. Личные дела направляй в life_area_id, не в коммерческое направление. Если нет уверенности — оставь соответствующий ID null и добавь короткий вопрос. Относительные даты считай от today в timezone из контекста; если срок не сказан — null, не выдумывай. Если в речи перечислены несколько самостоятельных действий — создай отдельные задачи. Если есть большая цель и шаги — создай родительскую задачу и шаги как следующие задачи с parent_index равным индексу родителя. Перед созданием сравни каждую задачу с existing_open_tasks. Если это явно та же самая незавершённая задача (совпадает смысл и ожидаемый результат), укажи её ID в possible_duplicate_task_id. Не считай похожие, но разные этапы дублями. Если совпадение неочевидно — null. Не превращай каждое слово в задачу. Сохраняй важные детали, названия, суммы и условия. Русский язык. Не считай рекомендации и пожелания подтверждёнными фактами."},
+    {role:"system",content:"Ты диспетчер задач личной системы управления. Используй описание и ожидаемый результат проекта, чтобы понять контекст и этап работы. Сначала сопоставь сказанное с открытыми задачами этого проекта; не создавай дубли. Если диктовка относится к уже существующему этапу, предложи дополнить или уточнить задачу только если это поддерживается форматом, иначе спроси пользователя. Разбери русскую диктовку в 1–15 конкретных задач. Верни ТОЛЬКО JSON: {summary:string,tasks:[{title:string,description:string,due_date:'YYYY-MM-DD'|null,priority:'low'|'medium'|'high',estimated_minutes:integer|null,direction_id:string|null,client_id:string|null,project_id:string|null,life_area_id:string|null,parent_index:integer|null,possible_duplicate_task_id:string|null}],clarifying_questions:string[]}. Контекст с допустимыми сущностями передан пользователем. Выбирай ID ТОЛЬКО из этого контекста, никогда не придумывай ID. Если проект однозначно найден по смыслу, привяжи задачу к нему и унаследуй его клиента и направление. Если упоминается клиент, выбери только точное/очевидное совпадение. Личные дела направляй в life_area_id, не в коммерческое направление. Если нет уверенности — оставь соответствующий ID null и добавь короткий вопрос. Относительные даты считай от today в timezone из контекста; если срок не сказан — null, не выдумывай. Если в речи перечислены несколько самостоятельных действий — создай отдельные задачи. Если есть большая цель и шаги — создай родительскую задачу и шаги как следующие задачи с parent_index равным индексу родителя. Перед созданием сравни каждую задачу с existing_open_tasks. Если это явно та же самая незавершённая задача (совпадает смысл и ожидаемый результат), укажи её ID в possible_duplicate_task_id. Не считай похожие, но разные этапы дублями. Если совпадение неочевидно — null. Не превращай каждое слово в задачу. Сохраняй важные детали, названия, суммы и условия. Русский язык. Не считай рекомендации и пожелания подтверждёнными фактами."},
     {role:"user",content:"Контекст доступных направлений, клиентов, проектов и личных областей:\n"+JSON.stringify(context)+"\n\nДиктовка:\n"+transcript}
    ],max_tokens:2200,temperature:0.1
   });
