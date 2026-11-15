@@ -2,6 +2,7 @@ import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { buildMonthlyDealForecast } from "../_lib/deal-forecast.js";
 import { buildObservedSalesFunnel } from "../_lib/observed-sales-funnel.js";
 import { buildDealDateForecast } from "../_lib/deal-date-forecast.js";
+import { isClientSelectable, isDirectionSelectable } from "../_lib/workspace-entity-availability.js";
 const STAGES=new Set(["contact","negotiation","proposal","awaiting_payment","won","lost"]);
 const LOSS_REASONS=new Set(["price","timing","no_need","competitor","no_response","trust","scope","other"]);
 const LOSS_LABELS={price:"Цена / бюджет",timing:"Сроки",no_need:"Нет потребности",competitor:"Выбрали конкурента",no_response:"Нет ответа",trust:"Недостаток доверия",scope:"Не подошёл объём / формат",other:"Другая причина"};
@@ -40,7 +41,8 @@ export async function onRequestPost({request,env}){
  if(action==="update"&&!id)return json({error:"Сделка не найдена"},400);
  const title=String(b.title||"").trim(),clientId=b.client_id?String(b.client_id):null,directionId=b.direction_id?String(b.direction_id):null,amount=Number(b.amount),probability=Number(b.probability_percent),stage=String(b.stage||"contact"),date=b.expected_close_date?String(b.expected_close_date):null,paymentDate=b.expected_payment_date?String(b.expected_payment_date):null,notes=String(b.notes||"").slice(0,1500),lossCategory=stage==="lost"?String(b.loss_reason_category||""):"",lossDetails=stage==="lost"?String(b.loss_reason_details||"").trim().slice(0,1200):"";
  if(!title||title.length>180||!Number.isFinite(amount)||amount<=0||amount>100000000||!Number.isInteger(probability)||probability<0||probability>100||!STAGES.has(stage)||!validDate(date)||!validDate(paymentDate)||(stage==="lost"&&(!LOSS_REASONS.has(lossCategory)||(lossCategory==="other"&&!lossDetails))))return json({error:"Проверь название, сумму, этап, вероятность, дату и причину проигрыша"},400);
- if(!(await owned(env,"clients",clientId,user.id))||!(await owned(env,"directions",directionId,user.id)))return json({error:"Клиент или направление не найдены"},404);
+ if(clientId){const client=await env.DB.prepare("SELECT id,status FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first();if(!client)return json({error:"Клиент не найден"},404);if(!isClientSelectable(client))return json({error:"Нельзя привязать сделку к закрытому клиенту"},409);}
+ if(directionId){const direction=await env.DB.prepare("SELECT id,active FROM directions WHERE id=? AND user_id=?").bind(directionId,user.id).first();if(!direction)return json({error:"Направление не найдено"},404);if(!isDirectionSelectable(direction))return json({error:"Направление отключено"},409);}
  if(action==="update"){
   const old=await env.DB.prepare("SELECT * FROM deals WHERE id=? AND user_id=? AND archived_at IS NULL").bind(id,user.id).first();
   if(!old)return json({error:"Сделка не найдена"},404);
