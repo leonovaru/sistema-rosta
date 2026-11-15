@@ -1,8 +1,9 @@
 function addDays(date,days){const value=new Date(date+"T12:00:00Z");value.setUTCDate(value.getUTCDate()+days);return value.toISOString().slice(0,10);}
 function weekday(date){const day=new Date(date+"T12:00:00Z").getUTCDay();return day||7;}
 function eventMinutes(event){const start=new Date(event.actual_start_at||event.start_at),end=new Date(event.actual_end_at||event.end_at);return Number.isFinite(start.getTime())&&Number.isFinite(end.getTime())?Math.max(0,Math.round((end-start)/60000)):0;}
-function taskArea(task){
+function taskArea(task,projectTargets=new Set()){
  if(task.life_area_id)return {key:"life:"+task.life_area_id,title:task.life_area_title||"Личная сфера",type:"personal"};
+ if(task.project_id&&projectTargets.has(task.project_id))return {key:"project:"+task.project_id,title:task.project_title||"Собственный проект",type:"project"};
  if(task.direction_id)return {key:"direction:"+task.direction_id,title:task.direction_title||"Доходное направление",type:"income"};
  if(task.project_id)return {key:"project:"+task.project_id,title:task.project_title||"Собственный проект",type:"project"};
  if(task.client_id)return {key:"client:"+task.client_id,title:task.client_name||"Клиент без направления",type:"income"};
@@ -24,9 +25,10 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
   row.minutes+=minutes;row.count++;eventGroups.set(type,row);
  }
  const active=(tasks||[]).filter(t=>["todo","doing"].includes(t.status));
+ const projectTargets=new Set((targets||[]).map(t=>t.project_id).filter(Boolean));
  const areaGroups=new Map();
  for(const task of active){
-  const area=taskArea(task),estimate=Math.max(0,Number(task.estimated_minutes)||0),remaining=task.status==="doing"?Math.max(0,estimate-Math.max(0,Number(task.actual_minutes)||0)):estimate;
+  const area=taskArea(task,projectTargets),estimate=Math.max(0,Number(task.estimated_minutes)||0),remaining=task.status==="doing"?Math.max(0,estimate-Math.max(0,Number(task.actual_minutes)||0)):estimate;
   const row=areaGroups.get(area.key)||{...area,task_count:0,estimated_minutes:0,weekly_estimated_minutes:0,unestimated_count:0,target_minutes:null};
   row.task_count++;row.estimated_minutes+=remaining;
   if(!Number.isFinite(Number(task.estimated_minutes))||Number(task.estimated_minutes)<=0)row.unestimated_count++;
@@ -50,7 +52,7 @@ export function buildWeeklyWorkload({today,workingDays=[],dailyCapacityMinutes=0
   const remaining=task.status==="doing"?Math.max(0,estimate-Math.max(0,Number(task.actual_minutes)||0)):estimate;
   if(!eligible.length||!remaining)continue;
   const base=Math.floor(remaining/eligible.length),remainder=remaining%eligible.length;
-  const area=taskArea(task),areaRow=areaGroups.get(area.key);if(areaRow)areaRow.weekly_estimated_minutes+=remaining;
+  const area=taskArea(task,projectTargets),areaRow=areaGroups.get(area.key);if(areaRow)areaRow.weekly_estimated_minutes+=remaining;
   eligible.forEach((day,index)=>{
    const share=base+(index<remainder?1:0);
    if(!share)return;
