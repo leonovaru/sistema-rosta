@@ -1,6 +1,8 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { calculateProjectEconomics } from "../_lib/project-economics.js";
 import { calculateProjectWorkload } from "../_lib/project-workload.js";
+import { calculateCalendarBusyMinutes } from "../_lib/calendar-capacity.js";
+import { expandRecurringEvents } from "../_lib/calendar.js";
 
 const DEFAULT_AREAS = [
   ["Дом","Уборка, порядок, бытовые задачи"],
@@ -10,6 +12,8 @@ const DEFAULT_AREAS = [
   ["Здоровье и отдых","Восстановление, сон, движение и отдых"],
   ["Личное развитие","Обучение, хобби и личные цели"]
 ];
+
+function addCalendarDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 
 async function owned(env, table, id, userId) {
   if (!id) return true;
@@ -27,7 +31,8 @@ export async function onRequestGet({request,env}) {
       "INSERT OR IGNORE INTO life_areas (id,user_id,title,description,sort_order) VALUES (?,?,?,?,?)"
     ).bind(newId(),user.id,title,description,i)));
   }
-  const [clients,projects,areas,directions,activityEvents]=await Promise.all([
+  const calendarFrom=today+"T00:00",calendarTo=addCalendarDays(today,30)+"T00:00";
+  const [clients,projects,areas,directions,activityEvents,calendarRows]=await Promise.all([
     env.DB.prepare(`SELECT c.*,d.title AS direction_title,
       (SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id) AS project_count,
       (SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id AND p.user_id=c.user_id AND p.status IN ('active','waiting')) AS active_projects,
@@ -66,7 +71,8 @@ export async function onRequestGet({request,env}) {
       SELECT 'interaction' AS activity_type,occurred_on AS activity_date FROM client_interactions WHERE user_id=?
       UNION ALL SELECT 'meeting',meeting_date FROM meeting_notes WHERE user_id=?
       UNION ALL SELECT 'task' ,substr(completed_at,1,10) FROM tasks WHERE user_id=? AND status='done' AND completed_at IS NOT NULL
-    ) WHERE activity_date>=date(?,'-29 days') AND activity_date<=? `).bind(user.id,user.id,user.id,today,today).all()
+    ) WHERE activity_date>=date(?,'-29 days') AND activity_date<=? `).bind(user.id,user.id,user.id,today,today).all(),
+    env.DB.prepare("SELECT * FROM calendar_events WHERE user_id=? AND status='planned' AND ((start_at<? AND end_at>?) OR (repeat_rule!='none' AND start_at<? AND repeat_until>=?))").bind(user.id,calendarTo,calendarFrom,calendarTo,today).all()
   ]);
   const activitySummary={week:{interactions:0,meetings:0,tasks_completed:0},month:{interactions:0,meetings:0,tasks_completed:0}};
   for(const event of activityEvents.results){
@@ -77,7 +83,9 @@ export async function onRequestGet({request,env}) {
   activitySummary.week.total=activitySummary.week.interactions+activitySummary.week.meetings+activitySummary.week.tasks_completed;
   activitySummary.month.total=activitySummary.month.interactions+activitySummary.month.meetings+activitySummary.month.tasks_completed;
   let workingDays=[]; try { workingDays=JSON.parse(settings?.working_days_json||'[]'); } catch {}
-  const workload=calculateProjectWorkload(projects.results,today,{configured:Number(settings?.work_capacity_configured)===1,working_days:workingDays,daily_capacity_minutes:settings?.daily_capacity_minutes});
+  const expandedCalendar=expandRecurringEvents(calendarRows.results,calendarFrom,calendarTo);
+  const calendarBusyByHorizon=[7,14,30].map(days=>calculateCalendarBusyMinutes(expandedCalendar,today,days,workingDays));
+  const workload=calculateProjectWorkload(projects.results,today,{configured:Number(settings?.work_capacity_configured)===1,working_days:workingDays,daily_capacity_minutes:settings?.daily_capacity_minutes,calendar_busy_by_horizon:calendarBusyByHorizon});
   return json({today,client_activity_summary:activitySummary,clients:clients.results,project_workload_summary:workload.horizons,work_capacity:{configured:workload.capacity_configured,working_days:workload.working_days,daily_capacity_minutes:workload.daily_capacity_minutes},projects:workload.projects.map(p=>({...p,economics:calculateProjectEconomics({plannedRevenue:p.budget,plannedCosts:p.cost_budget,received:p.received_total,directExpenses:p.direct_expenses,minutes:p.tracked_minutes})})),life_areas:areas.results,directions:directions.results});
 }
 
