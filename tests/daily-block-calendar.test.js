@@ -57,3 +57,21 @@ test("builds priority, focus and flexible daily plan variants without mutating s
  assert.deepEqual(titles("flexible"),["urgent","routine-long","medium","deep"]);
  assert.deepEqual(tasks.map(task=>task.id),original);
 });
+
+test("summarizes fit, priority coverage, free time and unchanged day assignments",()=>{
+ const scenarios=buildDailyBlockScenarios([{date:"2026-11-16",gross_capacity_minutes:30,available_minutes:30,tasks:[
+  {id:"important",title:"Срочная задача",minutes:20,priority:"high",priority_score:90,cognitive_load:"high"},
+  {id:"routine",title:"Рутинная задача",minutes:20,priority:"low",priority_score:10,cognitive_load:"low"}
+ ]}],{startTime:"09:00",focusMinutes:50,breakMinutes:10});
+ const priority=scenarios.find(item=>item.key==="priority").summary;
+ assert.equal(priority.total_tasks,2);
+ assert.equal(priority.completed_tasks,1);
+ assert.equal(priority.partially_scheduled_tasks,1);
+ assert.equal(priority.unplaced_tasks,0);
+ assert.equal(priority.high_priority_tasks,1);
+ assert.equal(priority.high_priority_completed,1);
+ assert.equal(priority.unallocated_minutes,10);
+ assert.equal(priority.unused_minutes,0);
+ assert.equal(priority.overloaded_days,1);
+ assert.equal(priority.cross_day_moves,0);
+});
