@@ -18,6 +18,49 @@
       <section id="app-view" class="hidden">
         <div class="welcome"><div><p class="eyebrow">ТВОЯ РАБОЧАЯ ПАНЕЛЬ</p><h1>Добро пожаловать!</h1><p class="muted">Сначала главное — что приближает к доходу.</p></div><div class="date-pill" id="today"></div></div>
         <div class="metrics"><article class="metric"><span>Цель на месяц</span><strong id="target">300 000 ₽</strong></article><article class="metric"><span>Получено в этом месяце</span><strong id="actual">0 ₽</strong></article><article class="metric"><span>Осталось до цели</span><strong id="gap">300 000 ₽</strong></article><article class="metric"><span>Прогноз на месяц</span><strong id="forecast">—</strong></article></div>
+        <section class="panel finance-panel">
+          <div class="section-head"><div><p class="eyebrow">ФИНАНСОВАЯ КАРТИНА</p><h2>Деньги, расходы и обязательства</h2></div><span class="muted" id="finance-period"></span></div>
+          <div class="finance-metrics">
+            <article><span>Доход за месяц</span><b id="finance-income">0 ₽</b></article>
+            <article><span>Расходы за месяц</span><b id="finance-expenses">0 ₽</b></article>
+            <article><span>Погашение долгов</span><b id="finance-debt-paid">0 ₽</b></article>
+            <article><span>Остаток после расходов и долгов</span><b id="finance-net">0 ₽</b></article>
+            <article><span>Остаток долгов</span><b id="finance-debt-balance">0 ₽</b></article>
+            <article><span>Платежи на ближайшие 30 дней</span><b id="finance-upcoming">0 ₽</b></article>
+          </div>
+          <div class="finance-forms">
+            <form id="expense-form" class="finance-form"><h3>Записать расход</h3>
+              <label>На что<input id="expense-title" required maxlength="180" placeholder="Продукты, аренда, сервис"></label>
+              <label>Сумма, ₽<input id="expense-amount" type="number" min="0.01" step="0.01" required></label>
+              <label>Категория<input id="expense-category" maxlength="80" value="Прочее"></label>
+              <label>Дата<input id="expense-date" type="date" required></label>
+              <button class="button primary">Добавить расход</button>
+            </form>
+            <form id="debt-form" class="finance-form"><h3>Добавить долг</h3>
+              <label>Название<input id="debt-title" required maxlength="180" placeholder="Кредит, займ, частный долг"></label>
+              <label>Кому должна<input id="debt-creditor" maxlength="160" placeholder="Организация или человек"></label>
+              <label>Остаток на сегодня, ₽<input id="debt-amount" type="number" min="0.01" step="0.01" required></label>
+              <label>Ставка, % годовых<input id="debt-rate" type="number" min="0" max="1000" step="0.01" value="0"></label>
+              <label>Обязательный платёж, ₽<input id="debt-minimum" type="number" min="0" step="0.01" value="0"></label>
+              <label>День платежа<input id="debt-due-day" type="number" min="1" max="31" placeholder="Например, 15"></label>
+              <button class="button primary">Добавить долг</button>
+            </form>
+            <form id="obligation-form" class="finance-form"><h3>Запланировать платёж</h3>
+              <label>Название<input id="obligation-title" required maxlength="180" placeholder="Аренда, связь, подписка"></label>
+              <label>Сумма, ₽<input id="obligation-amount" type="number" min="0.01" step="0.01" required></label>
+              <label>Дата оплаты<input id="obligation-date" type="date" required></label>
+              <label>Повторение<select id="obligation-frequency"><option value="once">Один раз</option><option value="monthly">Ежемесячно</option><option value="weekly">Еженедельно</option></select></label>
+              <button class="button primary">Добавить платёж</button>
+            </form>
+          </div>
+          <div class="finance-lists">
+            <div><h3>Долги</h3><div id="finance-debts" class="finance-list"></div>
+              <form id="debt-payment-form" class="finance-inline-form"><label>Погасить долг<select id="payment-debt" required></select></label><label>Сумма, ₽<input id="debt-payment-amount" type="number" min="0.01" step="0.01" required></label><label>Дата<input id="debt-payment-date" type="date" required></label><button class="button primary">Записать погашение</button></form>
+            </div>
+            <div><h3>Ближайшие обязательные платежи</h3><div id="finance-obligations" class="finance-list"></div></div>
+            <div><h3>Последние расходы</h3><div id="finance-expense-list" class="finance-list"></div></div>
+          </div>
+        </section>
         <section class="panel calendar-panel">
           <div class="section-head"><div><p class="eyebrow">ВРЕМЯ И РИТМ ЖИЗНИ</p><h2>Календарь</h2></div><div class="calendar-nav"><button type="button" class="button ghost" id="calendar-prev" aria-label="Предыдущий период">←</button><button type="button" class="button ghost" id="calendar-today">Сегодня</button><button type="button" class="button ghost" id="calendar-next" aria-label="Следующий период">→</button></div></div>
           <div class="calendar-toolbar"><strong id="calendar-caption"></strong><div class="calendar-views"><button type="button" class="filter active" data-calendar-view="month">Месяц</button><button type="button" class="filter" data-calendar-view="week">Неделя</button><button type="button" class="filter" data-calendar-view="day">День</button></div></div>
