@@ -102,3 +102,10 @@
 .client-history-entry small{color:var(--muted,#687080)}
 .client-history-entry p{margin:3px 0;white-space:pre-wrap}
 @media(max-width:560px){.client-history-form{grid-template-columns:1fr}.client-history-form label:nth-last-of-type(1){grid-column:auto}.client-history-form button{width:100%}}
+
+
+.client-finance-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:12px 0}
+.client-finance-summary article{display:grid;gap:5px;padding:11px;border:1px solid var(--line,#ddd);border-radius:10px;background:var(--surface,#fff)}
+.client-finance-summary small{color:var(--muted,#687080)}
+.client-finance-summary b{font-size:1.05rem}
+@media(max-width:560px){.client-finance-summary{grid-template-columns:1fr}}
