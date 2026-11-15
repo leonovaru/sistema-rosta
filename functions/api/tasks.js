@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
-import { isClientSelectable, isProjectSelectable, isDirectionSelectable } from "../_lib/workspace-entity-availability.js";
+import { isClientSelectable, isProjectSelectable, isProjectActiveForWork, isDirectionSelectable } from "../_lib/workspace-entity-availability.js";
 import { isTaskAvailableForPlanning } from "../_lib/task-planning-availability.js";
 
 async function invalidateTodayPlan(env, userId) {
@@ -63,7 +63,7 @@ export async function onRequestPost({ request, env }) {
   }
   if (projectId) {
     const project=await env.DB.prepare("SELECT client_id,direction_id,status FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first();
-    if(!isProjectSelectable(project))return json({error:"Нельзя создавать задачи в архивном проекте"},409);
+    if(!isProjectActiveForWork(project))return json({error:"Нельзя создавать задачи в завершённом или архивном проекте"},409);
     if ((clientId && clientId!==project.client_id) || (directionId && directionId!==project.direction_id)) return json({error:"Клиент и направление должны соответствовать выбранному проекту"},400);
   }
   let inherited = null;
@@ -76,7 +76,7 @@ export async function onRequestPost({ request, env }) {
   const finalClientId=clientId || inherited?.client_id || null;
   const finalProjectId=projectId || inherited?.project_id || null;
   const finalLifeAreaId=lifeAreaId || inherited?.life_area_id || null;
-  if(finalProjectId){const project=await env.DB.prepare("SELECT id,status FROM projects WHERE id=? AND user_id=?").bind(finalProjectId,user.id).first();if(!isProjectSelectable(project))return json({error:"Нельзя создавать задачи в архивном проекте"},409);}
+  if(finalProjectId){const project=await env.DB.prepare("SELECT id,status FROM projects WHERE id=? AND user_id=?").bind(finalProjectId,user.id).first();if(!isProjectActiveForWork(project))return json({error:"Нельзя создавать задачи в завершённом или архивном проекте"},409);}
   if(finalClientId){const client=await env.DB.prepare("SELECT id,status FROM clients WHERE id=? AND user_id=?").bind(finalClientId,user.id).first();if(!isClientSelectable(client))return json({error:"Нельзя создавать задачи для закрытого клиента"},409);}
   if(finalDirectionId){const direction=await env.DB.prepare("SELECT id,active FROM directions WHERE id=? AND user_id=?").bind(finalDirectionId,user.id).first();if(!isDirectionSelectable(direction))return json({error:"Нельзя создавать задачи в отключённом направлении"},409);}
   const id = newId();
