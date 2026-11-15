@@ -23,7 +23,7 @@ export async function onRequestGet({request,env}){
   env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 AND due_date<=? ORDER BY due_date").bind(user.id,end).all(),
   env.DB.prepare("SELECT title,balance,minimum_payment,due_day,status FROM debts WHERE user_id=? AND status='open'").bind(user.id).all(),
   env.DB.prepare("SELECT title,target_amount,current_amount,monthly_contribution,target_date,active FROM cash_reserves WHERE user_id=? AND active=1").bind(user.id).all(),
-  env.DB.prepare("SELECT id,title,category,amount,next_date,frequency FROM irregular_expenses WHERE user_id=? AND active=1 AND next_date<=? ORDER BY next_date").bind(user.id,end).all()
+  env.DB.prepare("SELECT id,title,category,amount,next_date,frequency,recurrence_day FROM irregular_expenses WHERE user_id=? AND active=1 AND next_date<=? ORDER BY next_date").bind(user.id,end).all()
  ]);
  const forecast=buildCashflowForecast({today,horizonDays:horizon,startingBalance:settings?.starting_balance||0,planned:planned.results,obligations:obligations.results,debts:debts.results,variableExpensesByMonth,reserves:reserves.results,irregularExpenses:irregularExpenses.results});
  return json({...forecast,planned:planned.results,starting_balance:Number(settings?.starting_balance||0),variable_expense_forecast:variableExpenseForecast,variable_expenses_by_month:variableExpensesByMonth,reserves:reserves.results,irregular_expenses:irregularExpenses.results});
