@@ -9,15 +9,15 @@ const validDate=value=>!value||(/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN
 async function owned(env,table,id,userId){if(!id)return true;return Boolean(await env.DB.prepare("SELECT id FROM "+table+" WHERE id=? AND user_id=?").bind(id,userId).first());}
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
- const rows=await env.DB.prepare("SELECT d.*,c.name client_name,dr.title direction_title,ROUND(d.amount*d.probability_percent/100,2) weighted_amount FROM deals d LEFT JOIN clients c ON c.id=d.client_id AND c.user_id=d.user_id LEFT JOIN directions dr ON dr.id=d.direction_id AND dr.user_id=d.user_id WHERE d.user_id=? ORDER BY CASE d.stage WHEN 'awaiting_payment' THEN 0 WHEN 'proposal' THEN 1 WHEN 'negotiation' THEN 2 WHEN 'contact' THEN 3 WHEN 'won' THEN 4 ELSE 5 END,d.expected_close_date,d.updated_at DESC").bind(user.id).all();
+ const rows=await env.DB.prepare("SELECT d.*,c.name client_name,dr.title direction_title,ROUND(d.amount*d.probability_percent/100,2) weighted_amount FROM deals d LEFT JOIN clients c ON c.id=d.client_id AND c.user_id=d.user_id LEFT JOIN directions dr ON dr.id=d.direction_id AND dr.user_id=d.user_id WHERE d.user_id=? AND d.archived_at IS NULL ORDER BY CASE d.stage WHEN 'awaiting_payment' THEN 0 WHEN 'proposal' THEN 1 WHEN 'negotiation' THEN 2 WHEN 'contact' THEN 3 WHEN 'won' THEN 4 ELSE 5 END,d.expected_close_date,d.updated_at DESC").bind(user.id).all();
  const [monthlyDeals,monthlyIncome,undatedDeals,firstContacts,dealStageEvents,dealFirstContacts]=await Promise.all([
-  env.DB.prepare("SELECT substr(expected_payment_date,1,7) month,COUNT(*) deal_count,SUM(amount) planned_amount,SUM(amount*probability_percent/100) weighted_amount FROM deals WHERE user_id=? AND stage NOT IN ('won','lost') AND expected_payment_date IS NOT NULL GROUP BY substr(expected_payment_date,1,7) ORDER BY month").bind(user.id).all(),
+  env.DB.prepare("SELECT substr(expected_payment_date,1,7) month,COUNT(*) deal_count,SUM(amount) planned_amount,SUM(amount*probability_percent/100) weighted_amount FROM deals WHERE user_id=? AND archived_at IS NULL AND stage NOT IN ('won','lost') AND expected_payment_date IS NOT NULL GROUP BY substr(expected_payment_date,1,7) ORDER BY month").bind(user.id).all(),
   env.DB.prepare("SELECT substr(received_on,1,7) month,SUM(amount) actual_amount FROM income_entries WHERE user_id=? GROUP BY substr(received_on,1,7) ORDER BY month").bind(user.id).all(),
-  env.DB.prepare("SELECT COUNT(*) count,SUM(amount) amount FROM deals WHERE user_id=? AND stage NOT IN ('won','lost') AND expected_payment_date IS NULL").bind(user.id).first(),
+  env.DB.prepare("SELECT COUNT(*) count,SUM(amount) amount FROM deals WHERE user_id=? AND archived_at IS NULL AND stage NOT IN ('won','lost') AND expected_payment_date IS NULL").bind(user.id).first(),
   env.DB.prepare("SELECT c.direction_id,ci.client_id,MIN(ci.occurred_on) first_contact_on FROM client_interactions ci JOIN clients c ON c.id=ci.client_id AND c.user_id=ci.user_id WHERE ci.user_id=? AND ci.interaction_type IN ('call','email','message') AND ci.occurred_on>=date('now','-89 days') AND c.direction_id IS NOT NULL GROUP BY c.direction_id,ci.client_id").bind(user.id).all(),
-  env.DB.prepare("SELECT d.direction_id,d.client_id,e.changes_json,e.created_at FROM deal_events e JOIN deals d ON d.id=e.deal_id AND d.user_id=e.user_id WHERE e.user_id=? ORDER BY e.created_at").bind(user.id).all(),
+  env.DB.prepare("SELECT e.direction_id_snapshot AS direction_id,e.client_id_snapshot AS client_id,e.changes_json,e.created_at FROM deal_events e JOIN deals d ON d.id=e.deal_id AND d.user_id=e.user_id WHERE e.user_id=? AND d.archived_at IS NULL ORDER BY e.created_at").bind(user.id).all(),
   env.DB.prepare("SELECT d.direction_id,ci.client_id,MIN(ci.occurred_on) first_contact_on FROM deals d JOIN client_interactions ci ON ci.client_id=d.client_id AND ci.user_id=d.user_id WHERE d.user_id=? AND d.client_id IS NOT NULL AND d.direction_id IS NOT NULL AND ci.interaction_type IN ('call','email','message') GROUP BY d.direction_id,ci.client_id").bind(user.id,user.id).all() ]);
- const events=await env.DB.prepare("SELECT e.* FROM deal_events e JOIN deals d ON d.id=e.deal_id AND d.user_id=e.user_id WHERE e.user_id=? ORDER BY e.created_at DESC LIMIT 500").bind(user.id).all();
+ const events=await env.DB.prepare("SELECT e.* FROM deal_events e JOIN deals d ON d.id=e.deal_id AND d.user_id=e.user_id WHERE e.user_id=? AND d.archived_at IS NULL ORDER BY e.created_at DESC LIMIT 500").bind(user.id).all();
  const eventsByDeal=new Map();for(const event of events.results){if(!eventsByDeal.has(event.deal_id))eventsByDeal.set(event.deal_id,[]);eventsByDeal.get(event.deal_id).push(event);}
  const observed=buildObservedSalesFunnel({interactionRows:firstContacts.results,dealEventRows:dealStageEvents.results});
  const cycleByDirection=new Map(observed.map(x=>[x.direction_id,x]));
@@ -33,7 +33,7 @@ export async function onRequestPost({request,env}){
  const b=await readJson(request)||{},action=String(b.action||"create");
  if(action==="delete"){
   const id=String(b.id||"");if(!id)return json({error:"Сделка не найдена"},400);
-  const r=await env.DB.prepare("DELETE FROM deals WHERE id=? AND user_id=?").bind(id,user.id).run();
+  const r=await env.DB.prepare("UPDATE deals SET archived_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND user_id=? AND archived_at IS NULL").bind(id,user.id).run();
   return Number(r.meta?.changes||0)?json({ok:true}):json({error:"Сделка не найдена"},404);
  }
  const id=action==="update"?String(b.id||""):newId();
@@ -49,14 +49,14 @@ export async function onRequestPost({request,env}){
   if(!changes.length)return json({ok:true,id,unchanged:true});
   await env.DB.batch([
    env.DB.prepare("UPDATE deals SET client_id=?,direction_id=?,title=?,amount=?,stage=?,probability_percent=?,expected_close_date=?,expected_payment_date=?,notes=?,loss_reason_category=?,loss_reason_details=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(clientId,directionId,title,amount,stage,probability,date,paymentDate,notes,lossCategory||null,lossDetails,id,user.id),
-   env.DB.prepare("INSERT INTO deal_events (id,user_id,deal_id,event_type,changes_json) VALUES (?,?,?,'updated',?)").bind(newId(),user.id,id,JSON.stringify(changes))
+   env.DB.prepare("INSERT INTO deal_events (id,user_id,deal_id,event_type,changes_json,direction_id_snapshot,client_id_snapshot) VALUES (?,?,?,'updated',?,?,?)").bind(newId(),user.id,id,JSON.stringify(changes),directionId,clientId)
   ]);
   return json({ok:true,id});
  }
  if(action!=="create")return json({error:"Неизвестное действие"},400);
  await env.DB.batch([
   env.DB.prepare("INSERT INTO deals (id,user_id,client_id,direction_id,title,amount,stage,probability_percent,expected_close_date,expected_payment_date,notes,loss_reason_category,loss_reason_details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,clientId,directionId,title,amount,stage,probability,date,paymentDate,notes,lossCategory||null,lossDetails),
-  env.DB.prepare("INSERT INTO deal_events (id,user_id,deal_id,event_type,changes_json) VALUES (?,?,?,'created',?)").bind(newId(),user.id,id,JSON.stringify([{field:"created",label:"Сделка создана",to:title}]))
+  env.DB.prepare("INSERT INTO deal_events (id,user_id,deal_id,event_type,changes_json,direction_id_snapshot,client_id_snapshot) VALUES (?,?,?,'created',?,?,?)").bind(newId(),user.id,id,JSON.stringify([{field:"created",label:"Сделка создана",to:title}]),directionId,clientId)
  ]);
  return json({ok:true,id},201);
 }
