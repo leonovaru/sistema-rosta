@@ -1,6 +1,7 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { addDays, addPeriod } from "../_lib/finance.js";
 import { detectRecurringExpenses } from "../_lib/recurring-expense-detection.js";
+import { buildFinancialAttributionSnapshot } from "../_lib/financial-attribution.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 function validDate(value) {
@@ -73,6 +74,7 @@ export async function onRequestPost({request,env}) {
     const effectiveDirectionId=directionId||project?.direction_id||client?.direction_id||null;
     const direction=effectiveDirectionId?await env.DB.prepare("SELECT id,title FROM directions WHERE id=? AND user_id=?").bind(effectiveDirectionId,user.id).first():null;
     if(effectiveDirectionId&&!direction)return json({error:"Направление не найдено"},404);
+    const snapshot=buildFinancialAttributionSnapshot({direction,client,project});
     const bucketId=body.bucket_id?String(body.bucket_id):null;
     if(bucketId){
       const bucket=await env.DB.prepare("SELECT id,title FROM income_buckets WHERE id=? AND user_id=? AND active=1").bind(bucketId,user.id).first();
@@ -80,7 +82,7 @@ export async function onRequestPost({request,env}) {
       const available=await bucketAvailable(env,user.id,bucketId);
       if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     }
-    await env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id,client_id,project_id,direction_id_snapshot,direction_title_snapshot,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,effectiveDirectionId,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500),bucketId,clientId,projectId,effectiveDirectionId,direction?.title||null,clientId,client?.name||null,projectId,project?.title||null).run();
+    await env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id,client_id,project_id,direction_id_snapshot,direction_title_snapshot,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,effectiveDirectionId,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500),bucketId,clientId,projectId,snapshot.direction_id_snapshot,snapshot.direction_title_snapshot,snapshot.client_id_snapshot,snapshot.client_name_snapshot,snapshot.project_id_snapshot,snapshot.project_title_snapshot).run();
     return json({ok:true,id},201);
   }
   if(action==="debt"){
