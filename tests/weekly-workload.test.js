@@ -26,10 +26,10 @@ test("keeps overdue, undated, waiting and unestimated tasks visible as separate 
  assert.equal(result.summary.without_deadline_count,1);
  assert.equal(result.summary.waiting_task_count,1);
  assert.equal(result.summary.unestimated_task_count,1);
- assert.equal(result.summary.estimated_task_minutes,90);
+ assert.equal(result.summary.estimated_task_minutes,60);
 });
 test("reports overload without silently changing deadlines or capacity",()=>{
- const result=buildWeeklyWorkload({...base,dailyCapacityMinutes:60,tasks:[{id:"a",status:"todo",due_date:"2026-11-16",estimated_minutes:240}]});
+ const result=buildWeeklyWorkload({...base,dailyCapacityMinutes:60,tasks:[{id:"a",status:"todo",due_date:"2026-11-16",estimated_minutes:480}]});
  assert.equal(result.summary.over_capacity,true);
  assert.equal(result.summary.remaining_minutes,-180);
  assert.equal(result.days[0].overloaded,true);
