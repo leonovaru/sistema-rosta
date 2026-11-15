@@ -20,7 +20,7 @@ export async function onRequestPost({request,env}){
   const amount=Number(item.amount),paymentId=newId(),expenseEntryId=newId();
   let nextDate=null,active=0;
   if(item.frequency!=="once"){
-   nextDate=nextIrregularDate(item.next_date,item.frequency);
+   nextDate=nextIrregularDate(item.next_date,item.frequency,item.recurrence_day);
    let guard=0;
    while(nextDate&&nextDate<=paidOn&&guard++<40)nextDate=nextIrregularDate(nextDate,item.frequency);
    if(!nextDate)return json({error:"Не удалось рассчитать следующую дату"},400);
@@ -40,10 +40,10 @@ export async function onRequestPost({request,env}){
  const title=clean(b.title,180),category=clean(b.category,80)||"Нерегулярные расходы",amount=Number(b.amount),date=String(b.next_date||""),frequency=String(b.frequency||"once"),notes=clean(b.notes,500);
  if(!title||!Number.isFinite(amount)||amount<=0||amount>100000000||!validDate(date)||!["once","yearly","quarterly"].includes(frequency))return json({error:"Проверь название, сумму, дату и периодичность"},400);
  if(action==="update"){
-  const r=await env.DB.prepare("UPDATE irregular_expenses SET title=?,category=?,amount=?,next_date=?,frequency=?,notes=?,active=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(title,category,amount,date,frequency,notes,b.active===false?0:1,clean(b.id,100),user.id).run();
+  const r=await env.DB.prepare("UPDATE irregular_expenses SET title=?,category=?,amount=?,next_date=?,frequency=?,notes=?,active=?,recurrence_day=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(title,category,amount,date,frequency,notes,b.active===false?0:1,Number(date.slice(8,10)),clean(b.id,100),user.id).run();
   if(!r.meta.changes)return json({error:"Расход не найден"},404);return json({ok:true});
  }
  const id=newId();
- await env.DB.prepare("INSERT INTO irregular_expenses (id,user_id,title,category,amount,next_date,frequency,notes) VALUES (?,?,?,?,?,?,?,?)").bind(id,user.id,title,category,amount,date,frequency,notes).run();
+ await env.DB.prepare("INSERT INTO irregular_expenses (id,user_id,title,category,amount,next_date,frequency,notes,recurrence_day) VALUES (?,?,?,?,?,?,?,?,?)").bind(id,user.id,title,category,amount,date,frequency,notes,Number(date.slice(8,10))).run();
  return json({ok:true,id},201);
 }
