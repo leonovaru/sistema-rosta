@@ -843,7 +843,7 @@ function renderCalendar() {
         const end=e.end_at.slice(0,10)>calendarSelected?1440:e.end_at.slice(0,10)<calendarSelected?0:Number(e.end_at.slice(11,13))*60+Number(e.end_at.slice(14,16));
         return Math.max(0,Math.floor(start/60))===hour&&end>hour*60;
       });
-      cells.push('<div class="calendar-hour-row"><span class="calendar-hour-label">'+pad2(hour)+':00</span><div class="calendar-hour-events">'+items.map(e=>'<button type="button" class="calendar-hour-event '+eventColors[e.event_type]+'" data-edit-event="'+e.id+'">'+(e.start_at.slice(0,10)<calendarSelected?'↳ ':eventTime(e.start_at)+' ')+escapeHtml(e.title)+'</button>').join("")+'</div></div>');
+      cells.push('<div class="calendar-hour-row"><span class="calendar-hour-label">'+pad2(hour)+':00</span><div class="calendar-hour-events">'+items.map(e=>e.is_sleep_session?'<span class="calendar-hour-event '+eventColors[e.event_type]+'">'+(e.start_at.slice(0,10)<calendarSelected?'↳ ':eventTime(e.start_at)+' ')+escapeHtml(e.title)+'</span>':'<button type="button" class="calendar-hour-event '+eventColors[e.event_type]+'" data-edit-event="'+e.id+'">'+(e.start_at.slice(0,10)<calendarSelected?'↳ ':eventTime(e.start_at)+' ')+escapeHtml(e.title)+'</button>').join("")+'</div></div>');
     }
   } else {
     const start=calendarView==="month"?new Date(calendarAnchor.getFullYear(),calendarAnchor.getMonth(),1):weekStart;
