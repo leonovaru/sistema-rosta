@@ -56,5 +56,7 @@ export function buildDailyReallocationProposals(days=[],options={}){
   const plan=planDay(day,day.tasks,options);
   for(const item of plan.unallocated||[])remaining.push({date:day.date,task_id:item.task_id,title:item.title,minutes:item.minutes});
  }
- return {proposals,remaining,summary:{proposed_moves:proposals.length,remaining_unallocated_minutes:remaining.reduce((sum,item)=>sum+item.minutes,0)}};
+ const movedIds=new Set(proposals.map(item=>String(item.task_id)));
+ const schedules=[...movedIds].map(taskId=>({task_id:taskId,allocations:projected.flatMap(day=>(day.tasks||[]).filter(task=>String(task.id)===taskId).map(task=>({date:day.date,minutes:Number(task.minutes)||0}))).filter(item=>item.minutes>0)}));
+ return {proposals,schedules,remaining,summary:{proposed_moves:proposals.length,remaining_unallocated_minutes:remaining.reduce((sum,item)=>sum+item.minutes,0)}};
 }
