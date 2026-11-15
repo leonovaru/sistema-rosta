@@ -36,7 +36,7 @@ export async function onRequestGet({request,env}){
  const calendarDays=calculateCalendarBusyByDay(events,today,7,workingDays);
  const configured=Number(settings?.work_capacity_configured)===1&&workingDays.length>0&&Number(settings?.daily_capacity_minutes)>0;
  const week=buildWeeklyWorkload({today,workingDays,dailyCapacityMinutes:settings?.daily_capacity_minutes,configured,calendarDays,calendarEvents:events,tasks:taskRows.results,targets:targetRows.results});
- applySavedDailyTaskAllocations(week,allocationRows.results);
+ applySavedDailyTaskAllocations(week,allocationRows.results,taskRows.results);
  attachWeeklyTaskPriority(week,taskRows.results,today);
  attachWeeklyActualTime(week,timeRows.results,timezone,targetRows.results);
  week.estimate_accuracy=buildEstimateAccuracy(completedRows.results);
