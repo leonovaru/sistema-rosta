@@ -1,5 +1,3 @@
-const APP_ROOT = new URL("/", self.location.origin).href;
-
 self.addEventListener("install", event => {
   event.waitUntil(self.skipWaiting());
 });
@@ -17,7 +15,7 @@ self.addEventListener("push", event => {
     tag: data.tag || "morning-wake",
     renotify: false,
     requireInteraction: true,
-    data: { url: data.url || "/?wake=1", action: "wake" },
+    data: { url: data.url || "/", wakeUrl: data.wakeUrl || "/?wake=1" },
     actions: [{ action: "wake", title: "Да, я проснулась" }]
   };
   event.waitUntil(self.registration.showNotification(title, options));
@@ -25,9 +23,12 @@ self.addEventListener("push", event => {
 
 self.addEventListener("notificationclick", event => {
   event.notification.close();
-  const url = new URL(event.notification.data?.url || "/?wake=1", self.location.origin).href;
+  const data = event.notification.data || {};
+  const confirmed = event.action === "wake";
+  const target = confirmed ? (data.wakeUrl || "/?wake=1") : (data.url || "/");
+  const url = new URL(target, self.location.origin).href;
   event.waitUntil((async () => {
-    if (event.action === "wake" || !event.action) {
+    if (confirmed) {
       try {
         await fetch("/api/sleep", {
           method: "POST",
