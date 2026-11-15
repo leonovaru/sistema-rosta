@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
-import { recurringTaskDates } from "../_lib/recurring-tasks.js";
+import { recurringTaskDates, normalizeRecurringSteps } from "../_lib/recurring-tasks.js";
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(value){if(!DATE.test(value))return false;const date=new Date(value+"T12:00:00Z");return !Number.isNaN(date.getTime())&&date.toISOString().slice(0,10)===value;}
@@ -65,8 +65,8 @@ export async function onRequestPost({request,env}){
  const lifeAreaId=b.life_area_id?String(b.life_area_id):null,directionId=b.direction_id?String(b.direction_id):null;
  const priority=["low","medium","high"].includes(b.priority)?b.priority:"medium";
  const estimated=b.estimated_minutes==null||b.estimated_minutes===""?null:Math.round(Number(b.estimated_minutes));
- const steps=Array.isArray(b.steps)?b.steps.map(x=>String(x?.title||x||"").trim()).filter(Boolean):[];
- if(steps.length>30||steps.some(x=>x.length>240))return json({error:"Добавь не более 30 подзадач, до 240 символов каждая"},400);
+ const steps=normalizeRecurringSteps(b.steps);
+ if(!steps)return json({error:"Добавь не более 30 подзадач, до 240 символов каждая"},400);
  if(!title||title.length>240)return json({error:"Укажи название задачи (до 240 символов)"},400);
  if(!["daily","weekly","monthly"].includes(recurrence))return json({error:"Выбери повторение"},400);
  if(!validDate(startDate))return json({error:"Проверь дату начала"},400);
