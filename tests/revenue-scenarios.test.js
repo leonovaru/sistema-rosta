@@ -23,3 +23,18 @@ test("shows a direction with no revenue history as lacking an hourly rate",()=>{
  const x=buildRevenueScenarios({monthlyTarget:100000,directionRows:[{id:"a",title:"New",share_percent:100}],actualRows:[{direction_id:"a",revenue:10000}],taskRows:[{direction_id:"a",actual_minutes:0}]});
  assert.equal(x.scenarios[1].directions[0].historical_revenue_per_hour,null);assert.equal(x.scenarios[1].capacity_fit,null);
 });
+
+test("projects month-end receipts from elapsed calendar days and calculates the remaining daily pace",()=>{
+ const x=buildRevenueScenarios({monthlyTarget:300000,directionRows:[{id:"a",title:"Аудит",share_percent:100}],actualRows:[{direction_id:"a",revenue:60000}],elapsedDays:10,daysInMonth:30,remainingDays:20});
+ const realistic=x.scenarios[1],a=realistic.directions[0];
+ assert.equal(realistic.projected_month_end,180000);
+ assert.equal(realistic.projection_gap,-120000);
+ assert.equal(realistic.required_daily_revenue,12000);
+ assert.equal(a.projected_month_end,180000);
+ assert.equal(a.required_daily_revenue,12000);
+});
+test("does not publish a pace projection before any elapsed day is supplied",()=>{
+ const x=buildRevenueScenarios({monthlyTarget:100000,directionRows:[{id:"a",share_percent:100}],actualRows:[{direction_id:"a",revenue:5000}]});
+ assert.equal(x.scenarios[1].projected_month_end,null);
+ assert.equal(x.scenarios[1].projection_gap,null);
+});
