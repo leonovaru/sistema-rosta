@@ -45,7 +45,7 @@ export function buildDailyAssignmentRepairs(week,allocations=[],tasks=[]){
    if(left<=0||wanted<=0)return;
    const day=dayMap.get(date);
    if(!day?.working_day||(task.due_date&&date>String(task.due_date).slice(0,10)))return;
-   const otherMinutes=(day.tasks||[]).filter(item=>String(item.id)!==taskId).reduce((sum,item)=>sum+Math.max(0,Number(item.minutes)||0),0);
+   const otherMinutes=(day.tasks||[]).filter(item=>!affected.has(String(item.id))).reduce((sum,item)=>sum+Math.max(0,Number(item.minutes)||0),0);
    const capacity=Math.max(0,Number(day.available_minutes||0)-otherMinutes-(reserved.get(date)||0)-(allocated.get(date)||0));
    const minutes=Math.min(left,wanted,capacity);
    if(minutes>0){allocated.set(date,(allocated.get(date)||0)+minutes);left-=minutes;}
@@ -57,10 +57,16 @@ export function buildDailyAssignmentRepairs(week,allocations=[],tasks=[]){
   for(const [date,minutes] of allocated)next.push({date,minutes});
   if(left>0){
    unresolved.push({task_id:taskId,title:task.title||"Задача",minutes:left,reason:"Не найдено достаточно свободного времени до дедлайна без перегрузки других задач."});
+   // Keep the current automatic fallback load of an unresolved task occupied,
+   // but never reserve the partial, uncommittable repair attempt.
+   for(const day of days){
+    const fallback=(day.tasks||[]).filter(item=>String(item.id)===taskId).reduce((sum,item)=>sum+Math.max(0,Number(item.minutes)||0),0);
+    if(fallback)reserved.set(day.date,(reserved.get(day.date)||0)+fallback);
+   }
    continue;
   }
-  // Reserve capacity only after the whole repair is feasible. A failed proposal
-  // must not consume capacity needed by a later independent repair. 
+  // Successful proposals replace their baseline shares; only the new complete
+  // allocation is reserved for subsequent repairs.
   for(const [date,minutes] of allocated)reserved.set(date,(reserved.get(date)||0)+minutes);
   const oldSorted=oldRows.filter(row=>row.minutes>0).sort((a,b)=>a.date.localeCompare(b.date));
   const nextSorted=next.sort((a,b)=>a.date.localeCompare(b.date));
