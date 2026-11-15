@@ -79,15 +79,13 @@ export default {
       if(local.hour!=="06"||Number(local.minute)>10)continue;
       const localDate=local.year+"-"+local.month+"-"+local.day;
       const id=crypto.randomUUID();
-      const claim=await env.DB.prepare(`INSERT OR IGNORE INTO push_deliveries (id,user_id,local_date,timezone,scheduled_at,status)
+      await env.DB.prepare(`INSERT OR IGNORE INTO push_deliveries (id,user_id,local_date,timezone,scheduled_at,status)
         VALUES (?,?,?,?,?,'pending')`).bind(id,row.user_id,localDate,row.timezone,now.toISOString()).run();
-      let deliveryId=id;
-      if(!claim.meta.changes){
-        const existing=await env.DB.prepare("SELECT id,status FROM push_deliveries WHERE user_id=? AND local_date=?").bind(row.user_id,localDate).first();
-        if(!existing||existing.status==="sent")continue;
-        deliveryId=existing.id;
-        await env.DB.prepare("UPDATE push_deliveries SET status='pending',error=NULL WHERE id=?").bind(deliveryId).run();
-      }
+      const delivery=await env.DB.prepare("SELECT id,status FROM push_deliveries WHERE user_id=? AND local_date=?").bind(row.user_id,localDate).first();
+      if(!delivery||delivery.status==="sent")continue;
+      const deliveryId=delivery.id;
+      const claimed=await env.DB.prepare("UPDATE push_deliveries SET status='sending',error=NULL WHERE id=? AND status IN ('pending','failed')").bind(deliveryId).run();
+      if(!claimed.meta.changes)continue;
       try{
         await sendPush(row,env,{title:"Система роста",body:"Доброе утро! Ты уже проснулась?",tag:"morning-wake-"+localDate,url:"/?wake=1"});
         await env.DB.prepare("UPDATE push_deliveries SET status='sent',sent_at=? WHERE id=?").bind(new Date().toISOString(),deliveryId).run();
