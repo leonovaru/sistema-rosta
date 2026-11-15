@@ -417,6 +417,25 @@ async function loadSalesPlan(){
  host.innerHTML=salesPlanData.directions.map(d=>'<article class="sales-plan-card"><div class="sales-plan-title"><b>'+escapeHtml(d.title)+'</b><span>Осталось до цели: '+money(d.remaining_target)+'</span></div><div class="sales-plan-inputs"><label>Контакт → обращение, %<input type="number" min="0" max="100" step="1" data-sales-response="'+escapeHtml(d.direction_id)+'" value="'+d.contact_to_lead_percent+'"></label><label>Обращение → продажа, %<input type="number" min="0" max="100" step="1" data-sales-close="'+escapeHtml(d.direction_id)+'" value="'+d.lead_to_sale_percent+'"></label></div><div class="sales-plan-numbers"><span>Продаж: <b>'+(d.sales_required===null?'укажи средний чек':d.sales_required)+'</b></span><span>Обращений: <b>'+(d.qualified_leads_required===null?'—':d.qualified_leads_required)+'</b></span><span>Нужно первичных контактов: <b>'+(d.outreach_required===null?'—':d.outreach_required)+'</b></span><span>Потенциальных клиентов в базе: <b>'+d.potential_clients+'</b></span><span>С контактом за 30 дней: <b>'+d.contacted_clients+'</b></span></div><p class="fine">'+(d.assumptions_default?'Используются стартовые допущения 40% и 20%. Измени их на свои показатели.':'Используются сохранённые тобой конверсии.')+'</p><button type="button" class="button ghost" data-sales-create="'+escapeHtml(d.direction_id)+'" '+(d.outreach_required===null||d.outreach_required===0?'disabled':'')+'>Добавить задачи на неделю</button></article>').join('');
  $("sales-plan-note").textContent="Потребность в контактах рассчитывается от оставшейся цели, среднего чека и двух конверсий. Отдельно показаны реальные карточки потенциальных клиентов со статусом «лид» и те, с кем была зафиксирована коммуникация за последние 30 дней. Система пока не считает этапы переговоров и вероятность конкретной сделки: для этого нужна отдельная фиксация возможностей/сделок. Уточняй конверсии по фактической статистике.";
 }
+
+$("risk-sales-plan").addEventListener("click",async e=>{
+ const button=e.target.closest("[data-risk-sales-create]");if(!button)return;
+ const direction=(cashflowData?.risk_sales_plan?.directions||[]).find(x=>x.direction_id===button.dataset.riskSalesCreate);if(!direction)return;
+ const titlePrefix="Кассовый разрыв — ";
+ const actions=[
+  {title:"Найти потенциальных клиентов — "+direction.title,count:direction.weekly_outreach,minutes:Math.max(30,Math.min(240,(direction.weekly_outreach||0)*10))},
+  {title:"Провести первичные переговоры — "+direction.title,count:direction.weekly_qualified_leads,minutes:Math.max(30,Math.min(240,(direction.weekly_qualified_leads||0)*15))},
+  {title:"Довести переговоры до продажи — "+direction.title,count:direction.weekly_sales,minutes:Math.max(30,Math.min(240,(direction.weekly_sales||0)*30))}
+ ].filter(x=>x.count>0);
+ const fresh=actions.filter(x=>!allTasks.some(t=>t.status!=="done"&&t.title===titlePrefix+x.title));
+ if(!fresh.length){alert("Такие активные задачи уже есть. Дубли не созданы.");return;}
+ if(!confirm("Создать "+fresh.length+" задач по направлению «"+direction.title+"»? Срок кассового риска: "+cashflowData.risk_sales_plan.due_date+"."))return;
+ button.disabled=true;
+ try{
+  for(const action of fresh)await api("/api/tasks",{method:"POST",body:JSON.stringify({title:titlePrefix+action.title,description:"Недельный план для снижения риска кассового разрыва. Ориентир: "+action.count+". Необходимая сумма по направлению: "+money(direction.allocated_amount)+". Дата, к которой нужны поступления: "+cashflowData.risk_sales_plan.due_date+". Отмечай фактические контакты и результаты.",direction_id:direction.direction_id,due_date:localToday,priority:"high",estimated_minutes:action.minutes})});
+  button.textContent="Задачи созданы";await loadTasks();await loadPlanner();
+ }catch(err){alert(err.message);button.disabled=false;}
+});
 $("save-sales-plan").addEventListener("click",async()=>{
  const b=$("save-sales-plan");b.disabled=true;
  try{const rows=salesPlanData.directions.map(d=>({direction_id:d.direction_id,contact_to_lead_percent:document.querySelector('[data-sales-response="'+d.direction_id+'"]').value,lead_to_sale_percent:document.querySelector('[data-sales-close="'+d.direction_id+'"]').value}));await api("/api/finance/sales-plan",{method:"POST",body:JSON.stringify({directions:rows})});await loadSalesPlan();}
