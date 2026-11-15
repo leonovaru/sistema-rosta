@@ -31,7 +31,7 @@ function createEnv() {
         },
         async run() {
           if (sql.includes("UPDATE sleep_sessions SET woke_at=")) {
-            const row = sessions.find(item => item.id === values[5] && item.user_id === values[6]);
+            const row = sessions.find(item => item.id === values[4] && item.user_id === values[5]);
             if (!row || row.woke_at) return { meta: { changes: 0 } };
             row.woke_at = values[0]; row.wake_date = values[1]; row.wake_source = values[2];
             wakeUpdates++;
