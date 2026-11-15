@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS payment_obligations (
   amount REAL NOT NULL CHECK(amount > 0),
   due_date TEXT NOT NULL,
   frequency TEXT NOT NULL DEFAULT 'once' CHECK(frequency IN ('once','monthly','weekly')),
+  recurrence_day INTEGER CHECK(recurrence_day IS NULL OR (recurrence_day >= 1 AND recurrence_day <= 31)),
   category TEXT NOT NULL DEFAULT 'Обязательный платёж',
   notes TEXT NOT NULL DEFAULT '',
   active INTEGER NOT NULL DEFAULT 1,
