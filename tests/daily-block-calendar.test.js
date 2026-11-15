@@ -18,3 +18,25 @@ test("reports tasks that do not fit into calendar gaps",()=>{
  assert.ok(day.unallocated.length>0);
  assert.equal(day.calendar_conflicts,0);
 });
+
+
+test("reserves preparation time before meetings and recovery time after",()=>{
+ const [day]=buildDailyBlockPlans([{date:"2026-11-16",gross_capacity_minutes:240,available_minutes:180,tasks:[{id:"a",title:"Подготовка отчёта",minutes:120}]}],{
+  startTime:"09:00",prepBeforeMinutes:20,bufferAfterMinutes:15,
+  calendarEvents:[{event_type:"meeting",status:"planned",start_at:"2026-11-16T10:00",end_at:"2026-11-16T11:00"}]
+ });
+ assert.equal(day.calendar_conflicts,0);
+ assert.equal(day.blocks[0].start_time,"09:00");
+ assert.equal(day.blocks[0].end_time,"09:40");
+ assert.ok(day.blocks.some(block=>block.start_time==="11:15"));
+ assert.ok(day.blocks.every(block=>block.end_time<="09:40"||block.start_time>="11:15"));
+});
+
+test("does not apply meeting buffers to sleep or work events",()=>{
+ const [day]=buildDailyBlockPlans([{date:"2026-11-16",gross_capacity_minutes:180,available_minutes:180,tasks:[{title:"Задача",minutes:60}]}],{
+  startTime:"09:00",prepBeforeMinutes:30,bufferAfterMinutes:30,
+  calendarEvents:[{event_type:"sleep",start_at:"2026-11-16T10:00",end_at:"2026-11-16T10:30"},{event_type:"work",start_at:"2026-11-16T11:00",end_at:"2026-11-16T11:30"}]
+ });
+ assert.equal(day.blocks[0].start_time,"09:00");
+ assert.equal(day.calendar_conflicts,0);
+});
