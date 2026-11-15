@@ -3,6 +3,7 @@ import { addDays } from "../../_lib/finance.js";
 import { buildCashflowForecast } from "../../_lib/cashflow-forecast.js";
 import { buildVariableExpenseForecast } from "../../_lib/variable-expense-forecast.js";
 import { buildMonthlyVariableExpenseSchedule } from "../../_lib/monthly-variable-expense-schedule.js";
+import { detectVariableRecurringExpenses } from "../../_lib/variable-recurring-expenses.js";
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(v){if(!DATE.test(v))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
 function shiftMonth(date,delta){const [y,m]=date.slice(0,7).split("-").map(Number),d=new Date(Date.UTC(y,m-1+delta,1,12));return d.toISOString().slice(0,10);}
@@ -12,11 +13,15 @@ export async function onRequestGet({request,env}){
  const settings=await env.DB.prepare("SELECT timezone,starting_balance FROM settings WHERE user_id=?").bind(user.id).first(),today=todayInZone(settings?.timezone||"Europe/Moscow"),url=new URL(request.url),horizon=Number(url.searchParams.get("days")||90);
  if(![30,90].includes(horizon))return json({error:"Период прогноза должен быть 30 или 90 дней"},400);
  const end=addDays(today,horizon),monthStart=today.slice(0,7)+"-01";
- const [expenseHistory,budgets]=await Promise.all([
-  env.DB.prepare("SELECT category,substr(spent_on,1,7) AS month,SUM(amount) AS total FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<? GROUP BY category,substr(spent_on,1,7)").bind(user.id,shiftMonth(monthStart,-3),monthStart).all(),
+ const [rawExpenseHistory,budgets]=await Promise.all([
+  env.DB.prepare("SELECT id,title,category,amount,spent_on FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<? ORDER BY spent_on").bind(user.id,shiftMonth(monthStart,-6),monthStart).all(),
   env.DB.prepare("SELECT month,category,planned_amount FROM category_budgets WHERE user_id=? AND month>=? AND month<=?").bind(user.id,today.slice(0,7),addDays(end,0).slice(0,7)).all()
  ]);
- const variableExpenseForecast=buildVariableExpenseForecast(expenseHistory.results,{today});
+ const variableRecurring=detectVariableRecurringExpenses(rawExpenseHistory.results,{today,horizonDays:horizon});
+ const matched=new Set(variableRecurring.matched_expense_ids),monthlyTotals=new Map();
+ for(const row of rawExpenseHistory.results){if(matched.has(row.id))continue;const key=String(row.category||"Прочее")+"|"+row.spent_on.slice(0,7);monthlyTotals.set(key,(monthlyTotals.get(key)||0)+Number(row.amount||0));}
+ const expenseHistory=[...monthlyTotals.entries()].map(([key,total])=>{const [category,month]=key.split("|");return {category,month,total};});
+ const variableExpenseForecast=buildVariableExpenseForecast(expenseHistory,{today});
  const variableExpensesByMonth=buildMonthlyVariableExpenseSchedule({historicalCategories:variableExpenseForecast.categories,budgets:budgets.results,today,horizonDays:horizon});
  const [planned,obligations,debts,reserves,irregularExpenses]=await Promise.all([
   env.DB.prepare("SELECT p.*,d.title direction_title FROM planned_cashflows p LEFT JOIN directions d ON d.id=p.direction_id AND d.user_id=p.user_id WHERE p.user_id=? AND p.status='planned' AND p.expected_date>=? AND p.expected_date<=? ORDER BY p.expected_date").bind(user.id,today,end).all(),
@@ -25,8 +30,8 @@ export async function onRequestGet({request,env}){
   env.DB.prepare("SELECT title,target_amount,current_amount,monthly_contribution,target_date,active FROM cash_reserves WHERE user_id=? AND active=1").bind(user.id).all(),
   env.DB.prepare("SELECT id,title,category,amount,next_date,frequency,recurrence_day FROM irregular_expenses WHERE user_id=? AND active=1 AND next_date<=? ORDER BY next_date").bind(user.id,end).all()
  ]);
- const forecast=buildCashflowForecast({today,horizonDays:horizon,startingBalance:settings?.starting_balance||0,planned:planned.results,obligations:obligations.results,debts:debts.results,variableExpensesByMonth,reserves:reserves.results,irregularExpenses:irregularExpenses.results});
- return json({...forecast,planned:planned.results,starting_balance:Number(settings?.starting_balance||0),variable_expense_forecast:variableExpenseForecast,variable_expenses_by_month:variableExpensesByMonth,reserves:reserves.results,irregular_expenses:irregularExpenses.results});
+ const forecast=buildCashflowForecast({today,horizonDays:horizon,startingBalance:settings?.starting_balance||0,planned:planned.results,obligations:obligations.results,debts:debts.results,variableExpensesByMonth,reserves:reserves.results,irregularExpenses:irregularExpenses.results,variableRecurringEvents:variableRecurring.events});
+ return json({...forecast,planned:planned.results,starting_balance:Number(settings?.starting_balance||0),variable_expense_forecast:variableExpenseForecast,variable_expenses_by_month:variableExpensesByMonth,variable_recurring_expenses:variableRecurring.suggestions,reserves:reserves.results,irregular_expenses:irregularExpenses.results});
 }
 export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
