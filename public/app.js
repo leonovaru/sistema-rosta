@@ -238,7 +238,14 @@ document.addEventListener("click",async event=>{
   const fresh=await api("/api/planner/week?"+query.toString());
   const latest=(fresh.week?.daily_block_plans||[]).flatMap(day=>day.cross_day_task_recommendations||[]).find(item=>String(item.task_id)===String(taskId)&&item.from_date===fromDate&&item.to_date===toDate&&item.start_time===startTime&&item.end_time===endTime&&Number(item.minutes)===minutes);
   if(!latest)throw new Error("Предложение устарело: свободное окно или распределение изменилось. Обновите недельный план.");
-  await api("/api/planner/assignments",{method:"PUT",body:JSON.stringify({schedules:[{task_id:taskId,allocations:[{date:toDate,minutes}]}]})});
+  const allocations=new Map();
+  for(const day of fresh.week?.days||[])for(const task of day.tasks||[])if(String(task.id)===String(taskId))allocations.set(day.date,(allocations.get(day.date)||0)+Number(task.minutes||0));
+  const sourceMinutes=allocations.get(fromDate)||0;
+  if(sourceMinutes<minutes)throw new Error("На исходной дате больше нет такого нераспределённого остатка. Обновите недельный план.");
+  allocations.set(fromDate,sourceMinutes-minutes);
+  allocations.set(toDate,(allocations.get(toDate)||0)+minutes);
+  const nextAllocations=[...allocations].filter(([,value])=>value>0).map(([date,value])=>({date,minutes:value}));
+  const moved=await api("/api/planner/assignments",{method:"PUT",body:JSON.stringify({schedules:[{task_id:taskId,allocations:nextAllocations}],move:{task_id:taskId,from_date:fromDate,to_date:toDate,minutes,start_time:startTime,end_time:endTime}})});
   if(status)status.textContent="Перенос сохранён. Обновляю недельный план…";
   await loadWeeklyWorkload();
  }catch(error){if(status)status.textContent="Перенос не сохранён: "+error.message;button.disabled=false;}
