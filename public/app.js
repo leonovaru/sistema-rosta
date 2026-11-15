@@ -245,7 +245,7 @@ document.addEventListener("click",async event=>{
   allocations.set(fromDate,sourceMinutes-minutes);
   allocations.set(toDate,(allocations.get(toDate)||0)+minutes);
   const nextAllocations=[...allocations].filter(([,value])=>value>0).map(([date,value])=>({date,minutes:value}));
-  const moved=await api("/api/planner/assignments",{method:"PUT",body:JSON.stringify({schedules:[{task_id:taskId,allocations:nextAllocations}],move:{task_id:taskId,from_date:fromDate,to_date:toDate,minutes,start_time:startTime,end_time:endTime}})});
+  const moved=await api("/api/planner/assignments",{method:"PUT",body:JSON.stringify({schedules:[{task_id:taskId,allocations:nextAllocations}],move:{task_id:taskId,from_date:fromDate,to_date:toDate,minutes,start_time:startTime,end_time:endTime,preferences:{focus_minutes:dailyBlockPreferences.focus,break_minutes:dailyBlockPreferences.rest,start_time:dailyBlockPreferences.start,prep_before_minutes:dailyBlockPreferences.prep,buffer_after_minutes:dailyBlockPreferences.after}}})});
   if(status)status.textContent="Перенос сохранён. Обновляю недельный план…";
   await loadWeeklyWorkload();
  }catch(error){if(status)status.textContent="Перенос не сохранён: "+error.message;button.disabled=false;}
