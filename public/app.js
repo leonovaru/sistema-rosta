@@ -75,7 +75,7 @@ async function loadFinance() {
   $("finance-period").textContent="С начала месяца по "+financeData.today;
   $("finance-income").textContent=money(s.income);
   $("finance-expenses").textContent=money(s.expenses);
-  $("finance-debt-paid").textContent=money(s.debt_payments);
+  $("finance-debt-paid").textContent=money(s.debt_payments);\n  $("finance-obligation-paid").textContent=money(s.obligation_payments);
   $("finance-net").textContent=money(s.net);
   $("finance-debt-balance").textContent=money(s.debt_balance);
   $("finance-upcoming").textContent=money(s.upcoming_obligations);
