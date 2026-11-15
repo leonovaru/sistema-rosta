@@ -1,7 +1,7 @@
 function remaining(task){
  const estimate=Number(task?.estimated_minutes);
  if(!Number.isFinite(estimate)||estimate<=0)return 0;
- return Math.max(0,estimate-(task.status==="doing"?Math.max(0,Number(task.actual_minutes)||0):0));
+ return Math.max(0,estimate-Math.max(0,Number(task.actual_minutes)||0));
 }
 
 /**
