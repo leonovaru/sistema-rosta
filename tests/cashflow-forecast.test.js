@@ -25,3 +25,17 @@ test("planned forecast events retain identifiers for safe deletion",()=>{
 test("invalid calendar dates are rejected",()=>{
  assert.throws(()=>buildCashflowForecast({today:"2026-02-30"}));
 });
+
+test("variable expenses reduce daily cash balance without inventing dated events",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:15,startingBalance:10000,variableExpensesByMonth:[{month:"2026-11",total:30000}]});
+ assert.equal(x.events.length,0);
+ assert.equal(x.summary.variable_expenses,16000);
+ assert.equal(x.summary.ending_balance,-6000);
+ assert.equal(x.days[0].variable_expenses,1000);
+ assert.equal(x.days[0].events.length,0);
+});
+test("variable expense forecast switches to the next month's budget",()=>{
+ const x=buildCashflowForecast({today:"2026-11-30",horizonDays:2,startingBalance:5000,variableExpensesByMonth:[{month:"2026-11",total:30000},{month:"2026-12",total:62000}]});
+ assert.equal(x.summary.variable_expenses,1000+2000*2);
+ assert.equal(x.summary.ending_balance,0);
+});
