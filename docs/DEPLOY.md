@@ -2,7 +2,7 @@
 
 1. Создать отдельную D1 database с именем `sistema-rosta-db`.
 2. Скопировать её ID в `wrangler.toml` вместо `REPLACE_WITH_CLOUDFLARE_D1_DATABASE_ID`.
-3. Выполнить `npm install`, затем `npm run db:migrate:remote`. Команда применяет базовую схему и все миграции, включая учёт фактического времени, сохранение результатов делегирования и список шагов задачи.
+3. Выполнить `npm install`, затем `npm run db:migrate:remote`. Команда применяет базовую схему и все миграции, включая учёт фактического времени, сохранение результатов делегирования, список шагов задачи и дневные планы.
 4. В Cloudflare Pages создать проект из этого GitHub-репозитория.
 5. Build command оставить пустой; output directory — `public`.
 6. В Settings → Functions → D1 database bindings добавить binding `DB` к созданной базе.
