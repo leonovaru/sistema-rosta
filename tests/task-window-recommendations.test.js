@@ -89,7 +89,7 @@ test("does not move tasks to non-working days or beyond their deadline",()=>{
   {date:"2026-11-17",tasks:[],unallocated:[],blocks:[],free_windows:[{start_time:"09:00",end_time:"11:00",minutes:120}]},
   {date:"2026-11-18",tasks:[],unallocated:[],blocks:[],free_windows:[{start_time:"09:00",end_time:"11:00",minutes:120}]}
  ],null,[
-  {date:"2026-11-16",working_day:true,tasks:[{id:"task"}]},
+  {date:"2026-11-16",working_day:true,tasks:[{id:"task",title:"Сдать отчёт",minutes:60,due_date:"2026-11-17"}]},
   {date:"2026-11-17",working_day:false,tasks:[]},
   {date:"2026-11-18",working_day:true,tasks:[]}
  ]);
