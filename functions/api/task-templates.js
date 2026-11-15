@@ -1,7 +1,7 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { recurringTaskDates } from "../_lib/recurring-tasks.js";
 
-const DATE=/^\\d{4}-\\d{2}-\\d{2}$/;
+const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(value){if(!DATE.test(value))return false;const date=new Date(value+"T12:00:00Z");return !Number.isNaN(date.getTime())&&date.toISOString().slice(0,10)===value;}
 function todayInZone(timezone){
  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
