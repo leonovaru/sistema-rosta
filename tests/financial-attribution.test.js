@@ -32,12 +32,17 @@ test("financial history prefers the transaction-time label after an entity is re
  assert.equal(resolveHistoricalLabel(null,null),"");
 });
 
-import { isClientSelectable, isProjectSelectable, isDirectionSelectable } from "../functions/_lib/workspace-entity-availability.js";
+import { isClientSelectable, isProjectSelectable, isProjectActiveForWork, isDirectionSelectable } from "../functions/_lib/workspace-entity-availability.js";
 test("archived workspace entities remain historical but cannot receive new links",()=>{
  assert.equal(isClientSelectable({id:"c",status:"active"}),true);
  assert.equal(isClientSelectable({id:"c",status:"closed"}),false);
  assert.equal(isProjectSelectable({id:"p",status:"active"}),true);
  assert.equal(isProjectSelectable({id:"p",status:"archived"}),false);
+ assert.equal(isProjectSelectable({id:"p",status:"done"}),true);
+ assert.equal(isProjectActiveForWork({id:"p",status:"active"}),true);
+ assert.equal(isProjectActiveForWork({id:"p",status:"waiting"}),true);
+ assert.equal(isProjectActiveForWork({id:"p",status:"done"}),false);
+ assert.equal(isProjectActiveForWork({id:"p",status:"archived"}),false);
  assert.equal(isDirectionSelectable({id:"d",active:1}),true);
  assert.equal(isDirectionSelectable({id:"d",active:0}),false);
  assert.equal(isDirectionSelectable(null),false);
