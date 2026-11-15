@@ -215,6 +215,27 @@ document.addEventListener("click",async event=>{
   await loadWeeklyWorkload();
  }catch(error){if(status)status.textContent="Не удалось сохранить распределение: "+error.message;button.disabled=false;}
 });
+document.addEventListener("click",async event=>{
+ const button=event.target.closest("[data-block-outcome]");
+ if(!button)return;
+ const block=button.closest(".daily-execution-block"),panel=button.closest(".weekly-focus-card"),status=panel?.querySelector("[data-block-log-status]");
+ if(!block)return;
+ const outcome=button.dataset.blockOutcome,planned=Number(block.dataset.plannedMinutes);
+ let actual=0;
+ if(outcome==="done"||outcome==="interrupted"){
+  const raw=prompt(outcome==="done"?"Сколько минут фактически заняла задача?":"Сколько минут удалось поработать до прерывания?",String(planned));
+  if(raw===null)return;
+  actual=Number(raw);
+  if(!Number.isInteger(actual)||actual<0||actual>720){if(status)status.textContent="Введите целое число минут от 0 до 720.";return;}
+ }
+ const labels={done:"отметить блок выполненным",interrupted:"отметить блок прерванным",skipped:"отметить блок пропущенным"};
+ if(!confirm("Подтвердить: "+labels[outcome]+"?"))return;
+ button.disabled=true;
+ try{
+  await api("/api/planner/block-logs",{method:"POST",body:JSON.stringify({task_id:block.dataset.taskId,date:block.dataset.blockDate,start_time:block.dataset.startTime,end_time:block.dataset.endTime,planned_minutes:planned,actual_minutes:actual,status:outcome})});
+  await loadWeeklyWorkload();
+ }catch(error){if(status)status.textContent="Не удалось сохранить отметку: "+error.message;button.disabled=false;}
+});
 document.addEventListener("click",event=>{
  const button=event.target.closest("[data-daily-block-scenario]");
  if(!button||!event.target.closest("#weekly-workload"))return;
