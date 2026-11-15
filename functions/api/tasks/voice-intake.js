@@ -68,7 +68,7 @@ export async function onRequestPost({request,env}){
   if(!prepared.length&&!workspaceItems.length)return json({error:"Не найдено изменений для сохранения"},400);
   const statements=[];
   let created=0,updated=0,createdClients=0,createdProjects=0;
-  const newClientIds=[],newProjectIds=[];
+  const newClientIds=[],newProjectIds=[],newProjectMeta=new Map();
   for(const item of workspaceItems.filter(x=>x.type==="client")){
    const name=String(item.name||"").trim().slice(0,160);
    if(!name)return json({error:"У нового клиента должно быть название"},400);
@@ -88,7 +88,7 @@ export async function onRequestPost({request,env}){
    if(client?.direction_id&&directionId&&client.direction_id!==directionId)return json({error:"Проект и клиент должны относиться к одному направлению"},400);
    const duplicate=await env.DB.prepare("SELECT id FROM projects WHERE user_id=? AND lower(title)=lower(?) AND status NOT IN ('done','archived')").bind(user.id,title).first();
    if(duplicate)return json({error:"Проект «"+title+"» уже существует. Выбери его в распределении задач."},409);
-   const id=newId();newProjectIds.push(id);
+   const id=newId();newProjectIds.push(id);newProjectMeta.set(id,{client_id:clientId,direction_id:directionId});
    statements.push(env.DB.prepare("INSERT INTO projects (id,user_id,client_id,direction_id,title,description,expected_result,deadline,budget,status) VALUES (?,?,?,?,?,?,?,?,?,?)")
     .bind(id,user.id,clientId,directionId,title,String(item.description||"").slice(0,5000),String(item.expected_result||"").slice(0,2000),safeDate(item.deadline),"0","draft"));
    createdProjects++;
@@ -109,7 +109,7 @@ export async function onRequestPost({request,env}){
    const parent=t.parent_index===null?null:prepared[t.parent_index];
    if(parent){t.direction_id=t.direction_id||parent.direction_id;t.client_id=t.client_id||parent.client_id;t.project_id=t.project_id||parent.project_id;t.life_area_id=t.life_area_id||parent.life_area_id;}
    if(t.project_id){
-    const p=await env.DB.prepare("SELECT client_id,direction_id FROM projects WHERE id=? AND user_id=?").bind(t.project_id,user.id).first();
+    const p=newProjectMeta.get(t.project_id)||await env.DB.prepare("SELECT client_id,direction_id FROM projects WHERE id=? AND user_id=?").bind(t.project_id,user.id).first();
     if(!p)return json({error:"Проект в одной из задач больше не доступен. Обнови разбор."},409);
     t.client_id=p.client_id;t.direction_id=p.direction_id;
    }
