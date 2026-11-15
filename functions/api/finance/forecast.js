@@ -1,8 +1,8 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
 import { addDays } from "../../_lib/finance.js";
 import { buildCashflowForecast } from "../../_lib/cashflow-forecast.js";
-const DATE=/^\\d{4}-\\d{2}-\\d{2}$/;
-function validDate(v){return DATE.test(v)&&new Date(v+"T12:00:00Z").toISOString().slice(0,10)===v;}
+const DATE=/^\d{4}-\d{2}-\d{2}$/;
+function validDate(v){if(!DATE.test(v))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
 function todayInZone(zone){const p=new Intl.DateTimeFormat("en-CA",{timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date()),o=Object.fromEntries(p.map(x=>[x.type,x.value]));return o.year+"-"+o.month+"-"+o.day;}
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
@@ -26,7 +26,7 @@ export async function onRequestPost({request,env}){
  }
  const title=String(body?.title||"").trim(),amount=Number(body?.amount),date=String(body?.expected_date||""),type=String(body?.flow_type||"");
  if(!title||title.length>180||!Number.isFinite(amount)||amount<=0||amount>100000000||!validDate(date)||!["income","expense"].includes(type))return json({error:"Проверь название, сумму, дату и тип записи"},400);
- if(date<todayInZone("Europe/Moscow"))return json({error:"Нельзя планировать запись на прошедшую дату"},400);
+ const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();\n if(date<todayInZone(settings?.timezone||"Europe/Moscow"))return json({error:"Нельзя планировать запись на прошедшую дату"},400);
  const directionId=body.direction_id?String(body.direction_id):null;
  if(directionId&&!await env.DB.prepare("SELECT id FROM directions WHERE id=? AND user_id=?").bind(directionId,user.id).first())return json({error:"Направление не найдено"},404);
  const id=newId();
