@@ -70,3 +70,12 @@ test("uses recorded actual time for todo tasks after they are reopened",()=>{
  assert.equal(week.days[0].tasks[0].minutes,75);
  assert.deepEqual(week.daily_assignment_issues,[]);
 });
+
+test("ignores saved allocations for unfinished tasks in completed projects",()=>{
+ const week={days:[{date:"2026-11-16",working_day:true,available_minutes:120,planned_task_minutes:0,tasks:[]}]};
+ applySavedDailyTaskAllocations(week,[{task_id:"done-project-task",allocation_date:"2026-11-16",minutes:60}],
+ [{id:"done-project-task",title:"Задача завершённого проекта",status:"todo",estimated_minutes:60,actual_minutes:0,project_status:"done"}]);
+ assert.equal(week.daily_assignments_applied,0);
+ assert.deepEqual(week.daily_assignment_issues,[]);
+ assert.deepEqual(week.days[0].tasks,[]);
+});
