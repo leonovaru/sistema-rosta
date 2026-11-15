@@ -1,5 +1,6 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { addDays, addPeriod } from "../_lib/finance.js";
+import { detectRecurringExpenses } from "../_lib/recurring-expense-detection.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 function validDate(value) {
@@ -21,7 +22,7 @@ export async function onRequestGet({request,env}) {
   if(!user)return json({error:"Необходим вход"},401);
   const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
   const today=dateInZone(settings?.timezone||"Europe/Moscow"),monthStart=today.slice(0,7)+"-01",next30=addDays(today,30);
-  const [income,expenses,debtPayments,obligationPayments,debtRows,expenseRows,obligations,paymentRows]=await Promise.all([
+  const [income,expenses,debtPayments,obligationPayments,debtRows,expenseRows,obligations,paymentRows,patternRows]=await Promise.all([
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=?").bind(user.id,monthStart,today).first(),
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<=?").bind(user.id,monthStart,today).first(),
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM debt_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?").bind(user.id,monthStart,today).first(),
@@ -30,12 +31,14 @@ export async function onRequestGet({request,env}) {
     env.DB.prepare("SELECT e.*,d.title AS direction_title FROM expenses e LEFT JOIN directions d ON d.id=e.direction_id AND d.user_id=e.user_id WHERE e.user_id=? ORDER BY e.spent_on DESC,e.created_at DESC LIMIT 100").bind(user.id).all(),
     env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 ORDER BY due_date LIMIT 100").bind(user.id).all(),
     env.DB.prepare("SELECT p.*,d.title AS debt_title FROM debt_payments p JOIN debts d ON d.id=p.debt_id WHERE p.user_id=? ORDER BY p.paid_on DESC,p.created_at DESC LIMIT 30").bind(user.id).all()
+    ,env.DB.prepare("SELECT title,category,amount,spent_on,note FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<=? ORDER BY spent_on").bind(user.id,addDays(today,-190),today).all()
   ]);
+  const recurringSuggestions=detectRecurringExpenses(patternRows.results,{today,existingTitles:obligations.results.map(x=>x.title)});
   const debtBalance=debtRows.results.filter(x=>x.status==="open").reduce((sum,x)=>sum+Number(x.balance),0);
   const upcoming=obligations.results.filter(x=>x.due_date<=next30);
   const upcomingTotal=upcoming.reduce((sum,x)=>sum+Number(x.amount),0);
   const incomeTotal=Number(income?.total||0),expenseTotal=Number(expenses?.total||0),debtPaid=Number(debtPayments?.total||0),obligationPaid=Number(obligationPayments?.total||0);
-  return json({today,month_start:monthStart,summary:{income:incomeTotal,expenses:expenseTotal,debt_payments:debtPaid,obligation_payments:obligationPaid,net:incomeTotal-expenseTotal-debtPaid-obligationPaid,debt_balance:debtBalance,upcoming_obligations:upcomingTotal},debts:debtRows.results,expenses:expenseRows.results,obligations:obligations.results,upcoming_obligations:upcoming,debt_payments:paymentRows.results});
+  return json({today,month_start:monthStart,summary:{income:incomeTotal,expenses:expenseTotal,debt_payments:debtPaid,obligation_payments:obligationPaid,net:incomeTotal-expenseTotal-debtPaid-obligationPaid,debt_balance:debtBalance,upcoming_obligations:upcomingTotal},debts:debtRows.results,expenses:expenseRows.results,obligations:obligations.results,upcoming_obligations:upcoming,debt_payments:paymentRows.results,recurring_expense_suggestions:recurringSuggestions});
 }
 export async function onRequestPost({request,env}) {
   const user=await requireUser(request,env);
@@ -82,9 +85,9 @@ export async function onRequestPost({request,env}) {
     return json({ok:true,next_due_date:nextDue});
   }
   if(action==="obligation"){
-    const amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.due_date||""),frequency=String(body.frequency||"once");
-    if(!amount||!title||title.length>180||!validDate(date)||!["once","monthly","weekly"].includes(frequency))return json({error:"Проверь название, сумму, дату и периодичность платежа"},400);
-    await env.DB.prepare("INSERT INTO payment_obligations (id,user_id,title,amount,due_date,frequency,recurrence_day,category,notes) VALUES (?,?,?,?,?,?,?,?,?)").bind(id,user.id,title,amount,date,frequency,frequency==="monthly"?Number(date.slice(8,10)):null,String(body.category||"Обязательный платёж").slice(0,80),String(body.notes||"").slice(0,500)).run();
+    const amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.due_date||""),frequency=String(body.frequency||"once"),recurrenceDay=body.recurrence_day==null||body.recurrence_day===""?(frequency==="monthly"?Number(date.slice(8,10)):null):Number(body.recurrence_day);
+    if(!amount||!title||title.length>180||!validDate(date)||!["once","monthly","weekly"].includes(frequency)||(frequency==="monthly"&&(!Number.isInteger(recurrenceDay)||recurrenceDay<1||recurrenceDay>31)))return json({error:"Проверь название, сумму, дату и периодичность платежа"},400);
+    await env.DB.prepare("INSERT INTO payment_obligations (id,user_id,title,amount,due_date,frequency,recurrence_day,category,notes) VALUES (?,?,?,?,?,?,?,?,?)").bind(id,user.id,title,amount,date,frequency,frequency==="monthly"?recurrenceDay:null,String(body.category||"Обязательный платёж").slice(0,80),String(body.notes||"").slice(0,500)).run();
     return json({ok:true,id},201);
   }
   return json({error:"Неизвестный тип финансовой операции"},400);
