@@ -33,7 +33,7 @@ export async function onRequestGet({request,env}){
   env.DB.prepare("SELECT started_at,ended_at,duration_minutes FROM task_time_entries WHERE user_id=? AND ended_at IS NOT NULL AND started_at>=datetime('now','-90 days') AND duration_minutes>0 ORDER BY started_at").bind(user.id).all(),
   env.DB.prepare("SELECT fell_asleep_at,woke_at,timezone,asleep_timezone,wake_timezone FROM sleep_sessions WHERE user_id=? AND sleep_date>=date('now','-90 days') AND fell_asleep_at IS NOT NULL AND woke_at IS NOT NULL ORDER BY sleep_date").bind(user.id).all(),
   env.DB.prepare("SELECT task_id,allocation_date,minutes FROM daily_task_allocations WHERE user_id=? AND allocation_date>=? AND allocation_date<=? ORDER BY allocation_date").bind(user.id,today,end).all(),
-  env.DB.prepare("SELECT id,task_id,block_date,start_time,end_time,planned_minutes,actual_minutes,status,note FROM daily_block_logs WHERE user_id=? AND block_date>=? AND block_date<=? ORDER BY block_date,start_time").bind(user.id,today,end).all()
+  env.DB.prepare("SELECT l.id,l.task_id,t.title AS task_title,l.block_date,l.start_time,l.end_time,l.planned_minutes,l.actual_minutes,l.status,l.note FROM daily_block_logs l JOIN tasks t ON t.id=l.task_id AND t.user_id=l.user_id WHERE user_id=? AND block_date>=? AND block_date<=? ORDER BY block_date,start_time").bind(user.id,today,end).all()
  ]);
  const events=expandRecurringEvents(calendarRows.results,today+"T00:00",endExclusive+"T00:00");
  const calendarDays=calculateCalendarBusyByDay(events,today,7,workingDays);
