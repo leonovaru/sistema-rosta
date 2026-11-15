@@ -127,12 +127,20 @@
             <div id="debt-forecast-summary" class="analytics-metrics"></div><div id="debt-forecast-list" class="analytics-list"></div>
             <h4>График по месяцам</h4><div id="debt-forecast-months-list" class="finance-list"></div>
           </section>
+          <section class="income-buckets-section">
+            <div class="section-head"><div><p class="eyebrow">РАСПРЕДЕЛЕНИЕ ПОСТУПЛЕНИЙ</p><h3>Корзины дохода</h3></div><button type="button" class="button ghost" id="refresh-income-buckets">Обновить</button></div>
+            <p class="fine">Каждое новое поступление автоматически распределяется по процентам. Расход из выбранной корзины уменьшает её остаток. Проценты применяются только к новым поступлениям; прошлые распределения не пересчитываются.</p>
+            <div id="income-bucket-summary" class="analytics-metrics"></div>
+            <div id="income-bucket-list" class="finance-list"></div>
+            <div class="revenue-plan-actions"><span id="income-bucket-note" class="fine">Сумма долей должна составлять 100%.</span><button type="button" class="button primary" id="save-income-buckets">Сохранить проценты</button></div>
+          </section>
           <div class="finance-forms">
             <form id="expense-form" class="finance-form"><h3>Записать расход</h3>
               <label>На что<input id="expense-title" required maxlength="180" placeholder="Продукты, аренда, сервис"></label>
               <label>Сумма, ₽<input id="expense-amount" type="number" min="0.01" step="0.01" required></label>
               <label>Категория<input id="expense-category" maxlength="80" value="Прочее"></label>
               <label>Направление дохода<select id="expense-direction"><option value="">Не распределять / личный расход</option></select></label>
+              <label>Списать из корзины<select id="expense-bucket" required><option value="">Выбери корзину или вне корзин</option><option value="none">Вне корзин</option></select></label>
               <label>Дата<input id="expense-date" type="date" required></label>
               <button class="button primary">Добавить расход</button>
             </form>
