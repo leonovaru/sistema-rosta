@@ -46,18 +46,21 @@ $("logout").addEventListener("click", async () => {
   button.disabled=true;
   try{
     if("serviceWorker" in navigator && "PushManager" in window){
-      try{
-        const registration=await navigator.serviceWorker.getRegistration();
-        const subscription=await registration?.pushManager.getSubscription();
-        if(subscription){
-          try{await api("/api/push-subscriptions",{method:"DELETE",body:JSON.stringify({endpoint:subscription.endpoint})});}
-          finally{await subscription.unsubscribe().catch(()=>false);}
-        }
-      }catch(error){console.warn("Не удалось полностью отключить push-подписку на этом устройстве",error);}
+      const registration=await navigator.serviceWorker.getRegistration();
+      const subscription=await registration?.pushManager.getSubscription();
+      if(subscription){
+        // Keep the session active if the server cannot remove the device row:
+        // otherwise the scheduler could continue sending to a logged-out account.
+        await api("/api/push-subscriptions",{method:"DELETE",body:JSON.stringify({endpoint:subscription.endpoint})});
+        const removed=await subscription.unsubscribe().catch(()=>false);
+        if(!removed)console.warn("Подписка удалена на сервере, но браузер не подтвердил локальную отписку.");
+      }
     }
     await api("/api/auth/logout",{method:"POST"});
-  }catch(error){console.warn("Не удалось завершить сеанс на сервере",error);}
-  finally{button.disabled=false;showAuth();}
+    showAuth();
+  }catch(error){
+    alert("Не удалось безопасно завершить выход: "+error.message+"\nСеанс оставлен открытым. Проверьте соединение и повторите попытку.");
+  }finally{button.disabled=false;}
 });
 $("estimate-task").addEventListener("click", async () => {
   const title = $("task-title").value.trim();
@@ -1113,7 +1116,13 @@ $("wake-notifications-toggle").addEventListener("click",async()=>{
     subscription=null;
    }
    subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decodePushKey(config.public_key)});
-   await api("/api/push-subscriptions",{method:"POST",body:JSON.stringify({subscription:subscription.toJSON()})});
+   try{
+    await api("/api/push-subscriptions",{method:"POST",body:JSON.stringify({subscription:subscription.toJSON()})});
+   }catch(error){
+    // Do not leave an unregistered browser subscription behind after a failed save.
+    await subscription.unsubscribe().catch(()=>false);
+    throw error;
+   }
    status.textContent="Уведомления включены: ежедневно в 06:00 по часовому поясу настроек.";
   }
   await refreshWakeNotificationStatus();
