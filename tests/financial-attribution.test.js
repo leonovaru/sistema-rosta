@@ -44,6 +44,7 @@ test("archived workspace entities remain historical but cannot receive new links
 });
 
 import { restoredClientStatus, restoredProjectStatus } from "../functions/_lib/workspace-entity-restore.js";
+import { canRestoreProject } from "../functions/_lib/workspace-entity-availability.js";
 test("restores archived clients and projects to their prior active workflow status",()=>{
  assert.equal(restoredClientStatus("paused"),"paused");
  assert.equal(restoredClientStatus("lead"),"lead");
@@ -52,4 +53,11 @@ test("restores archived clients and projects to their prior active workflow stat
  assert.equal(restoredProjectStatus("draft"),"draft");
  assert.equal(restoredProjectStatus("done"),"done");
  assert.equal(restoredProjectStatus("archived"),"active");
+});
+
+test("project restoration requires its parent client to be active",()=>{
+ assert.equal(canRestoreProject({status:"archived",client_id:"c"},{status:"active"}),true);
+ assert.equal(canRestoreProject({status:"archived",client_id:"c"},{status:"closed"}),false);
+ assert.equal(canRestoreProject({status:"archived",client_id:null},null),true);
+ assert.equal(canRestoreProject({status:"active",client_id:null},null),false);
 });
