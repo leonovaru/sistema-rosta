@@ -15,7 +15,7 @@ export function normalizePlannerItems(items, tasks, capacity) {
   const append = (item, forced = false) => {
     const task = byId.get(String(item?.task_id || ""));
     if (!task || seen.has(task.id)) return;
-    const estimate = Math.max(5, Math.round(Number(task.estimated_minutes) || 30));
+    const estimate = Math.max(5, Math.round(Number(task.planning_minutes) || Number(task.estimated_minutes) || 30));
     const proposed = Math.round(Number(item.minutes) || estimate);
     const minutes = Math.max(5, Math.min(estimate + Math.ceil(estimate * 0.25), proposed));
     selected.push({
