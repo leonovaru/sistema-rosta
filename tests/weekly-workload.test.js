@@ -101,3 +101,9 @@ test("uses an explicitly targeted project as its own bucket instead of double-co
  assert.equal(rows.Репетиторство.weekly_estimated_minutes,60);
  assert.equal(rows.Решай360.target_status,"below");
 });
+
+test("subtracts recorded actual time after an in-progress task is returned to todo",()=>{
+ const result=buildWeeklyWorkload({...base,tasks:[{id:"a",title:"Возвращена в работу",status:"todo",due_date:"2026-11-16",estimated_minutes:120,actual_minutes:45}]});
+ assert.equal(result.summary.estimated_task_minutes,75);
+ assert.equal(result.days[0].planned_task_minutes,75);
+});
