@@ -293,6 +293,8 @@ async function loadFinance() {
   $("debt-payment-form").querySelector("button").disabled=!openDebts.length;
   $("finance-debts").innerHTML=financeData.debts.length?financeData.debts.map(debt=>'<article class="finance-row"><div><b>'+escapeHtml(debt.title)+'</b><small>'+escapeHtml(debt.creditor||"")+(Number(debt.interest_rate)>0?" · "+debt.interest_rate+"% годовых":"")+(Number(debt.minimum_payment)>0?" · платёж "+money(debt.minimum_payment):"")+(debt.due_day?" · до "+debt.due_day+" числа":"")+'</small></div><strong>'+money(debt.balance)+'</strong></article>').join(""):'<p class="muted">Долги пока не добавлены.</p>';
   $("finance-obligations").innerHTML=financeData.obligations.length?financeData.obligations.map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.due_date+' · '+(item.frequency==="monthly"?"ежемесячно":item.frequency==="weekly"?"еженедельно":"один раз")+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-obligation-paid="'+escapeHtml(item.id)+'">Оплачено</button></article>').join(""):'<p class="muted">Предстоящих платежей пока нет.</p>';
+  const suggestions=financeData.recurring_expense_suggestions||[];
+  $("recurring-expense-suggestions").innerHTML=suggestions.length?'<h4>Возможные регулярные платежи</h4><p class="fine">Нашла похожие расходы в истории. Ничего не добавляется автоматически — проверь суммы и даты, затем подтверди создание обязательства.</p>'+suggestions.map((x,i)=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+escapeHtml(x.category)+' · '+x.occurrences+' раза · '+(x.frequency==="monthly"?"ежемесячно":"еженедельно")+' · средняя сумма '+money(x.amount)+'</small><small>Последняя оплата: '+x.last_paid_on+' · следующая дата: '+x.next_date+'</small></div><button class="button ghost" data-recurring-add="'+i+'">Добавить в обязательства</button></article>').join(""):'<p class="muted">Пока не обнаружено достаточно устойчивых повторяющихся расходов. Для предложения нужны минимум три похожие оплаты с близкими суммами и интервалами.</p>';
   $("finance-expense-list").innerHTML=financeData.expenses.length?financeData.expenses.slice(0,12).map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.spent_on+' · '+escapeHtml(item.category)+(item.direction_title?' · '+escapeHtml(item.direction_title):' · не распределён')+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-expense-delete="'+escapeHtml(item.id)+'">×</button></article>').join(""):'<p class="muted">Расходов пока нет.</p>';
   await loadCashflowForecast();
   await loadDebtForecast();
@@ -318,6 +320,13 @@ $("debt-payment-form").addEventListener("submit",async e=>{
   e.preventDefault();
   try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"debt_payment",debt_id:$("payment-debt").value,amount:$("debt-payment-amount").value,paid_on:$("debt-payment-date").value})});$("debt-payment-amount").value="";await loadFinance();}
   catch(err){alert(err.message);}
+});
+$("recurring-expense-suggestions").addEventListener("click",async e=>{
+ const button=e.target.closest("[data-recurring-add]");if(!button)return;
+ const item=(financeData?.recurring_expense_suggestions||[])[Number(button.dataset.recurringAdd)];if(!item)return;
+ if(!confirm('Добавить «'+item.title+'» как '+(item.frequency==="monthly"?"ежемесячный":"еженедельный")+' обязательный платёж на '+money(item.amount)+'?'))return;
+ try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation",title:item.title,amount:item.amount,due_date:item.next_date,frequency:item.frequency,recurrence_day:item.frequency==="monthly"?Number(item.last_paid_on.slice(8,10)):null,category:item.category,notes:"Создано из предложения по истории расходов. Проверь сумму и дату."})});await loadFinance();}
+ catch(err){alert(err.message);}
 });
 $("finance-obligations").addEventListener("click",async e=>{
   const button=e.target.closest("[data-obligation-paid]");if(!button)return;
