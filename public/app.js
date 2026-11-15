@@ -3,6 +3,7 @@ let authMode = "login";
 let directions = [];
 let userSettings = { monthly_target: 300000, timezone: "Europe/Moscow" };
 let allTasks = [];
+let taskTimerState = { active_timer:null, totals:[] };
 let taskFilter = "today";
 let localToday = "";
 let taskEstimate = null;
@@ -202,7 +203,7 @@ $("recurring-task-list").addEventListener("click",async e=>{
 });
 
 async function loadTasks() {
-  const data = await api("/api/tasks"); allTasks = data.tasks;
+  const [data, timerData] = await Promise.all([api("/api/tasks"), api("/api/task-time")]); allTasks = data.tasks; taskTimerState = timerData;
   $("task-parent").innerHTML = '<option value="">Самостоятельная задача</option>' + allTasks.filter(t=>t.status!=="done").map(t=>'<option value="'+escapeHtml(t.id)+'">'+escapeHtml(t.title)+'</option>').join("");
   $("task-count").textContent = allTasks.filter(t => t.status !== "done").length;
   renderTasks();
@@ -230,7 +231,7 @@ function renderTasks() {
     const priorityText = ({high:"Высокий",medium:"Обычный",low:"Низкий"})[t.priority] || "Обычный";
     return '<article class="task-card ' + (t.status === "done" ? "done " : "") + (t.parent_task_id ? "subtask-card" : "") + '">' +
       '<label class="task"><input type="checkbox" data-task="' + t.id + '" ' + (t.status === "done" ? "checked" : "") + '><span class="task-body"><b>' + escapeHtml(t.title) + '</b><small>' + escapeHtml(dateText) + " · " + escapeHtml(t.project_title || t.life_area_title || t.direction_title || "Без привязки") + (t.client_name ? " · " + escapeHtml(t.client_name) : "") + (t.parent_task_title ? " · Подзадача: " + escapeHtml(t.parent_task_title) : "") + (t.template_id ? " · Повторяется" : "") + ' · ' + priorityText + '</small></span></label>' +
-      '<div class="task-time"><span>План: <b>' + (t.estimated_minutes ? duration(t.estimated_minutes) : "не задан") + '</b></span><label>Факт, мин<input type="number" min="0" max="10000" step="5" placeholder="—" value="' + (t.actual_minutes ?? "") + '" data-actual-time="' + t.id + '"></label><button type="button" class="button ghost" data-save-time="' + t.id + '">Сохранить</button></div>' +
+      '<div class="task-time"><span>План: <b>' + (t.estimated_minutes ? duration(t.estimated_minutes) : "не задан") + '</b></span><span>Факт: <b>' + (t.actual_minutes == null ? "—" : duration(t.actual_minutes)) + '</b></span><span>Таймер: <b>' + duration((taskTimerState.totals.find(item=>item.task_id===t.id)?.tracked_minutes)||0) + '</b></span><button type="button" class="button ghost" data-task-timer="' + t.id + '" ' + (t.status==="done" ? "disabled" : "") + '>' + (taskTimerState.active_timer?.task_id===t.id ? "Остановить таймер" : taskTimerState.active_timer ? "Таймер занят" : "Начать работу") + '</button></div>' +
       '<div class="task-ai"><button type="button" class="button ghost" data-delegate-task="' + t.id + '">' + (t.delegated_result ? "Подготовить заново с ИИ" : "Поручить ИИ") + '</button>' +
       (t.delegated_result ? '<details class="delegated-saved"><summary>Результат ИИ' + (t.delegated_at ? ' · ' + escapeHtml(t.delegated_at) : '') + '</summary><div class="delegated-output">' + escapeHtml(t.delegated_result) + '</div></details>' : '') + '</div>' +
       '<div class="task-steps"><div class="task-steps-head"><b>План выполнения</b><button type="button" class="button ghost" data-plan-task="' + t.id + '">' + (t.steps?.length ? "Обновить план" : "Разбить на этапы с ИИ") + '</button></div>' +
@@ -239,6 +240,16 @@ function renderTasks() {
   }).join("") : '<p class="muted">В этом периоде задач нет. Добавь следующий конкретный шаг.</p>';
   document.querySelectorAll("[data-task]").forEach(input => input.addEventListener("change", async () => {
     await api("/api/tasks", { method: "PATCH", body: JSON.stringify({ id: input.dataset.task, status: input.checked ? "done" : "todo" }) }); await loadTasks(); await rebuildDayPlanIfToday();
+  }));
+  document.querySelectorAll("[data-task-timer]").forEach(button => button.addEventListener("click", async () => {
+    const taskId = button.dataset.taskTimer;
+    const isActive = taskTimerState.active_timer?.task_id === taskId;
+    button.disabled = true;
+    try {
+      await api("/api/task-time", { method:"POST", body:JSON.stringify(isActive ? {action:"stop"} : {action:"start",task_id:taskId}) });
+      await loadTasks();
+      await rebuildDayPlanIfToday();
+    } catch (err) { alert(err.message); button.disabled = false; }
   }));
   document.querySelectorAll("[data-save-time]").forEach(button => button.addEventListener("click", async () => {
     const input = document.querySelector('[data-actual-time="' + button.dataset.saveTime + '"]');
