@@ -27,3 +27,11 @@ export function recurringTaskDates(template,from,to){
  }
  return dates;
 }
+
+export function normalizeRecurringSteps(value){
+ if(value==null)return [];
+ if(!Array.isArray(value))return null;
+ const steps=value.map(item=>String(item?.title||item||"").trim()).filter(Boolean);
+ if(steps.length>30||steps.some(title=>title.length>240))return null;
+ return steps;
+}
