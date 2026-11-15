@@ -38,7 +38,8 @@ export async function onRequestPost({request,env}){
  if(!user)return json({error:"Необходим вход"},401);
  const body=await readJson(request)||{};
  if(body.action==="save"){
-  if(!Array.isArray(body.tasks)||!body.tasks.length||body.tasks.length>15)return json({error:"Проверь список задач (не более 15)"},400);
+  const workspaceItems=Array.isArray(body.workspace_items)?body.workspace_items.slice(0,8):[];
+  if((!Array.isArray(body.tasks)||body.tasks.length>15||(!body.tasks.length&&!workspaceItems.length)))return json({error:"Проверь список изменений"},400);
   const [dirs,clients,projects,areas,openTasks]=await Promise.all([
    env.DB.prepare("SELECT id FROM directions WHERE user_id=?").bind(user.id).all(),
    env.DB.prepare("SELECT id FROM clients WHERE user_id=?").bind(user.id).all(),
@@ -53,6 +54,8 @@ export async function onRequestPost({request,env}){
    direction_id:allowed.direction_id.has(t.direction_id)?t.direction_id:null,
    client_id:allowed.client_id.has(t.client_id)?t.client_id:null,
    project_id:allowed.project_id.has(t.project_id)?t.project_id:null,
+   project_draft_index:Number.isInteger(t.project_draft_index)&&t.project_draft_index>=0&&t.project_draft_index<workspaceItems.filter(x=>x.type==="project").length?t.project_draft_index:null,
+   client_draft_index:Number.isInteger(t.client_draft_index)&&t.client_draft_index>=0&&t.client_draft_index<workspaceItems.filter(x=>x.type==="client").length?t.client_draft_index:null,
    life_area_id:allowed.life_area_id.has(t.life_area_id)?t.life_area_id:null,
    due_date:safeDate(t.due_date),priority:["low","medium","high"].includes(t.priority)?t.priority:"medium",
    estimated_minutes:Number.isInteger(Number(t.estimated_minutes))&&Number(t.estimated_minutes)>=5&&Number(t.estimated_minutes)<=10000?Number(t.estimated_minutes):null,
@@ -64,7 +67,32 @@ export async function onRequestPost({request,env}){
   if(prepared.some(t=>t.parent_index!==null&&t.parent_index>=prepared.length))return json({error:"Проверь связь подзадач с родительскими задачами."},400);
   if(!prepared.length)return json({error:"Не найдено задач для сохранения"},400);
   const statements=[];
-  let created=0,updated=0;
+  let created=0,updated=0,createdClients=0,createdProjects=0;
+  const newClientIds=[],newProjectIds=[];
+  for(const item of workspaceItems.filter(x=>x.type==="client")){
+   const name=String(item.name||"").trim().slice(0,160);
+   if(!name)return json({error:"У нового клиента должно быть название"},400);
+   const directionId=allowed.direction_id.has(item.direction_id)?item.direction_id:null;
+   const duplicate=await env.DB.prepare("SELECT id FROM clients WHERE user_id=? AND lower(name)=lower(?) AND status!='closed'").bind(user.id,name).first();
+   if(duplicate)return json({error:"Клиент «"+name+"» уже существует. Выбери его в распределении задач."},409);
+   const id=newId();newClientIds.push(id);
+   statements.push(env.DB.prepare("INSERT INTO clients (id,user_id,direction_id,name,contact,status,notes) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,directionId,name,String(item.contact||"").slice(0,240),"lead",String(item.notes||"").slice(0,3000)));
+   createdClients++;
+  }
+  for(const item of workspaceItems.filter(x=>x.type==="project")){
+   const title=String(item.title||"").trim().slice(0,180);
+   if(!title)return json({error:"У нового проекта должно быть название"},400);
+   const clientId=Number.isInteger(item.client_draft_index)&&newClientIds[item.client_draft_index]?newClientIds[item.client_draft_index]:(allowed.client_id.has(item.client_id)?item.client_id:null);
+   const client=clientId?await env.DB.prepare("SELECT direction_id FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first():null;
+   const directionId=allowed.direction_id.has(item.direction_id)?item.direction_id:(client?.direction_id||null);
+   if(client?.direction_id&&directionId&&client.direction_id!==directionId)return json({error:"Проект и клиент должны относиться к одному направлению"},400);
+   const duplicate=await env.DB.prepare("SELECT id FROM projects WHERE user_id=? AND lower(title)=lower(?) AND status NOT IN ('done','archived')").bind(user.id,title).first();
+   if(duplicate)return json({error:"Проект «"+title+"» уже существует. Выбери его в распределении задач."},409);
+   const id=newId();newProjectIds.push(id);
+   statements.push(env.DB.prepare("INSERT INTO projects (id,user_id,client_id,direction_id,title,description,expected_result,deadline,budget,status) VALUES (?,?,?,?,?,?,?,?,?,?)")
+    .bind(id,user.id,clientId,directionId,title,String(item.description||"").slice(0,5000),String(item.expected_result||"").slice(0,2000),safeDate(item.deadline),"0","draft"));
+   createdProjects++;
+  }
   for(let i=0;i<prepared.length;i++){
    const t=prepared[i];
    if(t.operation==="update"&&t.target_task_id){
@@ -76,6 +104,8 @@ export async function onRequestPost({request,env}){
     updated++;
     continue;
    }
+   if(Number.isInteger(t.project_draft_index)&&newProjectIds[t.project_draft_index])t.project_id=newProjectIds[t.project_draft_index];
+   if(Number.isInteger(t.client_draft_index)&&newClientIds[t.client_draft_index])t.client_id=newClientIds[t.client_draft_index];
    const parent=t.parent_index===null?null:prepared[t.parent_index];
    if(parent){t.direction_id=t.direction_id||parent.direction_id;t.client_id=t.client_id||parent.client_id;t.project_id=t.project_id||parent.project_id;t.life_area_id=t.life_area_id||parent.life_area_id;}
    if(t.project_id){
@@ -92,7 +122,7 @@ export async function onRequestPost({request,env}){
   const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
   const today=localDate(settings?.timezone||"Europe/Moscow");
   await env.DB.prepare("DELETE FROM daily_plans WHERE user_id=? AND plan_date=?").bind(user.id,today).run();
-  return json({ok:true,created,updated});
+  return json({ok:true,created,updated,created_clients:createdClients,created_projects:createdProjects});
  }
  const transcript=String(body.transcript||"").trim();
  if(!transcript||transcript.length>6000)return json({error:"Надиктуй или вставь текст задачи (до 6000 символов)"},400);
@@ -113,7 +143,7 @@ export async function onRequestPost({request,env}){
   const response=await env.AI.run("@cf/google/gemma-4-26b-a4b-it",{
    response_format:{type:"json_object"},
    messages:[
-    {role:"system",content:"Ты диспетчер задач личной системы управления. Используй project_context: в нём есть ожидаемый результат проекта, незавершённые задачи, их статусы, сроки и чек-листы. Если пользователь просит составить план проекта или перечисляет большой результат, оцени покрытие: не предлагай задачи, которые уже закрыты существующими задачами или их шагами; предложи только недостающие конкретные действия. Если пользователь диктует одну задачу, не достраивай весь проект самовольно. Используй parent_index для группировки этапа и подзадач; не выдумывай зависимости, которых нельзя выразить этим форматом. Если диктовка относится к уже существующему этапу, предложи дополнить или уточнить задачу только если это поддерживается форматом, иначе спроси пользователя. Разбери русскую диктовку в 1–15 конкретных задач. Верни ТОЛЬКО JSON: {summary:string,tasks:[{title:string,description:string,due_date:'YYYY-MM-DD'|null,priority:'low'|'medium'|'high',estimated_minutes:integer|null,direction_id:string|null,client_id:string|null,project_id:string|null,life_area_id:string|null,parent_index:integer|null,operation:'create'|'update',target_task_id:string|null,possible_duplicate_task_id:string|null}],clarifying_questions:string[]}. Контекст с допустимыми сущностями передан пользователем. Выбирай ID ТОЛЬКО из этого контекста, никогда не придумывай ID. Если проект однозначно найден по смыслу, привяжи задачу к нему и унаследуй его клиента и направление. Если упоминается клиент, выбери только точное/очевидное совпадение. Личные дела направляй в life_area_id, не в коммерческое направление. Если нет уверенности — оставь соответствующий ID null и добавь короткий вопрос. Относительные даты считай от today в timezone из контекста; если срок не сказан — null, не выдумывай. Если в речи перечислены несколько самостоятельных действий — создай отдельные задачи. Если есть большая цель и шаги — создай родительскую задачу и шаги как следующие задачи с parent_index равным индексу родителя. Перед созданием сравни каждую задачу с existing_open_tasks. Если пользователь просит добавить информацию, шаг или срок к конкретной существующей незавершённой задаче, выбери operation='update' и target_task_id этой задачи; обновляй только если связь однозначна. Если это повторное поручение той же самой работы, укажи possible_duplicate_task_id, operation='create' (пользователь сам решит). Не считай похожие, но разные этапы дублями. Если совпадение неочевидно — null. Не превращай каждое слово в задачу. Сохраняй важные детали, названия, суммы и условия. Русский язык. Не считай рекомендации и пожелания подтверждёнными фактами."},
+    {role:"system",content:"Ты диспетчер задач личной системы управления. Используй project_context: в нём есть ожидаемый результат проекта, незавершённые задачи, их статусы, сроки и чек-листы. Если пользователь просит составить план проекта или перечисляет большой результат, оцени покрытие: не предлагай задачи, которые уже закрыты существующими задачами или их шагами; предложи только недостающие конкретные действия. Если пользователь диктует одну задачу, не достраивай весь проект самовольно. Используй parent_index для группировки этапа и подзадач; не выдумывай зависимости, которых нельзя выразить этим форматом. Если диктовка относится к уже существующему этапу, предложи дополнить или уточнить задачу только если это поддерживается форматом, иначе спроси пользователя. Разбери русскую диктовку в 1–15 конкретных задач. Верни ТОЛЬКО JSON: {summary:string,workspace_items:[{type:'client',name:string,direction_id:string|null,contact:string,notes:string}|{type:'project',title:string,description:string,expected_result:string,deadline:'YYYY-MM-DD'|null,client_id:string|null,client_draft_index:integer|null,direction_id:string|null}],tasks:[{title:string,description:string,due_date:'YYYY-MM-DD'|null,priority:'low'|'medium'|'high',estimated_minutes:integer|null,direction_id:string|null,client_id:string|null,client_draft_index:integer|null,project_id:string|null,project_draft_index:integer|null,life_area_id:string|null,parent_index:integer|null,operation:'create'|'update',target_task_id:string|null,possible_duplicate_task_id:string|null}],clarifying_questions:string[]}. Контекст с допустимыми сущностями передан пользователем. Выбирай ID ТОЛЬКО из этого контекста, никогда не придумывай ID. Если пользователь явно описывает нового клиента, которого нет среди доступных, предложи workspace_items type=client; не создавай клиента по одному упоминанию имени без контекста нового клиента/заказчика. Если пользователь явно описывает новый проект, предложи workspace_items type=project с названием, описанием, ожидаемым результатом, сроком и привязкой к существующему клиенту или client_draft_index. Не предлагай новый проект, если речь идёт о задаче в существующем проекте. Если проект однозначно найден по смыслу, привяжи задачу к нему и унаследуй его клиента и направление. Задачи нового проекта связывай через project_draft_index. Если упоминается клиент, выбери только точное/очевидное совпадение. Личные дела направляй в life_area_id, не в коммерческое направление. Если нет уверенности — оставь соответствующий ID null и добавь короткий вопрос. Относительные даты считай от today в timezone из контекста; если срок не сказан — null, не выдумывай. Если в речи перечислены несколько самостоятельных действий — создай отдельные задачи. Если есть большая цель и шаги — создай родительскую задачу и шаги как следующие задачи с parent_index равным индексу родителя. Перед созданием сравни каждую задачу с existing_open_tasks. Если пользователь просит добавить информацию, шаг или срок к конкретной существующей незавершённой задаче, выбери operation='update' и target_task_id этой задачи; обновляй только если связь однозначна. Если это повторное поручение той же самой работы, укажи possible_duplicate_task_id, operation='create' (пользователь сам решит). Не считай похожие, но разные этапы дублями. Если совпадение неочевидно — null. Не превращай каждое слово в задачу. Сохраняй важные детали, названия, суммы и условия. Русский язык. Не считай рекомендации и пожелания подтверждёнными фактами."},
     {role:"user",content:"Контекст доступных направлений, клиентов, проектов и личных областей:\n"+JSON.stringify(context)+"\n\nДиктовка:\n"+transcript}
    ],max_tokens:2200,temperature:0.1
   });
@@ -123,6 +153,7 @@ export async function onRequestPost({request,env}){
   const allowed={direction_id:new Set(dirs.results.map(x=>x.id)),client_id:new Set(clients.results.map(x=>x.id)),project_id:new Set(projects.results.map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
   const clarifyingQuestions=Array.isArray(parsed.clarifying_questions)?parsed.clarifying_questions.slice(0,5).map(x=>String(x).slice(0,300)):[];
   const existingById=new Map(existingTasks.results.map(task=>[task.id,task]));
+  const workspaceItems=(Array.isArray(parsed.workspace_items)?parsed.workspace_items:[]).slice(0,8).map(item=>item.type==="client"?{type:"client",name:String(item.name||"").trim().slice(0,160),direction_id:allowed.direction_id.has(item.direction_id)?item.direction_id:null,contact:String(item.contact||"").slice(0,240),notes:String(item.notes||"").slice(0,3000)}:item.type==="project"?{type:"project",title:String(item.title||"").trim().slice(0,180),description:String(item.description||"").slice(0,5000),expected_result:String(item.expected_result||"").slice(0,2000),deadline:safeDate(item.deadline),client_id:allowed.client_id.has(item.client_id)?item.client_id:null,client_draft_index:Number.isInteger(item.client_draft_index)&&item.client_draft_index>=0?item.client_draft_index:null,direction_id:allowed.direction_id.has(item.direction_id)?item.direction_id:null}:null).filter(Boolean);
   const tasks=parsed.tasks.slice(0,15).map((t,i)=>({
    title:String(t.title||"").trim().slice(0,240),description:String(t.description||"").trim().slice(0,2000),
    due_date:safeDate(t.due_date),priority:["low","medium","high"].includes(t.priority)?t.priority:"medium",
@@ -150,7 +181,7 @@ export async function onRequestPost({request,env}){
    }
    if(task.parent_index!==null&&task.parent_index>=tasks.length)task.parent_index=null;
   }
-  return json({ok:true,source:"ai",summary:String(parsed.summary||"Задачи разобраны").slice(0,500),tasks,clarifying_questions:clarifyingQuestions,existing_tasks:existingTasks.results,project_context:projectContext});
+  return json({ok:true,source:"ai",summary:String(parsed.summary||"Задачи разобраны").slice(0,500),workspace_items:workspaceItems,tasks,clarifying_questions:clarifyingQuestions,existing_tasks:existingTasks.results,project_context:projectContext});
  }catch{
   return json({error:"Не удалось надёжно разобрать диктовку. Попробуй переформулировать её или добавь задачу вручную.",transcript},502);
  }
