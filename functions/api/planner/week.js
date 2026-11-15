@@ -11,7 +11,7 @@ import { attachWeeklyTaskPriority } from "../../_lib/weekly-task-priority.js";
 import { buildWeeklyAttentionScenarios } from "../../_lib/weekly-attention-scenarios.js";
 import { buildDailyRhythmInsights } from "../../_lib/daily-rhythm-insights.js";
 import { buildRecoveryInsights } from "../../_lib/recovery-insights.js";
-import { buildDailyBlockPlans } from "../../_lib/daily-block-plans.js";
+import { buildDailyBlockPlans, buildDailyBlockScenarios } from "../../_lib/daily-block-plans.js";
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day;}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 export async function onRequestGet({request,env}){
@@ -47,6 +47,6 @@ export async function onRequestGet({request,env}){
  week.recovery_insights=buildRecoveryInsights(rhythmTimeRows.results,timezone);
  const url=new URL(request.url),focusMinutes=Number(url.searchParams.get("focus_minutes"))||50,breakMinutes=Number(url.searchParams.get("break_minutes"))||10,prepBeforeMinutes=Math.max(0,Math.min(120,Number(url.searchParams.get("prep_before_minutes"))||0)),bufferAfterMinutes=Math.max(0,Math.min(120,Number(url.searchParams.get("buffer_after_minutes"))||0));
  week.daily_block_preferences={focus_minutes:focusMinutes,break_minutes:breakMinutes,prep_before_minutes:prepBeforeMinutes,buffer_after_minutes:bufferAfterMinutes};
- week.daily_block_plans=buildDailyBlockPlans(week.days,{focusMinutes,breakMinutes,startTime:url.searchParams.get("start_time")||"09:00",prepBeforeMinutes,bufferAfterMinutes,calendarEvents:events});
+ const dailyBlockOptions={focusMinutes,breakMinutes,startTime:url.searchParams.get("start_time")||"09:00",prepBeforeMinutes,bufferAfterMinutes,calendarEvents:events};\n week.daily_block_plans=buildDailyBlockPlans(week.days,dailyBlockOptions);\n week.daily_block_scenarios=buildDailyBlockScenarios(week.days,dailyBlockOptions);
  return json({week});
 }
