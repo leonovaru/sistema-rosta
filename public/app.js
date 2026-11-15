@@ -1007,7 +1007,7 @@ function renderSleep(){
  status.textContent=current?(current.woke_at?"Пробуждение зафиксировано: "+current.woke_at.slice(11,16):"Ночь начата "+(current.went_to_bed_at?current.went_to_bed_at.slice(11,16):"без отметки времени")+" · пробуждение ещё не подтверждено"):"Пока нет отметок за текущую ночь.";
  $("sleep-history").innerHTML=sleepSessions.length?sleepSessions.map(s=>{
   const durationMinutes=sleepDuration(s.fell_asleep_at,s.woke_at);
-  return '<article class="sleep-entry"><div class="sleep-entry-head"><strong>Ночь '+escapeHtml(s.sleep_date)+'</strong><b>'+sleepDurationLabel(durationMinutes)+'</b></div><form class="sleep-edit-form" data-sleep-edit="'+escapeHtml(s.id)+'"><label>Легла<input type="datetime-local" name="went_to_bed_at" value="'+escapeHtml(s.went_to_bed_at||"")+'"></label><label>Уснула примерно<input type="datetime-local" name="fell_asleep_at" value="'+escapeHtml(s.fell_asleep_at||"")+'"></label><label>Проснулась<input type="datetime-local" name="woke_at" value="'+escapeHtml(s.woke_at||"")+'"></label><label class="sleep-note">Заметка<input name="note" maxlength="1000" value="'+escapeHtml(s.note||"")+'"></label><button class="button ghost" type="submit">Сохранить исправления</button></form><small class="fine">Пробуждение: '+(s.woke_at?escapeHtml(s.woke_at.slice(11,16)):"не отмечено")+' · засыпание: '+(s.fell_asleep_at?escapeHtml(s.fell_asleep_at.slice(11,16)):"не указано")+'</small></article>';
+  return '<article class="sleep-entry"><div class="sleep-entry-head"><strong>Ночь '+escapeHtml(s.sleep_date)+'</strong><b>'+sleepDurationLabel(durationMinutes)+'</b></div><form class="sleep-edit-form" data-sleep-edit="'+escapeHtml(s.id)+'"><label>Легла<input type="datetime-local" name="went_to_bed_at" value="'+escapeHtml(s.went_to_bed_at||"")+'"></label><label>Уснула примерно<input type="datetime-local" name="fell_asleep_at" value="'+escapeHtml(s.fell_asleep_at||"")+'"></label><label>Проснулась<input type="datetime-local" name="woke_at" value="'+escapeHtml(s.woke_at||"")+'"></label><label class="sleep-note">Заметка<input name="note" maxlength="1000" value="'+escapeHtml(s.note||"")+'"></label><button class="button ghost" type="submit">Сохранить исправления</button></form><button type="button" class="button ghost" data-sleep-delete="'"+escapeHtml(s.id)+"'">Удалить запись</button><small class="fine">Пробуждение: '+(s.woke_at?escapeHtml(s.woke_at.slice(11,16)):"не отмечено")+' · засыпание: '+(s.fell_asleep_at?escapeHtml(s.fell_asleep_at.slice(11,16)):"не указано")+'</small></article>';
  }).join(""):'<p class="muted">Здесь появится история сна.</p>';
 }
 async function loadSleep(){
@@ -1023,6 +1023,13 @@ async function markSleep(action){
 $("sleep-bed").addEventListener("click",()=>markSleep("bed"));
 $("sleep-asleep").addEventListener("click",()=>markSleep("asleep"));
 $("sleep-wake").addEventListener("click",()=>markSleep("wake"));
+$("sleep-history").addEventListener("click",async event=>{
+ const button=event.target.closest("[data-sleep-delete]");if(!button)return;
+ if(!confirm("Удалить запись о сне?"))return;
+ button.disabled=true;
+ try{await api("/api/sleep",{method:"POST",body:JSON.stringify({action:"delete",id:button.dataset.sleepDelete})});await loadSleep();}
+ catch(err){alert(err.message);button.disabled=false;}
+});
 $("sleep-history").addEventListener("submit",async event=>{
  const form=event.target.closest("[data-sleep-edit]");if(!form)return;event.preventDefault();
  const data=new FormData(form),payload={action:"edit",id:form.dataset.sleepEdit};
