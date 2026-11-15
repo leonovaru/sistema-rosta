@@ -30,6 +30,9 @@ export async function onRequestGet({request,env}){
  week.estimate_accuracy=buildEstimateAccuracy(completedRows.results);
  week.calibrated_load=buildCalibratedWeeklyLoad(week,week.estimate_accuracy);
  week.adjustment_proposals=buildWeeklyAdjustmentProposals(week.days,taskRows.results);
+ const calibratedDays=(week.calibrated_load?.days||[]).map(day=>({...day,planned_task_minutes:day.calibrated_task_minutes,tasks:(day.calibrated_tasks||[]).map(task=>({...task,minutes:task.calibrated_minutes}))}));
+ week.calibrated_adjustment_proposals=buildWeeklyAdjustmentProposals(calibratedDays,taskRows.results);
+
  week.focus_scenarios=buildWeeklyFocusScenarios(week.area_balance,week.days);
  return json({week});
 }
