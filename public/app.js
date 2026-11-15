@@ -11,6 +11,8 @@ let calendarEvents = [];
 let calendarAnchor = new Date();
 let calendarSelected = "";
 let calendarView = "month";
+let workspaceData = {clients:[],projects:[],life_areas:[],directions:[]};
+let pendingProjectPlan = null;
 
 const money = n => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(n || 0)) + " ₽";
 const duration = n => { const v = Number(n || 0); return v >= 60 ? (Math.floor(v/60) + " ч" + (v%60 ? " " + v%60 + " мин" : "")) : v + " мин"; };
@@ -58,7 +60,7 @@ $("estimate-task").addEventListener("click", async () => {
 ["task-title","task-description"].forEach(id => $(id).addEventListener("input", () => { taskEstimate = null; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; }));
 $("task-form").addEventListener("submit", async e => {
   e.preventDefault();
-  try { await api("/api/tasks", { method: "POST", body: JSON.stringify({ title: $("task-title").value, description: $("task-description").value, due_date: $("task-date").value || null, direction_id: $("task-direction").value || null, priority: $("task-priority").value, estimated_minutes: taskEstimate?.minutes ?? null, ai_plan: taskEstimate ? JSON.stringify(taskEstimate) : "" }) }); $("task-title").value = ""; $("task-description").value = ""; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; taskEstimate = null; await loadTasks(); }
+  try { await api("/api/tasks", { method: "POST", body: JSON.stringify({ title: $("task-title").value, description: $("task-description").value, due_date: $("task-date").value || null, direction_id: $("task-direction").value || null, client_id: $("task-client").value || null, project_id: $("task-project").value || null, life_area_id: $("task-life-area").value || null, priority: $("task-priority").value, estimated_minutes: taskEstimate?.minutes ?? null, ai_plan: taskEstimate ? JSON.stringify(taskEstimate) : "" }) }); $("task-title").value = ""; $("task-description").value = ""; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; taskEstimate = null; await loadTasks(); }
   catch (err) { alert(err.message); }
 });
 $("income-form").addEventListener("submit", async e => {
@@ -148,6 +150,27 @@ async function loadDirections() {
     } catch (err) { alert(err.message); }
   }));
 }
+
+async function loadWorkspace() {
+  workspaceData = await api("/api/workspace");
+  const dirs = '<option value="">Без направления</option>' + workspaceData.directions.map(d=>'<option value="'+escapeHtml(d.id)+'">'+escapeHtml(d.title)+'</option>').join("");
+  $("client-direction").innerHTML=dirs; $("project-direction").innerHTML=dirs; $("task-direction").innerHTML=dirs;
+  $("project-client").innerHTML='<option value="">Собственный проект / без клиента</option>'+workspaceData.clients.map(c=>'<option value="'+escapeHtml(c.id)+'">'+escapeHtml(c.name)+'</option>').join("");
+  $("task-client").innerHTML='<option value="">Без клиента</option>'+workspaceData.clients.map(c=>'<option value="'+escapeHtml(c.id)+'">'+escapeHtml(c.name)+'</option>').join("");
+  $("task-project").innerHTML='<option value="">Без проекта</option>'+workspaceData.projects.filter(p=>!["done","archived"].includes(p.status)).map(p=>'<option value="'+escapeHtml(p.id)+'">'+escapeHtml(p.title)+(p.client_name?' · '+escapeHtml(p.client_name):'')+'</option>').join("");
+  $("task-life-area").innerHTML='<option value="">Не личная задача</option>'+workspaceData.life_areas.map(a=>'<option value="'+escapeHtml(a.id)+'">'+escapeHtml(a.title)+'</option>').join("");
+  $("workspace-clients").innerHTML=workspaceData.clients.length?workspaceData.clients.map(c=>'<article class="workspace-item"><b>'+escapeHtml(c.name)+'</b><small>'+escapeHtml(c.direction_title||"Без направления")+' · '+Number(c.project_count||0)+' проектов</small><small>'+escapeHtml(c.contact||"Контакт не указан")+'</small></article>').join(""):'<p class="muted">Клиенты пока не добавлены.</p>';
+  $("workspace-projects").innerHTML=workspaceData.projects.length?workspaceData.projects.map(p=>'<article class="workspace-item"><b>'+escapeHtml(p.title)+'</b><small>'+(p.client_name?escapeHtml(p.client_name)+' · ':'')+escapeHtml(p.direction_title||"Собственный проект")+'</small><small>'+(p.deadline?'Срок: '+escapeHtml(p.deadline)+' · ':'')+'Открытых задач: '+Number(p.open_tasks||0)+'</small><div class="workspace-actions"><span class="status-chip">'+({active:"В работе",draft:"Черновик",waiting:"Ожидание",done:"Завершён",archived:"Архив"})[p.status]+'</span><button type="button" class="button ghost" data-project-plan="'+escapeHtml(p.id)+'">Составить план с ИИ</button></div></article>').join(""):'<p class="muted">Проекты пока не созданы.</p>';
+  $("workspace-areas").innerHTML=workspaceData.life_areas.map(a=>'<article class="workspace-item"><b>'+escapeHtml(a.title)+'</b><small>'+escapeHtml(a.description||"Личные задачи и регулярные дела")+'</small></article>').join("");
+}
+$("client-form").addEventListener("submit",async e=>{e.preventDefault();try{await api("/api/workspace",{method:"POST",body:JSON.stringify({type:"client",name:$("client-name").value,direction_id:$("client-direction").value||null,contact:$("client-contact").value,notes:$("client-notes").value})});$("client-form").reset();await loadWorkspace();}catch(err){alert(err.message);}});
+$("project-form").addEventListener("submit",async e=>{e.preventDefault();try{await api("/api/workspace",{method:"POST",body:JSON.stringify({type:"project",title:$("project-title").value,client_id:$("project-client").value||null,direction_id:$("project-direction").value||null,description:$("project-description").value,expected_result:$("project-result").value,deadline:$("project-deadline").value||null,budget:$("project-budget").value||0})});$("project-form").reset();await loadWorkspace();}catch(err){alert(err.message);}});
+$("life-area-form").addEventListener("submit",async e=>{e.preventDefault();try{await api("/api/workspace",{method:"POST",body:JSON.stringify({type:"life_area",title:$("life-area-title").value,description:$("life-area-description").value})});$("life-area-form").reset();await loadWorkspace();}catch(err){alert(err.message);}});
+$("workspace-projects").addEventListener("click",async e=>{const b=e.target.closest("[data-project-plan]");if(!b)return;const p=workspaceData.projects.find(x=>x.id===b.dataset.projectPlan);if(!p)return;b.disabled=true;b.textContent="Анализирую…";try{const data=await api("/api/projects/plan",{method:"POST",body:JSON.stringify({project_id:p.id})});pendingProjectPlan={project_id:p.id,steps:data.steps};$("project-plan-preview").classList.remove("hidden");$("project-plan-preview").innerHTML='<h4>Черновик плана: '+escapeHtml(p.title)+'</h4><p class="fine">Проверь задачи. Они попадут в общий список только после подтверждения.</p><ol>'+data.steps.map(s=>'<li><b>'+escapeHtml(s.title)+'</b><small>'+duration(s.minutes)+' · '+({high:"Высокий",medium:"Обычный",low:"Низкий"})[s.priority]+'</small>'+(s.description?'<small>'+escapeHtml(s.description)+'</small>':'')+'</li>').join("")+'</ol><div class="workspace-actions"><button type="button" class="button primary" id="save-project-plan">Подтвердить и создать задачи</button><button type="button" class="button ghost" id="discard-project-plan">Отменить</button></div>';}catch(err){alert(err.message);}finally{b.disabled=false;b.textContent="Составить план с ИИ";}});
+$("project-plan-preview").addEventListener("click",async e=>{if(e.target.id==="discard-project-plan"){pendingProjectPlan=null;$("project-plan-preview").classList.add("hidden");return;}if(e.target.id==="save-project-plan"&&pendingProjectPlan){const b=e.target;b.disabled=true;b.textContent="Сохраняю…";try{await api("/api/projects/plan",{method:"POST",body:JSON.stringify({action:"save",project_id:pendingProjectPlan.project_id,steps:pendingProjectPlan.steps})});pendingProjectPlan=null;$("project-plan-preview").classList.add("hidden");await loadTasks();await loadWorkspace();alert("Задачи проекта добавлены в общий список.");}catch(err){alert(err.message);b.disabled=false;b.textContent="Повторить сохранение";}}});
+$("task-project").addEventListener("change",()=>{const p=workspaceData.projects.find(x=>x.id===$("task-project").value);if(p){$("task-client").value=p.client_id||"";$("task-direction").value=p.direction_id||"";$("task-life-area").value="";}});
+$("task-life-area").addEventListener("change",()=>{if($("task-life-area").value){$("task-project").value="";$("task-client").value="";$("task-direction").value="";}});
+
 async function loadTasks() {
   const data = await api("/api/tasks"); allTasks = data.tasks;
   $("task-count").textContent = allTasks.filter(t => t.status !== "done").length;
@@ -168,7 +191,7 @@ function renderTasks() {
     const dateText = t.due_date ? (t.due_date < localToday ? "Просрочено · " : "") + t.due_date : "Без срока";
     const priorityText = ({high:"Высокий",medium:"Обычный",low:"Низкий"})[t.priority] || "Обычный";
     return '<article class="task-card ' + (t.status === "done" ? "done" : "") + '">' +
-      '<label class="task"><input type="checkbox" data-task="' + t.id + '" ' + (t.status === "done" ? "checked" : "") + '><span class="task-body"><b>' + escapeHtml(t.title) + '</b><small>' + escapeHtml(dateText) + ' · ' + escapeHtml(t.direction_title || "Без направления") + ' · ' + priorityText + '</small></span></label>' +
+      '<label class="task"><input type="checkbox" data-task="' + t.id + '" ' + (t.status === "done" ? "checked" : "") + '><span class="task-body"><b>' + escapeHtml(t.title) + '</b><small>' + escapeHtml(dateText) + " · " + escapeHtml(t.project_title || t.life_area_title || t.direction_title || "Без привязки") + (t.client_name ? " · " + escapeHtml(t.client_name) : "") + ' · ' + escapeHtml(t.direction_title || "Без направления") + ' · ' + priorityText + '</small></span></label>' +
       '<div class="task-time"><span>План: <b>' + (t.estimated_minutes ? duration(t.estimated_minutes) : "не задан") + '</b></span><label>Факт, мин<input type="number" min="0" max="10000" step="5" placeholder="—" value="' + (t.actual_minutes ?? "") + '" data-actual-time="' + t.id + '"></label><button type="button" class="button ghost" data-save-time="' + t.id + '">Сохранить</button></div>' +
       '<div class="task-ai"><button type="button" class="button ghost" data-delegate-task="' + t.id + '">' + (t.delegated_result ? "Подготовить заново с ИИ" : "Поручить ИИ") + '</button>' +
       (t.delegated_result ? '<details class="delegated-saved"><summary>Результат ИИ' + (t.delegated_at ? ' · ' + escapeHtml(t.delegated_at) : '') + '</summary><div class="delegated-output">' + escapeHtml(t.delegated_result) + '</div></details>' : '') + '</div>' +
@@ -373,7 +396,7 @@ async function boot() {
   try {
     const { user } = await api("/api/auth/me");
     if (!user) return showAuth();
-    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
+    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadWorkspace(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
   } catch { showAuth(); }
 }
 boot();
