@@ -70,6 +70,7 @@ export async function onRequestPost({request,env}) {
     const project=projectId?await env.DB.prepare("SELECT id,client_id,direction_id,title,status FROM projects WHERE id=? AND user_id=?").bind(projectId,user.id).first():null;
     if(projectId&&!project)return json({error:"Проект не найден"},404);
     if(projectId&&!isProjectSelectable(project))return json({error:"Нельзя привязать расход к архивному проекту"},409);
+    if(project?.client_id&&!clientId){const linkedClient=await env.DB.prepare("SELECT status FROM clients WHERE id=? AND user_id=?").bind(project.client_id,user.id).first();if(!isClientSelectable(linkedClient))return json({error:"Нельзя привязать расход к проекту закрытого клиента"},409);}
     if(project&&clientId&&project.client_id!==clientId)return json({error:"Проект не относится к выбранному клиенту"},400);
     if(project&&!clientId&&project.client_id)return json({error:"Выбери клиента, связанного с проектом"},400);
     if(project&&directionId&&project.direction_id&&directionId!==project.direction_id)return json({error:"Направление должно соответствовать выбранному проекту"},400);
