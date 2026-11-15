@@ -5,8 +5,10 @@ let userSettings = { monthly_target: 300000, timezone: "Europe/Moscow" };
 let allTasks = [];
 let taskFilter = "today";
 let localToday = "";
+let taskEstimate = null;
 
 const money = n => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(n || 0)) + " ₽";
+const duration = n => { const v = Number(n || 0); return v >= 60 ? (Math.floor(v/60) + " ч" + (v%60 ? " " + v%60 + " мин" : "")) : v + " мин"; };
 async function api(path, options = {}) {
   const response = await fetch(path, { credentials: "same-origin", headers: { "content-type": "application/json", ...(options.headers || {}) }, ...options });
   const data = await response.json().catch(() => ({}));
@@ -32,9 +34,24 @@ $("auth-form").addEventListener("submit", async e => {
   } catch (err) { $("auth-error").textContent = err.message; }
 });
 $("logout").addEventListener("click", async () => { await api("/api/auth/logout", { method: "POST" }).catch(() => {}); showAuth(); });
+$("estimate-task").addEventListener("click", async () => {
+  const title = $("task-title").value.trim();
+  if (!title) { alert("Сначала введи название задачи."); $("task-title").focus(); return; }
+  const button = $("estimate-task");
+  button.disabled = true; button.textContent = "Оцениваю…";
+  $("estimate-result").classList.remove("hidden");
+  $("estimate-result").textContent = "Анализирую объём задачи и возможность делегирования.";
+  try {
+    taskEstimate = await api("/api/tasks/estimate", { method: "POST", body: JSON.stringify({ title, description: $("task-description").value }) });
+    const delegation = ({full:"Можно поручить ИИ почти целиком",partial:"ИИ выполнит часть работы, тебе останется проверить результат",manual:"Нужно твоё участие или действие вне приложения"})[taskEstimate.delegation];
+    const steps = (taskEstimate.steps || []).map(step => "<li>" + escapeHtml(step.title) + " — " + duration(step.minutes) + "</li>").join("");
+    $("estimate-result").innerHTML = "<strong>Оценка: " + duration(taskEstimate.range_min) + "–" + duration(taskEstimate.range_max) + "</strong><p>" + escapeHtml(taskEstimate.rationale || "") + "</p><p><b>" + delegation + "</b></p><p>" + escapeHtml(taskEstimate.delegation_reason || "") + "</p>" + (steps ? "<ul>"+steps+"</ul>" : "") + "<small>" + (taskEstimate.source === "ai" ? "Оценка ИИ" : "Черновая алгоритмическая оценка") + (taskEstimate.note ? " · "+escapeHtml(taskEstimate.note) : "") + "</small>";
+  } catch (err) { taskEstimate = null; $("estimate-result").textContent = err.message; }
+  finally { button.disabled = false; button.textContent = "Оценить время и делегирование с ИИ"; }
+});
 $("task-form").addEventListener("submit", async e => {
   e.preventDefault();
-  try { await api("/api/tasks", { method: "POST", body: JSON.stringify({ title: $("task-title").value, due_date: $("task-date").value || null, direction_id: $("task-direction").value || null, priority: $("task-priority").value }) }); $("task-title").value = ""; await loadTasks(); }
+  try { await api("/api/tasks", { method: "POST", body: JSON.stringify({ title: $("task-title").value, description: $("task-description").value, due_date: $("task-date").value || null, direction_id: $("task-direction").value || null, priority: $("task-priority").value, estimated_minutes: taskEstimate?.minutes ?? null, ai_plan: taskEstimate ? JSON.stringify(taskEstimate) : "" }) }); $("task-title").value = ""; $("task-description").value = ""; $("estimate-result").classList.add("hidden"); $("estimate-result").textContent = ""; taskEstimate = null; await loadTasks(); }
   catch (err) { alert(err.message); }
 });
 $("income-form").addEventListener("submit", async e => {
@@ -88,13 +105,17 @@ function renderTasks() {
   $("tasks").innerHTML = visible.length ? visible.map(t => {
     const dateText = t.due_date ? (t.due_date < localToday ? "Просрочено · " : "") + t.due_date : "Без срока";
     const priorityText = ({high:"Высокий",medium:"Обычный",low:"Низкий"})[t.priority] || "Обычный";
-    return `<label class="task ${t.status === "done" ? "done" : ""}">
-      <input type="checkbox" data-task="${t.id}" ${t.status === "done" ? "checked" : ""}>
-      <span class="task-body"><b>${escapeHtml(t.title)}</b><small>${escapeHtml(dateText)} · ${escapeHtml(t.direction_title || "Без направления")} · ${priorityText}</small></span>
-    </label>`;
+    return '<article class="task-card ' + (t.status === "done" ? "done" : "") + '">' +
+      '<label class="task"><input type="checkbox" data-task="' + t.id + '" ' + (t.status === "done" ? "checked" : "") + '><span class="task-body"><b>' + escapeHtml(t.title) + '</b><small>' + escapeHtml(dateText) + ' · ' + escapeHtml(t.direction_title || "Без направления") + ' · ' + priorityText + '</small></span></label>' +
+      '<div class="task-time"><span>План: <b>' + (t.estimated_minutes ? duration(t.estimated_minutes) : "не задан") + '</b></span><label>Факт, мин<input type="number" min="0" max="10000" step="5" placeholder="—" value="' + (t.actual_minutes ?? "") + '" data-actual-time="' + t.id + '"></label><button type="button" class="button ghost" data-save-time="' + t.id + '">Сохранить</button></div></article>';
   }).join("") : '<p class="muted">В этом периоде задач нет. Добавь следующий конкретный шаг.</p>';
   document.querySelectorAll("[data-task]").forEach(input => input.addEventListener("change", async () => {
     await api("/api/tasks", { method: "PATCH", body: JSON.stringify({ id: input.dataset.task, status: input.checked ? "done" : "todo" }) }); await loadTasks();
+  }));
+  document.querySelectorAll("[data-save-time]").forEach(button => button.addEventListener("click", async () => {
+    const input = document.querySelector('[data-actual-time="' + button.dataset.saveTime + '"]');
+    try { await api("/api/tasks", { method: "PATCH", body: JSON.stringify({ id: button.dataset.saveTime, actual_minutes: input.value === "" ? null : input.value }) }); await loadTasks(); }
+    catch (err) { alert(err.message); }
   }));
 }
 document.querySelectorAll("[data-task-filter]").forEach(button => button.addEventListener("click", () => {
