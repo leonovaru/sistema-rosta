@@ -6,6 +6,21 @@ function localDate(timeZone) {
   const values = Object.fromEntries(parts.map(part => [part.type,part.value]));
   return `${values.year}-${values.month}-${values.day}`;
 }
+function mergeIntervals(intervals) {
+  const sorted=[...intervals].filter(x=>x.end>x.start).sort((a,b)=>a.start-b.start);
+  const merged=[];
+  for(const item of sorted){const last=merged[merged.length-1];if(last&&item.start<=last.end)last.end=Math.max(last.end,item.end);else merged.push({...item});}
+  return merged;
+}
+function intersectIntervals(left,right) {
+  const result=[];
+  for(const a of left) for(const b of right){const start=Math.max(a.start,b.start),end=Math.min(a.end,b.end);if(end>start)result.push({start,end});}
+  return mergeIntervals(result);
+}
+function localDateTime(date, minute) {
+  const value=new Date(date+"T00:00:00Z");value.setUTCMinutes(minute);
+  return value.toISOString().slice(0,16);
+}
 function parseJson(value) {
   if (typeof value !== "string") return value;
   const clean = value.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
@@ -68,7 +83,20 @@ export async function onRequestPost({ request, env }) {
   }).filter(item => item.end > item.start);
   const sortedBusy = [...busyIntervals].sort((a,b)=>a.start-b.start);
   let busyFutureMinutes = 0, cursor = nowMinute;
-  for (const interval of sortedBusy) { const start=Math.max(cursor,interval.start); if(interval.end>start){busyFutureMinutes+=interval.end-start;cursor=interval.end;} }
+  const freeIntervals=[];
+  for (const interval of sortedBusy) {
+    const start=Math.max(cursor,interval.start);
+    if(interval.start>cursor) freeIntervals.push({start:cursor,end:interval.start});
+    if(interval.end>start){busyFutureMinutes+=interval.end-start;cursor=interval.end;}
+  }
+  if(cursor<1440) freeIntervals.push({start:cursor,end:1440});
+  const workWindows=mergeIntervals(calendarEvents.filter(event=>event.event_type==="work"&&event.status!=="completed").map(event=>{
+    const startDate=event.start_at.slice(0,10),endDate=event.end_at.slice(0,10);
+    const start=startDate<today?0:startDate>today?1440:Number(event.start_at.slice(11,13))*60+Number(event.start_at.slice(14,16));
+    const end=endDate>today?1440:endDate<today?0:Number(event.end_at.slice(11,13))*60+Number(event.end_at.slice(14,16));
+    return {start:Math.max(nowMinute,start),end:Math.min(1440,end)};
+  }));
+  const schedulingIntervals=workWindows.length?intersectIntervals(freeIntervals,workWindows):freeIntervals;
   const workIntervals = calendarEvents.filter(event=>event.event_type==="work").map(event=>{
     const endValue=event.status==="completed"&&event.actual_end_at?event.actual_end_at:event.end_at;
     const startValue=event.status==="completed"&&event.actual_start_at?event.actual_start_at:event.start_at;
@@ -80,7 +108,7 @@ export async function onRequestPost({ request, env }) {
   let workDoneMinutes=0, workCursor=0;
   for(const interval of workIntervals){const start=Math.max(workCursor,interval.start);if(interval.end>start){workDoneMinutes+=interval.end-start;workCursor=interval.end;}}
   const remainingWorkCapacity=Math.max(0,dailyCapacity-workDoneMinutes);
-  const freeAfterCalendar=Math.max(0,1440-nowMinute-busyFutureMinutes);
+  const freeAfterCalendar=schedulingIntervals.reduce((sum,interval)=>sum+interval.end-interval.start,0);
   const capacity=Math.min(remainingWorkCapacity,freeAfterCalendar);
   const tasksResult = await env.DB.prepare(`
     SELECT t.id,t.title,t.description,t.status,t.priority,t.due_date,t.estimated_minutes,d.title AS direction_title,d.target_month AS direction_target
@@ -129,6 +157,19 @@ export async function onRequestPost({ request, env }) {
       source = "ai";
     } catch { /* безопасно используем алгоритмический план */ }
   }
+  const slotPool=schedulingIntervals.map(interval=>({...interval}));
+  const placed=[],unplaced=[];
+  for(const item of plan.items){
+    const slot=slotPool.find(interval=>interval.end-interval.start>=item.minutes);
+    if(!slot){unplaced.push({...item,scheduled:false,schedule_note:"Нет непрерывного свободного окна такой длины"});continue;}
+    const start=slot.start,end=start+item.minutes;
+    placed.push({...item,scheduled:true,start_at:localDateTime(today,start),end_at:localDateTime(today,end)});
+    slot.start=end;
+  }
+  plan.items=[...placed,...unplaced];
+  plan.total_minutes=placed.reduce((sum,item)=>sum+item.minutes,0);
+  plan.reserve_minutes=Math.max(0,capacity-plan.total_minutes);
+  plan.unscheduled_count=unplaced.length;
   plan.source = source;
   plan.daily_capacity_minutes = dailyCapacity;
   plan.available_minutes = capacity;
