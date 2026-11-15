@@ -1,17 +1,24 @@
 import { json, requireUser, readJson } from "../../_lib/auth.js";
 import { calculateBucketBalances } from "../../_lib/income-buckets.js";
 import { buildBucketRecommendations } from "../../_lib/bucket-recommendations.js";
+function dateInZone(timeZone) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return values.year+"-"+values.month+"-"+values.day;
+}
 
 export async function onRequestGet({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error: "Необходим вход" }, 401);
-  const monthStart = new Date().toISOString().slice(0,7)+"-01";
+  const settings = await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+  const today = dateInZone(settings?.timezone || "Europe/Moscow");
+  const monthStart = today.slice(0,7)+"-01";
   const [buckets, allocations, expenses, incomeHistory, spendingHistory] = await Promise.all([
     env.DB.prepare("SELECT * FROM income_buckets WHERE user_id=? AND active=1 ORDER BY sort_order,title").bind(user.id).all(),
     env.DB.prepare("SELECT bucket_id,SUM(amount) amount FROM income_bucket_allocations WHERE user_id=? GROUP BY bucket_id").bind(user.id).all(),
     env.DB.prepare("SELECT bucket_id,SUM(amount) amount FROM (SELECT bucket_id,amount FROM expenses WHERE user_id=? AND bucket_id IS NOT NULL UNION ALL SELECT bucket_id,amount FROM debt_payments WHERE user_id=? AND bucket_id IS NOT NULL UNION ALL SELECT bucket_id,amount FROM obligation_payments WHERE user_id=? AND bucket_id IS NOT NULL) GROUP BY bucket_id").bind(user.id,user.id,user.id).all(),
     env.DB.prepare("SELECT substr(received_on,1,7) month,SUM(amount) total FROM income_entries WHERE user_id=? AND received_on>=date(?,'-3 months') AND received_on<? GROUP BY substr(received_on,1,7)").bind(user.id,monthStart,monthStart).all(),
-    env.DB.prepare("SELECT bucket_id,substr(spent_on,1,7) month,SUM(amount) total FROM expenses WHERE user_id=? AND bucket_id IS NOT NULL AND spent_on>=date(?,'-3 months') AND spent_on<? GROUP BY bucket_id,substr(spent_on,1,7)").bind(user.id,monthStart,monthStart).all()
+    env.DB.prepare("SELECT bucket_id,substr(spent_on,1,7) month,SUM(amount) total FROM (SELECT bucket_id,amount,spent_on FROM expenses WHERE user_id=? UNION ALL SELECT bucket_id,amount,paid_on AS spent_on FROM debt_payments WHERE user_id=? UNION ALL SELECT bucket_id,amount,paid_on AS spent_on FROM obligation_payments WHERE user_id=?) WHERE bucket_id IS NOT NULL AND spent_on>=date(?,'-3 months') AND spent_on<? GROUP BY bucket_id,substr(spent_on,1,7)").bind(user.id,user.id,user.id,monthStart,monthStart).all()
   ]);
   const rows = calculateBucketBalances(buckets.results, allocations.results, expenses.results);
   const percentageTotal = rows.reduce((sum, row) => sum + Number(row.percentage), 0);
