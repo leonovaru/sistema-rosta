@@ -1,5 +1,3 @@
-import { expandRecurringEvents } from "./calendar.js";
-
 const EXCLUDED_TYPES = new Set(["sleep","work"]);
 
 export function calculateCalendarBusyMinutes(events = [], fromDate, horizonDays, workingDays = []) {
@@ -33,4 +31,3 @@ export function calculateCalendarBusyMinutes(events = [], fromDate, horizonDays,
   return total;
 }
 
-export { expandRecurringEvents };
