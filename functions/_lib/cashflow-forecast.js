@@ -29,17 +29,21 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
  }
  events.sort((a,b)=>a.date.localeCompare(b.date)||(a.type===b.type?a.title.localeCompare(b.title):a.type==="income"?-1:1));
  const variableByMonth=new Map(variableExpensesByMonth.map(x=>[x.month,positive(x.total)]));
- const days=[];let balance=Number(startingBalance)||0,totalVariableExpenses=0,totalNewReserveAllocations=0;\n const activeReserves=reserves.filter(r=>Number(r.active)!==0).map(r=>({title:r.title,remaining:Math.max(0,Number(r.target_amount)-Number(r.current_amount)),monthly:positive(r.monthly_contribution)}));\n const existingReserved=activeReserves.reduce((sum,r)=>sum+Math.max(0,Number(reserves.find(x=>x.title===r.title)?.current_amount)||0),0);
+ const activeReserves=reserves.filter(r=>Number(r.active)!==0).map(r=>({title:r.title,remaining:Math.max(0,Number(r.target_amount)-Number(r.current_amount)),saved:positive(r.current_amount),monthly:positive(r.monthly_contribution)}));
+ const existingReserved=activeReserves.reduce((sum,r)=>sum+r.saved,0);
+ const days=[];let balance=Number(startingBalance)||0,totalVariableExpenses=0,totalNewReserveAllocations=0;
  for(let date=today;date<=end;date=addDays(date,1)){
   const dayEvents=events.filter(e=>e.date===date);
   const income=dayEvents.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0);
   const fixedExpense=dayEvents.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0);
-  const month=date.slice(0,7),variableExpense=(variableByMonth.get(month)||0)/monthDays(month);
+  const month=date.slice(0,7),daysInMonth=monthDays(month),variableExpense=(variableByMonth.get(month)||0)/daysInMonth;
+  const dailyReserve=activeReserves.reduce((sum,r)=>{const allocation=Math.min(r.monthly,r.remaining)/daysInMonth;r.remaining=Math.max(0,r.remaining-allocation);return sum+allocation;},0);
   const expense=fixedExpense+variableExpense;
-  totalVariableExpenses+=variableExpense;balance+=income-expense;
-  days.push({date,income,expenses:expense,fixed_expenses:fixedExpense,variable_expenses:variableExpense,net:income-expense,balance,events:dayEvents});
+  totalNewReserveAllocations+=dailyReserve;totalVariableExpenses+=variableExpense;balance+=income-expense;
+  days.push({date,income,expenses:expense,fixed_expenses:fixedExpense,variable_expenses:variableExpense,reserve_allocations:dailyReserve,available_balance:balance-existingReserved-totalNewReserveAllocations,net:income-expense,balance,events:dayEvents});
  }
  const totalIncome=events.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0);
  const totalExpenses=events.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0);
- return {period:{from:today,to:end,days:horizonDays},summary:{starting_balance:Number(startingBalance)||0,planned_income:totalIncome,planned_expenses:totalExpenses,variable_expenses:Math.round(totalVariableExpenses*100)/100,existing_reserves:Math.round(existingReserved*100)/100,new_reserve_allocations:Math.round(totalNewReserveAllocations*100)/100,total_reserved:Math.round((existingReserved+totalNewReserveAllocations)*100)/100,available_ending_balance:Math.round((balance-existingReserved-totalNewReserveAllocations)*100)/100,total_expenses:Math.round((totalExpenses+totalVariableExpenses)*100)/100,net:Math.round((totalIncome-totalExpenses-totalVariableExpenses)*100)/100,ending_balance:Math.round(balance*100)/100,lowest_balance:Math.min(Number(startingBalance)||0,...days.map(d=>d.balance)),lowest_available_balance:Math.min((Number(startingBalance)||0)-existingReserved,...days.map(d=>d.available_balance)),negative_days:days.filter(d=>d.available_balance<0).map(d=>d.date)},events,days};
+ const availableEnding=balance-existingReserved-totalNewReserveAllocations;
+ return {period:{from:today,to:end,days:horizonDays},summary:{starting_balance:Number(startingBalance)||0,planned_income:totalIncome,planned_expenses:totalExpenses,variable_expenses:Math.round(totalVariableExpenses*100)/100,existing_reserves:Math.round(existingReserved*100)/100,new_reserve_allocations:Math.round(totalNewReserveAllocations*100)/100,total_reserved:Math.round((existingReserved+totalNewReserveAllocations)*100)/100,available_ending_balance:Math.round(availableEnding*100)/100,total_expenses:Math.round((totalExpenses+totalVariableExpenses)*100)/100,net:Math.round((totalIncome-totalExpenses-totalVariableExpenses)*100)/100,ending_balance:Math.round(balance*100)/100,lowest_balance:Math.min(Number(startingBalance)||0,...days.map(d=>d.balance)),lowest_available_balance:Math.min((Number(startingBalance)||0)-existingReserved,...days.map(d=>d.available_balance)),negative_days:days.filter(d=>d.available_balance<0).map(d=>d.date)},events,days};
 }
