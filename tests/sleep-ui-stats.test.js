@@ -138,7 +138,7 @@ test("sleep chart excludes dates outside its selected window", () => {
   assert.doesNotMatch(html, /480 мин/);
 });
 
-const goalMatch = app.match(/function sleepGoalComparison\\(sessions,days,targetMinutes\\)\\{([\\s\\S]*?)\\n\\}/);
+const goalMatch = app.match(/function sleepGoalComparison\(sessions,days,targetMinutes\)\{([\s\S]*?)\n\}/);
 assert.ok(goalMatch, "sleepGoalComparison must remain available for sleep analytics");
 function runGoal(sessions, days, target, today = "2026-11-15") {
   const sleepLocalDate = () => today;
