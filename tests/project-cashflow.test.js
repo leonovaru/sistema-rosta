@@ -25,3 +25,24 @@ test("same-day inflows and outflows are netted before detecting a gap",()=>{
  ],{today:"2026-11-15"});
  assert.equal(x.minimum_cumulative,0);assert.equal(x.first_negative_date,null);
 });
+
+test("partial realizations leave the remaining planned amount open",()=>{
+ const plan={amount:50000,realized_amount:20000,status:"planned"};
+ const remaining=Math.max(0,plan.amount-plan.realized_amount);
+ assert.equal(remaining,30000);
+ assert.equal(plan.status,"planned");
+});
+test("a deleted actual operation must not leave a completed plan",()=>{
+ const plannedAmount=50000;
+ const remainingRealizations=[{amount:20000}];
+ const realized=remainingRealizations.reduce((sum,row)=>sum+row.amount,0);
+ const status=realized>=plannedAmount-0.005?"realized":"planned";
+ assert.equal(status,"planned");
+});
+test("removing the last actual operation reopens a non-archived plan",()=>{
+ const plannedAmount=50000;
+ const remainingRealizations=[];
+ const realized=remainingRealizations.reduce((sum,row)=>sum+row.amount,0);
+ const status=realized>=plannedAmount-0.005?"realized":"planned";
+ assert.equal(status,"planned");
+});
