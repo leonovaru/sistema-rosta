@@ -23,3 +23,16 @@ export function attachObservedSalesMetrics(directions=[],funnelRows=[]){
   avg_contact_to_won_days:null,contact_to_won_sample:0
  })}));
 }
+export function buildCompletedTaskResiduals(taskRows=[],timerTotals=[]){
+ const tracked=new Map((timerTotals||[]).map(row=>[String(row.task_id),Math.max(0,Number(row.tracked_minutes)||0)]));
+ const map=new Map();
+ for(const task of taskRows||[]){
+  const minutes=Math.max(0,Number(task.actual_minutes)||0)-Math.max(0,tracked.get(String(task.id))||0);
+  const key=task.direction_id||"unassigned";
+  const row=map.get(key)||{direction_id:task.direction_id||null,direction_title:task.direction_title||"Без направления",completed_tasks:0,actual_minutes:0};
+  row.completed_tasks+=1;
+  row.actual_minutes+=Math.max(0,minutes);
+  map.set(key,row);
+ }
+ return [...map.values()];
+}
