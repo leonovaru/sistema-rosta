@@ -1052,13 +1052,14 @@ async function refreshWakeNotificationStatus(){
   button.disabled=true;return;
  }
  try{
-  const data=await api("/api/push-subscriptions");
+  const registration=await navigator.serviceWorker.register("/sw.js");
+  const local=await registration.pushManager.getSubscription();
+  const endpoint=local?encodeURIComponent(local.endpoint):"";
+  const data=await api("/api/push-subscriptions"+(endpoint?"?endpoint="+endpoint:""));
   if(!data.supported){
    status.textContent="Отправка уведомлений ещё не настроена на сервере. Кнопка пробуждения в приложении уже доступна.";
    button.disabled=true;return;
   }
-  const registration=await navigator.serviceWorker.register("/sw.js");
-  const local=await registration.pushManager.getSubscription();
   if(data.subscribed&&local){
    button.textContent="Отключить уведомления";
    status.textContent="Уведомления включены: каждый день в 06:00 по часовому поясу настроек.";
@@ -1077,8 +1078,8 @@ $("wake-notifications-toggle").addEventListener("click",async()=>{
  button.disabled=true;
  try{
   const registration=await navigator.serviceWorker.register("/sw.js");
-  const config=await api("/api/push-subscriptions");
   const current=await registration.pushManager.getSubscription();
+  const config=await api("/api/push-subscriptions"+(current?"?endpoint="+encodeURIComponent(current.endpoint):""));
   if(current&&config.subscribed){
    await api("/api/push-subscriptions",{method:"DELETE",body:JSON.stringify({endpoint:current.endpoint})});
    await current.unsubscribe();
