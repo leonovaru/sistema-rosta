@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {calculateProjectEconomics} from "../functions/_lib/project-economics.js";
+import {calculateProjectEconomics,calculateClientEconomics} from "../functions/_lib/project-economics.js";
 
 test("project economics separates agreed value, receipts, direct costs and time",()=>{
  const x=calculateProjectEconomics({plannedRevenue:100000,received:60000,directExpenses:15000,minutes:900});
