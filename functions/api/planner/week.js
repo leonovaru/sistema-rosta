@@ -24,7 +24,7 @@ export async function onRequestGet({request,env}){
  const settings=await env.DB.prepare("SELECT timezone,daily_capacity_minutes,work_capacity_configured,working_days_json FROM settings WHERE user_id=?").bind(user.id).first();
  const timezone=settings?.timezone||"Europe/Moscow",today=localDate(timezone),end=addDays(today,6),endExclusive=addDays(end,1);
  let workingDays=[];try{workingDays=JSON.parse(settings?.working_days_json||"[]");}catch{}
- const [calendarRows,taskRows,targetRows,timeRows,completedRows,rhythmTimeRows,sleepRows,allocationRows]=await Promise.all([
+ const [calendarRows,taskRows,targetRows,timeRows,completedRows,rhythmTimeRows,sleepRows,allocationRows,blockLogRows]=await Promise.all([
   env.DB.prepare("SELECT id,title,event_type,start_at,end_at,actual_start_at,actual_end_at,status,mode,location,repeat_rule,repeat_until FROM calendar_events WHERE user_id=? AND status!='cancelled' AND ((start_at < ? AND end_at > ?) OR (repeat_rule!='none' AND start_at < ? AND repeat_until >= ?)) ORDER BY start_at").bind(user.id,endExclusive+"T00:00",today+"T00:00",endExclusive+"T00:00",today).all(),
   env.DB.prepare("SELECT t.id,t.title,t.description,t.status,t.priority,t.due_date,t.estimated_minutes,t.actual_minutes,COALESCE(t.direction_id,p.direction_id,c.direction_id) AS direction_id,d.title AS direction_title,t.life_area_id,la.title AS life_area_title,t.project_id,p.title AS project_title,t.client_id,c.name AS client_name FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN directions d ON d.id=COALESCE(t.direction_id,p.direction_id,c.direction_id) LEFT JOIN life_areas la ON la.id=t.life_area_id AND la.user_id=t.user_id WHERE t.user_id=? AND t.status IN ('todo','doing','waiting') ORDER BY t.due_date IS NULL,t.due_date,CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END").bind(user.id).all(),
   env.DB.prepare("SELECT wt.direction_id,wt.life_area_id,wt.project_id,wt.target_minutes,COALESCE(d.title,la.title,p.title) AS title FROM weekly_time_targets wt LEFT JOIN directions d ON d.id=wt.direction_id AND d.user_id=wt.user_id LEFT JOIN life_areas la ON la.id=wt.life_area_id AND la.user_id=wt.user_id LEFT JOIN projects p ON p.id=wt.project_id AND p.user_id=wt.user_id WHERE wt.user_id=?").bind(user.id).all(),
@@ -32,7 +32,8 @@ export async function onRequestGet({request,env}){
   env.DB.prepare("SELECT t.estimated_minutes,t.actual_minutes,t.status,t.direction_id,d.title AS direction_title,t.life_area_id,la.title AS life_area_title,t.project_id,p.title AS project_title FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN directions d ON d.id=COALESCE(t.direction_id,p.direction_id) LEFT JOIN life_areas la ON la.id=t.life_area_id AND la.user_id=t.user_id WHERE t.user_id=? AND t.status='done' AND t.completed_at>=datetime('now','-90 days') AND t.estimated_minutes IS NOT NULL AND t.actual_minutes IS NOT NULL").bind(user.id).all(),
   env.DB.prepare("SELECT started_at,ended_at,duration_minutes FROM task_time_entries WHERE user_id=? AND ended_at IS NOT NULL AND started_at>=datetime('now','-90 days') AND duration_minutes>0 ORDER BY started_at").bind(user.id).all(),
   env.DB.prepare("SELECT fell_asleep_at,woke_at,timezone,asleep_timezone,wake_timezone FROM sleep_sessions WHERE user_id=? AND sleep_date>=date('now','-90 days') AND fell_asleep_at IS NOT NULL AND woke_at IS NOT NULL ORDER BY sleep_date").bind(user.id).all(),
-  env.DB.prepare("SELECT task_id,allocation_date,minutes FROM daily_task_allocations WHERE user_id=? AND allocation_date>=? AND allocation_date<=? ORDER BY allocation_date").bind(user.id,today,end).all()
+  env.DB.prepare("SELECT task_id,allocation_date,minutes FROM daily_task_allocations WHERE user_id=? AND allocation_date>=? AND allocation_date<=? ORDER BY allocation_date").bind(user.id,today,end).all(),
+  env.DB.prepare("SELECT id,task_id,block_date,start_time,end_time,planned_minutes,actual_minutes,status,note FROM daily_block_logs WHERE user_id=? AND block_date>=? AND block_date<=? ORDER BY block_date,start_time").bind(user.id,today,end).all()
  ]);
  const events=expandRecurringEvents(calendarRows.results,today+"T00:00",endExclusive+"T00:00");
  const calendarDays=calculateCalendarBusyByDay(events,today,7,workingDays);
@@ -40,6 +41,7 @@ export async function onRequestGet({request,env}){
  const week=buildWeeklyWorkload({today,workingDays,dailyCapacityMinutes:settings?.daily_capacity_minutes,configured,calendarDays,calendarEvents:events,tasks:taskRows.results,targets:targetRows.results});
  applySavedDailyTaskAllocations(week,allocationRows.results,taskRows.results);
  week.daily_assignment_repairs=buildDailyAssignmentRepairs(week,allocationRows.results,taskRows.results);
+ week.daily_block_logs=blockLogRows.results;
  attachWeeklyTaskPriority(week,taskRows.results,today);
  attachWeeklyActualTime(week,timeRows.results,timezone,targetRows.results);
  week.estimate_accuracy=buildEstimateAccuracy(completedRows.results);
@@ -56,7 +58,7 @@ export async function onRequestGet({request,env}){
  week.daily_block_preferences={focus_minutes:focusMinutes,break_minutes:breakMinutes,prep_before_minutes:prepBeforeMinutes,buffer_after_minutes:bufferAfterMinutes};
  const dailyBlockOptions={focusMinutes,breakMinutes,startTime:url.searchParams.get("start_time")||"09:00",prepBeforeMinutes,bufferAfterMinutes,calendarEvents:events};
  week.daily_block_plans=buildDailyBlockPlans(week.days,dailyBlockOptions);
- week.today_remaining_plan=configured?buildRemainingDailyPlan({days:week.days,calendarEvents:events,now:new Date().toISOString(),timeZone:timezone,startTime:dailyBlockOptions.startTime,focusMinutes,breakMinutes,prepBeforeMinutes,bufferAfterMinutes}):null;
+ week.today_remaining_plan=configured?buildRemainingDailyPlan({days:week.days,calendarEvents:events,logs:blockLogRows.results,now:new Date().toISOString(),timeZone:timezone,startTime:dailyBlockOptions.startTime,focusMinutes,breakMinutes,prepBeforeMinutes,bufferAfterMinutes}):null;
  week.daily_block_scenarios=buildDailyBlockScenarios(week.days,dailyBlockOptions);
  week.daily_reallocation_proposals=buildDailyReallocationProposals(week.days,dailyBlockOptions);
  return json({week});
