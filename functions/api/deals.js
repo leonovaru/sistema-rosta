@@ -18,11 +18,7 @@ export async function onRequestGet({request,env}){
  const deals=rows.results.map(x=>({...x,amount:Number(x.amount),weighted_amount:Number(x.weighted_amount),history:eventsByDeal.get(x.id)||[]}));
  const open=deals.filter(x=>!["won","lost"].includes(x.stage)),won=deals.filter(x=>x.stage==="won"),lost=deals.filter(x=>x.stage==="lost");
  const lossReasons=Object.entries(LOSS_LABELS).map(([key,label])=>{const items=lost.filter(x=>x.loss_reason_category===key);return {key,label,count:items.length,amount:items.reduce((s,x)=>s+x.amount,0)};}).filter(x=>x.count).sort((a,b)=>b.count-a.count);
- const monthMap=new Map();
- for(const row of monthlyDeals.results){monthMap.set(row.month,{month:row.month,planned_amount:Number(row.planned_amount||0),weighted_amount:Number(row.weighted_amount||0),deal_count:Number(row.deal_count||0),actual_amount:0});}
- for(const row of monthlyIncome.results){const item=monthMap.get(row.month)||{month:row.month,planned_amount:0,weighted_amount:0,deal_count:0,actual_amount:0};item.actual_amount=Number(row.actual_amount||0);monthMap.set(row.month,item);}
- const monthly_forecast=[...monthMap.values()].sort((a,b)=>a.month.localeCompare(b.month));
- const undated_open={count:Number(undatedDeals?.count||0),amount:Number(undatedDeals?.amount||0)};
+ const {monthly_forecast,undated_open}=buildMonthlyDealForecast({dealRows:monthlyDeals.results,incomeRows:monthlyIncome.results,undatedRow:undatedDeals});
  return json({deals,summary:{open_count:open.length,open_amount:open.reduce((s,x)=>s+x.amount,0),weighted_amount:open.reduce((s,x)=>s+x.weighted_amount,0),won_amount:won.reduce((s,x)=>s+x.amount,0),lost_count:lost.length,lost_amount:lost.reduce((s,x)=>s+x.amount,0)},loss_reasons:lossReasons,monthly_forecast,undated_open});
 }
 export async function onRequestPost({request,env}){
