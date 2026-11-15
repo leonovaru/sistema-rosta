@@ -21,7 +21,7 @@ export function recurringTaskDates(template,from,to){
   for(let i=0;i<14;i++){
    const date=monthDate(cursor.getUTCFullYear(),cursor.getUTCMonth(),d);
    if(date>to||date>until)break;
-   if(date>=start)dates.push(date);
+   if(date>=start&&date>=from)dates.push(date);
    cursor.setUTCMonth(cursor.getUTCMonth()+1);
   }
  }
