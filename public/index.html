@@ -140,7 +140,7 @@
               <label>На что<input id="expense-title" required maxlength="180" placeholder="Продукты, аренда, сервис"></label>
               <label>Сумма, ₽<input id="expense-amount" type="number" min="0.01" step="0.01" required></label>
               <label>Категория<input id="expense-category" maxlength="80" value="Прочее"></label>
-              <label>Направление дохода<select id="expense-direction"><option value="">Не распределять / личный расход</option></select></label>
+              <label>Направление дохода<select id="expense-direction"><option value="">Не распределять / личный расход</option></select></label><label>Клиент<select id="expense-client"><option value="">Без клиента</option></select></label><label>Проект<select id="expense-project"><option value="">Без проекта</option></select></label>
               <label>Списать из корзины<select id="expense-bucket" required><option value="">Выбери корзину или вне корзин</option><option value="none">Вне корзин</option></select></label>
               <label>Дата<input id="expense-date" type="date" required></label>
               <button class="button primary">Добавить расход</button>
@@ -285,7 +285,7 @@
           </form>
           <div class="task-filters"><button type="button" class="filter active" data-task-filter="today">Сегодня</button><button type="button" class="filter" data-task-filter="week">Неделя</button><button type="button" class="filter" data-task-filter="all">Все</button></div>
           <div id="tasks" class="task-list"></div></section>
-          <section class="panel"><div class="section-head"><div><p class="eyebrow">ДЕНЬГИ</p><h2>Добавить доход</h2></div></div><form id="income-form" class="stack-form"><label>Сумма, ₽<input id="income-amount" type="number" min="1" step="0.01" required placeholder="Например, 15000"></label><label>Направление<select id="income-direction"></select></label><label>Дата<input id="income-date" type="date" required></label><label>Комментарий<input id="income-note" maxlength="500" placeholder="За что поступление"></label><button class="button primary">Записать поступление</button></form><div id="income-recent" class="income-recent"></div></section>
+          <section class="panel"><div class="section-head"><div><p class="eyebrow">ДЕНЬГИ</p><h2>Добавить доход</h2></div></div><form id="income-form" class="stack-form"><label>Сумма, ₽<input id="income-amount" type="number" min="1" step="0.01" required placeholder="Например, 15000"></label><label>Направление<select id="income-direction"></select></label><label>Дата<input id="income-date" type="date" required></label><label>Клиент<select id="income-client"><option value="">Без клиента</option></select></label><label>Проект<select id="income-project"><option value="">Без проекта</option></select></label><label>Комментарий<input id="income-note" maxlength="500" placeholder="За что поступление"></label><button class="button primary">Записать поступление</button></form><div id="income-recent" class="income-recent"></div></section>
         </div>
         <section class="panel directions-panel"><div class="section-head"><div><p class="eyebrow">ПОРТФЕЛЬ</p><h2>Направления дохода</h2></div><span class="muted">8 потоков</span></div><div id="directions" class="directions-grid"></div></section>
       </section>
