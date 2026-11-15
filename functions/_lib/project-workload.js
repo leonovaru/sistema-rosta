@@ -29,7 +29,7 @@ export function calculateProjectWorkload(projects = [], today) {
   const enriched = projects.map(project => {
     const deadline = project.deadline || null;
     const days = deadline ? Math.round((Date.parse(deadline + "T12:00:00Z") - Date.parse(today + "T12:00:00Z")) / 86400000) : null;
-    const workdays = deadline && days >= 0 ? businessDaysInclusive(today, deadline) : null;
+    const workdays = deadline && days >= 0 && ["active", "waiting"].includes(project.status) ? businessDaysInclusive(today, deadline) : null;
     const minutes = Math.max(0, Number(project.open_estimated_minutes) || 0);
     return {
       ...project,
