@@ -58,3 +58,16 @@
 .scenario-directions>div{display:grid;gap:3px}
 .scenario-directions span{font-size:12px}
 @media(max-width:900px){.scenario-grid{grid-template-columns:1fr}}
+
+.sales-plan-section{margin-top:24px;padding-top:20px;border-top:1px solid #eceef3}
+.sales-plan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.sales-plan-card{border:1px solid #eceef3;border-radius:14px;padding:15px;min-width:0}
+.sales-plan-title{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.sales-plan-title span{font-size:11px;color:#85899a;text-align:right}
+.sales-plan-inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.sales-plan-inputs label{font-size:10px}
+.sales-plan-inputs input{padding:9px}
+.sales-plan-numbers{display:grid;gap:6px;margin:12px 0;font-size:12px}
+.sales-plan-numbers span{display:flex;justify-content:space-between;gap:8px}
+.sales-plan-card button:disabled{opacity:.45;cursor:not-allowed}
+@media(max-width:800px){.sales-plan-grid{grid-template-columns:1fr}.sales-plan-inputs{grid-template-columns:1fr 1fr}}
