@@ -55,9 +55,11 @@ export async function onRequestPost({ request, env }) {
     const endedAt = new Date().toISOString();
     const minutes = elapsedMinutes(active.started_at,endedAt);
     if (minutes===null) return json({ error:"Не удалось рассчитать время таймера" },500);
-    const update = await env.DB.prepare("UPDATE task_time_entries SET ended_at=?,duration_minutes=? WHERE id=? AND user_id=? AND ended_at IS NULL").bind(endedAt,minutes,active.id,user.id).run();
+    const [update] = await env.DB.batch([
+      env.DB.prepare("UPDATE task_time_entries SET ended_at=?,duration_minutes=? WHERE id=? AND user_id=? AND ended_at IS NULL").bind(endedAt,minutes,active.id,user.id),
+      env.DB.prepare("UPDATE tasks SET actual_minutes=COALESCE(actual_minutes,0)+? WHERE id=? AND user_id=? AND EXISTS (SELECT 1 FROM task_time_entries WHERE id=? AND user_id=? AND ended_at=? AND duration_minutes=?)").bind(minutes,active.task_id,user.id,active.id,user.id,endedAt,minutes)
+    ]);
     if (!update.meta.changes) return json({ error:"Таймер уже остановлен" },409);
-    await env.DB.prepare("UPDATE tasks SET actual_minutes=COALESCE(actual_minutes,0)+? WHERE id=? AND user_id=?").bind(minutes,active.task_id,user.id).run();
     await invalidateTodayPlan(env,user.id);
     return json({ ok:true,task_id:active.task_id,tracked_minutes:minutes,ended_at:endedAt });
   }
