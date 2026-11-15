@@ -105,7 +105,7 @@ export async function onRequestPost({ request, env }) {
   const tasksResult = await env.DB.prepare(`
     SELECT t.id,t.title,t.description,t.status,t.priority,t.due_date,t.estimated_minutes,t.actual_minutes,t.direction_id,d.title AS direction_title,d.target_month AS direction_target
     FROM tasks t LEFT JOIN directions d ON d.id=t.direction_id
-    WHERE t.user_id=? AND t.status IN ('todo','doing','waiting') AND (t.due_date IS NULL OR t.due_date<=?)
+    WHERE t.user_id=? AND t.status IN ('todo','doing') AND (t.due_date IS NULL OR t.due_date<=?)
     ORDER BY CASE t.status WHEN 'doing' THEN 0 ELSE 1 END,t.due_date IS NULL,t.due_date,
       CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END
     LIMIT 60
