@@ -57,6 +57,18 @@
             <div class="section-head"><div><p class="eyebrow">ПЛАНИРОВАНИЕ ДЕНЕГ</p><h3>Прогноз денежного потока</h3></div><div class="analytics-actions"><select id="cashflow-days" aria-label="Период прогноза"><option value="30">30 дней</option><option value="90" selected>90 дней</option></select><button type="button" class="button ghost" id="refresh-cashflow">Обновить</button></div></div>
             <div class="cashflow-opening"><label>Сколько денег сейчас доступно, ₽<input id="cashflow-opening-balance" type="number" min="0" step="0.01" value="0"></label><button type="button" class="button ghost" id="save-opening-balance">Сохранить остаток</button><small class="fine">Это стартовая сумма для прогноза, не доход и не прибыль.</small></div>
             <div class="analytics-metrics" id="cashflow-summary"></div><div id="variable-expense-forecast" class="finance-list"></div>
+            <section class="category-budget-section">
+              <div class="section-head"><div><p class="eyebrow">БЮДЖЕТ И КОНТРОЛЬ</p><h3>План и факт расходов по категориям</h3></div><label>Месяц<input id="budget-month" type="month"></label></div>
+              <form id="budget-form" class="finance-form">
+                <label>Категория<input id="budget-category" list="budget-category-options" maxlength="80" required placeholder="Продукты, транспорт, связь"></label>
+                <datalist id="budget-category-options"><option value="Продукты"><option value="Транспорт"><option value="Жильё"><option value="Связь и интернет"><option value="Здоровье"><option value="Коты"><option value="Дом"><option value="Обучение"><option value="Развлечения"><option value="Прочее"></datalist>
+                <label>План на месяц, ₽<input id="budget-amount" type="number" min="0" max="100000000" step="0.01" required></label>
+                <button class="button primary">Сохранить бюджет</button>
+              </form>
+              <div id="budget-summary" class="analytics-metrics"></div>
+              <div id="budget-categories" class="finance-list"></div>
+              <p class="fine">Факт берётся из внесённых расходов за выбранный месяц. Категории без заданного лимита тоже отображаются — их можно включить в бюджет.</p>
+            </section>
             <div class="cashflow-columns"><div><h4>Планируемое поступление или расход</h4><form id="cashflow-form" class="finance-form">
               <label>Название<input id="cashflow-title" maxlength="180" required placeholder="Оплата клиента, закупка, сервис"></label>
               <label>Тип<select id="cashflow-type"><option value="income">Ожидаемое поступление</option><option value="expense">Планируемый расход</option></select></label>
