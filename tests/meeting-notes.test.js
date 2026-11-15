@@ -55,3 +55,19 @@ test("meeting follow-up summary does not mark undated commitments overdue",()=>{
  assert.equal(summary.overdue,0);
  assert.equal(summary.pending,1);
 });
+
+import { listMeetingFollowups } from "../functions/_lib/meeting-followup.js";
+
+test("outstanding meeting commitments include missing tasks and overdue flags but exclude completed",()=>{
+ const items=listMeetingFollowups([
+  {id:"m1",title:"Планирование",meeting_date:"2026-11-10",agreements:[
+   {task:"Отправить смету",task_id:"t1",task_status:"doing",task_due_date:"2026-11-12"},
+   {task:"Позвонить клиенту",task_id:"t2",task_status:"done",due_date:"2026-11-01"},
+   {task:"Согласовать сроки",due_date:"2026-11-20"}
+  ]}
+ ],"2026-11-15");
+ assert.equal(items.length,2);
+ assert.equal(items[0].overdue,true);
+ assert.equal(items[1].task_missing,true);
+ assert.equal(items[1].overdue,false);
+});
