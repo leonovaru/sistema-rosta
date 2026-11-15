@@ -1,7 +1,7 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 
-const DATE=/^\\d{4}-\\d{2}-\\d{2}$/;
-const LOCAL_DATE_TIME=/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/;
+const DATE=/^\d{4}-\d{2}-\d{2}$/;
+const LOCAL_DATE_TIME=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 const SOURCES=["manual","app","push","health_import"];
 const CONFIDENCE=["exact","approximate","imported"];
 
@@ -22,7 +22,14 @@ async function ensureSession(env,userId,sleepDate,timezone){
   await env.DB.prepare("INSERT OR IGNORE INTO sleep_sessions (id,user_id,sleep_date,timezone) VALUES (?,?,?,?)").bind(id,userId,sleepDate,timezone).run();
   return await env.DB.prepare("SELECT * FROM sleep_sessions WHERE user_id=? AND sleep_date=?").bind(userId,sleepDate).first();
 }
-function validateTime(value){return value==null||value===""||LOCAL_DATE_TIME.test(String(value));}
+function validateTime(value){
+  if(value==null||value==="")return true;
+  const match=String(value).match(LOCAL_DATE_TIME);
+  if(!match)return false;
+  const [date,time]=String(value).split("T"),[year,month,day]=date.split("-").map(Number),[hour,minute]=time.split(":").map(Number);
+  const parsed=new Date(Date.UTC(year,month-1,day,hour,minute));
+  return parsed.getUTCFullYear()===year&&parsed.getUTCMonth()===month-1&&parsed.getUTCDate()===day&&hour<=23&&minute<=59;
+}
 
 export async function onRequestGet({request,env}){
   const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
@@ -61,6 +68,8 @@ export async function onRequestPost({request,env}){
     const id=String(body?.id||"");
     if(!id)return json({error:"Запись не выбрана"},400);
     for(const key of ["went_to_bed_at","fell_asleep_at","woke_at"])if(!validateTime(body[key]))return json({error:"Проверь дату и время"},400);
+    const bed=body.went_to_bed_at||null,asleep=body.fell_asleep_at||null,wake=body.woke_at||null;
+    if((bed&&asleep&&asleep<bed)||(asleep&&wake&&wake<=asleep)||(bed&&wake&&wake<=bed))return json({error:"Проверь последовательность времени: отход ко сну, засыпание, пробуждение"},400);
     const source=(v)=>SOURCES.includes(v)?v:"manual";
     const confidence=(v)=>CONFIDENCE.includes(v)?v:"approximate";
     const note=String(body?.note||"").trim().slice(0,1000);
