@@ -15,6 +15,6 @@ export function buildObservedSalesFunnel({interactionRows=[],dealEventRows=[],fr
  return [...ids].map(direction_id=>{
   const contacts=contacted.get(direction_id)?.size||0,leads=qualified.get(direction_id)?.size||0,sales=won.get(direction_id)?.size||0;
   const contactToLead=contacts?Math.min(100,leads/contacts*100):null,leadToSale=leads?Math.min(100,sales/leads*100):null;
-  return {direction_id,period_days:90,contacted_clients:contacts,qualified_clients:leads,won_clients:sales,observed_contact_to_lead_percent:contactToLead===null?null:Math.round(contactToLead*10)/10,observed_lead_to_sale_percent:leadToSale===null?null:Math.round(leadToSale*10)/10,has_enough_contact_sample:contacts>=5,has_enough_lead_sample:leads>=3,can_suggest:contacts>=5&&leads>=3};
+  return {direction_id,period_days:90,observed_contacted_clients:contacts,qualified_clients:leads,won_clients:sales,observed_contact_to_lead_percent:contactToLead===null?null:Math.round(contactToLead*10)/10,observed_lead_to_sale_percent:leadToSale===null?null:Math.round(leadToSale*10)/10,has_enough_contact_sample:contacts>=5,has_enough_lead_sample:leads>=3,can_suggest:contacts>=5&&leads>=3};
  });
 }
