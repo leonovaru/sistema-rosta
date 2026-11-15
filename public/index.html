@@ -52,12 +52,14 @@
             <article><span>Остаток долгов</span><b id="finance-debt-balance">0 ₽</b></article>
             <article><span>Просрочено и к оплате за 30 дней</span><b id="finance-upcoming">0 ₽</b></article><article><span>Останется после них</span><b id="finance-after-upcoming">0 ₽</b></article>
           </div>
+          <section class="profitability-section"><div class="section-head"><div><p class="eyebrow">ЭКОНОМИКА НАПРАВЛЕНИЙ</p><h3>Что приносит больше результата</h3></div><div class="analytics-actions"><span id="profitability-period" class="muted"></span><button id="refresh-profitability" type="button" class="button ghost">Обновить</button></div></div><div id="profitability-summary" class="analytics-metrics"></div><div id="profitability-directions" class="analytics-list"></div><p class="fine">Вклад = поступления минус расходы, прямо отнесённые к направлению. Доход на час и вклад на час рассчитываются по фактическому времени завершённых задач. Это управленческая оценка, а не бухгалтерская прибыль: общие расходы и проценты по долгам сюда не распределяются.</p></section>
           <p class="fine">Погашение долгов и оплата обязательных платежей учитываются отдельно. Не записывай их повторно как обычные расходы. Проценты по долгам пока фиксируются справочно и не начисляются автоматически.</p>
           <div class="finance-forms">
             <form id="expense-form" class="finance-form"><h3>Записать расход</h3>
               <label>На что<input id="expense-title" required maxlength="180" placeholder="Продукты, аренда, сервис"></label>
               <label>Сумма, ₽<input id="expense-amount" type="number" min="0.01" step="0.01" required></label>
               <label>Категория<input id="expense-category" maxlength="80" value="Прочее"></label>
+              <label>Направление дохода<select id="expense-direction"><option value="">Не распределять / личный расход</option></select></label>
               <label>Дата<input id="expense-date" type="date" required></label>
               <button class="button primary">Добавить расход</button>
             </form>
