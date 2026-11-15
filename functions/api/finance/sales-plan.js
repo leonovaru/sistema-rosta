@@ -5,11 +5,13 @@ function month(zone){const p=new Intl.DateTimeFormat("en-CA",{timeZone:zone,year
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const settings=await env.DB.prepare("SELECT timezone,monthly_target FROM settings WHERE user_id=?").bind(user.id).first(),zone=settings?.timezone||"Europe/Moscow",m=month(zone);
- const [dirs,income]=await Promise.all([
+ const [dirs,income,pipeline]=await Promise.all([
   env.DB.prepare("SELECT d.id direction_id,d.title,COALESCE(t.share_percent,0) share_percent,COALESCE(t.average_sale_amount,0) average_sale_amount,COALESCE(f.contact_to_lead_percent,40) contact_to_lead_percent,COALESCE(f.lead_to_sale_percent,20) lead_to_sale_percent,CASE WHEN f.direction_id IS NULL THEN 1 ELSE 0 END assumptions_default FROM directions d LEFT JOIN direction_revenue_targets t ON t.direction_id=d.id AND t.user_id=d.user_id LEFT JOIN direction_sales_funnels f ON f.direction_id=d.id AND f.user_id=d.user_id WHERE d.user_id=? ORDER BY d.sort_order,d.id").bind(user.id).all(),
-  env.DB.prepare("SELECT direction_id,SUM(amount) actual FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=? GROUP BY direction_id").bind(user.id,m.start,m.today).all()
+  env.DB.prepare("SELECT direction_id,SUM(amount) actual FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=? GROUP BY direction_id").bind(user.id,m.start,m.today).all(),
+  env.DB.prepare("SELECT c.direction_id,COUNT(*) potential_clients,SUM(CASE WHEN EXISTS(SELECT 1 FROM client_interactions ci WHERE ci.user_id=c.user_id AND ci.client_id=c.id AND ci.occurred_on>=date(?,'-29 days') AND ci.occurred_on<=?) THEN 1 ELSE 0 END) contacted_clients FROM clients c WHERE c.user_id=? AND c.status='lead' AND c.direction_id IS NOT NULL GROUP BY c.direction_id").bind(m.today,m.today,user.id).all()
  ]);
  const actual=new Map(income.results.map(x=>[x.direction_id||"",Number(x.actual)||0]));
+ const pipelineByDirection=new Map(pipeline.results.map(x=>[x.direction_id,{potential_clients:Number(x.potential_clients)||0,contacted_clients:Number(x.contacted_clients)||0}]));
  const allSharesZero=dirs.results.length>0&&dirs.results.every(d=>Number(d.share_percent)===0);
  const directions=dirs.results.map(d=>({...d,remaining_target:Math.max(0,(Number(settings?.monthly_target)||300000)*(allSharesZero?100/dirs.results.length:Number(d.share_percent))/100-(actual.get(d.direction_id)||0))}));
  return json({period:{days_remaining:Math.max(1,m.days-m.day+1),day:m.day,days_in_month:m.days,timezone:zone},suggested_funnel_assumptions:{contact_to_lead_percent:40,lead_to_sale_percent:20},directions:buildSalesPlan(directions,Math.max(1,m.days-m.day+1)).map((x,i)=>({...x,assumptions_default:Boolean(dirs.results[i].assumptions_default)}))});
