@@ -187,13 +187,15 @@ export async function onRequestPost({request,env}){
    direction_id:allowed.direction_id.has(t.direction_id)?t.direction_id:null,
    client_id:allowed.client_id.has(t.client_id)?t.client_id:null,
    project_id:allowed.project_id.has(t.project_id)?t.project_id:null,
+   project_draft_index:Number.isInteger(t.project_draft_index)&&t.project_draft_index>=0&&t.project_draft_index<workspaceItems.filter(x=>x.type==="project").length?t.project_draft_index:null,
+   client_draft_index:Number.isInteger(t.client_draft_index)&&t.client_draft_index>=0&&t.client_draft_index<workspaceItems.filter(x=>x.type==="client").length?t.client_draft_index:null,
    life_area_id:allowed.life_area_id.has(t.life_area_id)?t.life_area_id:null,
    parent_index:Number.isInteger(t.parent_index)&&t.parent_index>=0&&t.parent_index<i?t.parent_index:null,
    operation:t.operation==="update"&&existingById.has(t.target_task_id)?"update":"create",
    target_task_id:existingById.has(t.target_task_id)?t.target_task_id:null,
    possible_duplicate_task_id:existingById.has(t.possible_duplicate_task_id)?t.possible_duplicate_task_id:null
   }));
-  if(!tasks.length||tasks.some(task=>!task.title))throw new Error("Some tasks have no title");
+  if(tasks.some(task=>!task.title))throw new Error("Some tasks have no title");
   for(const task of tasks){
    if(task.operation!=="update"&&!task.possible_duplicate_task_id){
     const candidate=existingTasks.results
