@@ -7,12 +7,22 @@ async function owned(env,table,id,userId){if(!id)return true;return Boolean(awai
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const rows=await env.DB.prepare("SELECT d.*,c.name client_name,dr.title direction_title,ROUND(d.amount*d.probability_percent/100,2) weighted_amount FROM deals d LEFT JOIN clients c ON c.id=d.client_id AND c.user_id=d.user_id LEFT JOIN directions dr ON dr.id=d.direction_id AND dr.user_id=d.user_id WHERE d.user_id=? ORDER BY CASE d.stage WHEN 'awaiting_payment' THEN 0 WHEN 'proposal' THEN 1 WHEN 'negotiation' THEN 2 WHEN 'contact' THEN 3 WHEN 'won' THEN 4 ELSE 5 END,d.expected_close_date,d.updated_at DESC").bind(user.id).all();
+ const [monthlyDeals,monthlyIncome,undatedDeals]=await Promise.all([
+  env.DB.prepare("SELECT substr(expected_close_date,1,7) month,COUNT(*) deal_count,SUM(amount) planned_amount,SUM(amount*probability_percent/100) weighted_amount FROM deals WHERE user_id=? AND stage NOT IN ('won','lost') AND expected_close_date IS NOT NULL GROUP BY substr(expected_close_date,1,7) ORDER BY month").bind(user.id).all(),
+  env.DB.prepare("SELECT substr(received_on,1,7) month,SUM(amount) actual_amount FROM income_entries WHERE user_id=? GROUP BY substr(received_on,1,7) ORDER BY month").bind(user.id).all(),
+  env.DB.prepare("SELECT COUNT(*) count,SUM(amount) amount FROM deals WHERE user_id=? AND stage NOT IN ('won','lost') AND expected_close_date IS NULL").bind(user.id).first()
+ ]);
  const events=await env.DB.prepare("SELECT e.* FROM deal_events e JOIN deals d ON d.id=e.deal_id AND d.user_id=e.user_id WHERE e.user_id=? ORDER BY e.created_at DESC LIMIT 500").bind(user.id).all();
  const eventsByDeal=new Map();for(const event of events.results){if(!eventsByDeal.has(event.deal_id))eventsByDeal.set(event.deal_id,[]);eventsByDeal.get(event.deal_id).push(event);}
  const deals=rows.results.map(x=>({...x,amount:Number(x.amount),weighted_amount:Number(x.weighted_amount),history:eventsByDeal.get(x.id)||[]}));
  const open=deals.filter(x=>!["won","lost"].includes(x.stage)),won=deals.filter(x=>x.stage==="won"),lost=deals.filter(x=>x.stage==="lost");
  const lossReasons=Object.entries(LOSS_LABELS).map(([key,label])=>{const items=lost.filter(x=>x.loss_reason_category===key);return {key,label,count:items.length,amount:items.reduce((s,x)=>s+x.amount,0)};}).filter(x=>x.count).sort((a,b)=>b.count-a.count);
- return json({deals,summary:{open_count:open.length,open_amount:open.reduce((s,x)=>s+x.amount,0),weighted_amount:open.reduce((s,x)=>s+x.weighted_amount,0),won_amount:won.reduce((s,x)=>s+x.amount,0),lost_count:lost.length,lost_amount:lost.reduce((s,x)=>s+x.amount,0)},loss_reasons:lossReasons});
+ const monthMap=new Map();
+ for(const row of monthlyDeals.results){monthMap.set(row.month,{month:row.month,planned_amount:Number(row.planned_amount||0),weighted_amount:Number(row.weighted_amount||0),deal_count:Number(row.deal_count||0),actual_amount:0});}
+ for(const row of monthlyIncome.results){const item=monthMap.get(row.month)||{month:row.month,planned_amount:0,weighted_amount:0,deal_count:0,actual_amount:0};item.actual_amount=Number(row.actual_amount||0);monthMap.set(row.month,item);}
+ const monthly_forecast=[...monthMap.values()].sort((a,b)=>a.month.localeCompare(b.month));
+ const undated_open={count:Number(undatedDeals?.count||0),amount:Number(undatedDeals?.amount||0)};
+ return json({deals,summary:{open_count:open.length,open_amount:open.reduce((s,x)=>s+x.amount,0),weighted_amount:open.reduce((s,x)=>s+x.weighted_amount,0),won_amount:won.reduce((s,x)=>s+x.amount,0),lost_count:lost.length,lost_amount:lost.reduce((s,x)=>s+x.amount,0)},loss_reasons:lossReasons,monthly_forecast,undated_open});
 }
 export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
