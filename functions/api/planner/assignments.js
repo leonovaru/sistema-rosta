@@ -4,6 +4,7 @@ import { expandRecurringEvents } from "../../_lib/calendar.js";
 import { calculateCalendarBusyByDay } from "../../_lib/calendar-capacity.js";
 import { buildWeeklyWorkload } from "../../_lib/weekly-workload.js";
 import { validateDailyTaskMove } from "../../_lib/daily-task-move-validation.js";
+import { buildDailyBlockPlans } from "../../_lib/daily-block-plans.js";
 function addDays(date,days){const value=new Date(date+"T12:00:00Z");value.setUTCDate(value.getUTCDate()+days);return value.toISOString().slice(0,10);}
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));return values.year+"-"+values.month+"-"+values.day;}
 export async function onRequestGet({request,env}){
@@ -53,7 +54,15 @@ export async function onRequestPut({request,env}){
   const baseWeek=buildWeeklyWorkload({today,workingDays,dailyCapacityMinutes:settings?.daily_capacity_minutes,configured:true,calendarDays,calendarEvents:events,tasks:allTasks.results,targets:[]});
   const existingRows=await env.DB.prepare("SELECT task_id,allocation_date,minutes FROM daily_task_allocations WHERE user_id=? AND allocation_date>=? AND allocation_date<=?").bind(user.id,today,weekEnd).all();
   applySavedDailyTaskAllocations(baseWeek,existingRows.results,allTasks.results);
-  const validation=validateDailyTaskMove({week:baseWeek,taskId,fromDate,toDate,minutes:moveMinutes,rows:schedule.rows,startTime:move.start_time,endTime:move.end_time});
+  const preferences=move.preferences||{};
+  const focusMinutes=Math.max(15,Math.min(120,Math.round(Number(preferences.focus_minutes)||50)));
+  const breakMinutes=Math.max(3,Math.min(30,Math.round(Number(preferences.break_minutes)||10)));
+  const prepBeforeMinutes=Math.max(0,Math.min(120,Math.round(Number(preferences.prep_before_minutes)||0)));
+  const bufferAfterMinutes=Math.max(0,Math.min(120,Math.round(Number(preferences.buffer_after_minutes)||0)));
+  const startOfDay=/^\d{2}:\d{2}$/.test(String(preferences.start_time||""))?preferences.start_time:"09:00";
+  const targetDay=baseWeek.days.find(day=>day.date===toDate);
+  const targetSlotPlan=targetDay?buildDailyBlockPlans([{...targetDay,tasks:targetDay.tasks?.length?targetDay.tasks:[{id:null,title:"",minutes:0}]}],{focusMinutes,breakMinutes,startTime:startOfDay,prepBeforeMinutes,bufferAfterMinutes,calendarEvents:events})[0]:null;
+  const validation=validateDailyTaskMove({week:baseWeek,taskId,fromDate,toDate,minutes:moveMinutes,rows:schedule.rows,startTime:move.start_time,endTime:move.end_time,targetSlotPlan});
   if(!validation.ok)return json({error:validation.error},409);
  }
  const statements=[];
