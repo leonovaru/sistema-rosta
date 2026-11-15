@@ -173,6 +173,31 @@ $("task-project").addEventListener("change",()=>{const p=workspaceData.projects.
 $("task-life-area").addEventListener("change",()=>{if($("task-life-area").value){$("task-project").value="";$("task-client").value="";$("task-direction").value="";$("task-parent").value="";}});
 $("task-parent").addEventListener("change",()=>{const p=allTasks.find(x=>x.id===$("task-parent").value);if(p){$("task-project").value=p.project_id||"";$("task-client").value=p.client_id||"";$("task-direction").value=p.direction_id||"";$("task-life-area").value=p.life_area_id||"";}});
 
+
+let recurringTemplates=[];
+const recurrenceLabels={daily:"Каждый день",weekly:"Каждую неделю",monthly:"Каждый месяц"};
+async function loadRecurringTemplates(){
+ const data=await api("/api/task-templates");recurringTemplates=data.templates||[];
+ $("recurring-area").innerHTML='<option value="">Без области</option>'+workspaceData.life_areas.map(a=>'<option value="'+escapeHtml(a.id)+'">'+escapeHtml(a.title)+'</option>').join("");
+ $("recurring-start").value=localToday;
+ $("recurring-task-list").innerHTML=recurringTemplates.length?recurringTemplates.map(t=>'<article class="recurring-item"><div><b>'+escapeHtml(t.title)+'</b><small>'+escapeHtml(t.life_area_title||"Без личной области")+' · '+recurrenceLabels[t.recurrence]+' · с '+escapeHtml(t.start_date)+(t.end_date?' по '+escapeHtml(t.end_date):' без даты окончания')+'</small><small>Открытых задач на ближайшие 30 дней: '+Number(t.open_instances||0)+(t.active?'':' · приостановлено')+'</small></div><button type="button" class="button ghost" data-toggle-template="'+escapeHtml(t.id)+'" data-active="'+(t.active?0:1)+'">'+(t.active?'Приостановить':'Возобновить')+'</button></article>').join(""):'<p class="muted">Шаблонов пока нет. Добавь регулярные дела — они будут появляться в списке задач автоматически.</p>';
+}
+$("recurring-task-form").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const button=e.submitter;button.disabled=true;button.textContent="Создаю…";
+ try{
+  await api("/api/task-templates",{method:"POST",body:JSON.stringify({title:$("recurring-title").value,description:$("recurring-description").value,life_area_id:$("recurring-area").value||null,recurrence:$("recurring-rule").value,start_date:$("recurring-start").value,end_date:$("recurring-end").value||null,estimated_minutes:$("recurring-minutes").value||null,priority:$("recurring-priority").value})});
+  $("recurring-task-form").reset();$("recurring-start").value=localToday;await loadRecurringTemplates();await loadTasks();
+ }catch(err){alert(err.message);}
+ finally{button.disabled=false;button.textContent="Создать повторяющуюся задачу";}
+});
+$("recurring-task-list").addEventListener("click",async e=>{
+ const b=e.target.closest("[data-toggle-template]");if(!b)return;
+ b.disabled=true;
+ try{await api("/api/task-templates",{method:"POST",body:JSON.stringify({action:"toggle",id:b.dataset.toggleTemplate,active:Number(b.dataset.active)})});await loadRecurringTemplates();await loadTasks();}
+ catch(err){alert(err.message);b.disabled=false;}
+});
+
 async function loadTasks() {
   const data = await api("/api/tasks"); allTasks = data.tasks;
   $("task-parent").innerHTML = '<option value="">Самостоятельная задача</option>' + allTasks.filter(t=>t.status!=="done").map(t=>'<option value="'+escapeHtml(t.id)+'">'+escapeHtml(t.title)+'</option>').join("");
@@ -399,7 +424,7 @@ async function boot() {
   try {
     const { user } = await api("/api/auth/me");
     if (!user) return showAuth();
-    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadWorkspace(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
+    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadWorkspace(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
   } catch { showAuth(); }
 }
 boot();
