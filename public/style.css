@@ -118,3 +118,22 @@
 .project-economics-status{display:block;margin:5px 0 10px;color:var(--muted,#687080)}
 .project-economics-status.warning{color:var(--danger,#b54747);font-weight:600}
 @media(max-width:560px){.project-economics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+.project-cashflow{margin:12px 0;padding:12px;border:1px solid var(--line,#ddd);border-radius:12px;background:var(--surface,#fff)}
+.project-cashflow-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.project-cashflow-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0}
+.project-cashflow-summary span{display:grid;gap:4px;padding:9px;border-radius:8px;background:var(--surface-muted,#f5f6f8);font-size:.8rem}
+.project-cashflow-summary b{font-size:.95rem}
+.project-cashflow-warning{padding:10px;border-radius:8px;background:#fff2e8;color:#9a4514;font-size:.88rem}
+.project-cashflow-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0}
+.project-cashflow-form label{display:grid;gap:4px;font-size:.84rem}
+.project-cashflow-form .cashflow-note{grid-column:1/-1}
+.project-cashflow-form button{justify-self:start}
+.project-cashflow-list{display:grid;gap:8px;margin-top:10px}
+.project-cashflow-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--line,#ddd)}
+.project-cashflow-row>div{display:grid;gap:3px;min-width:0}
+.project-cashflow-row small{color:var(--muted,#687080);font-size:.78rem}
+.project-cashflow-row strong{white-space:nowrap}
+.project-cashflow-row .positive{color:var(--success,#23845b)}
+@media(max-width:620px){.project-cashflow-summary{grid-template-columns:1fr}.project-cashflow-row{grid-template-columns:minmax(0,1fr) auto}.project-cashflow-row button{justify-self:start}.project-cashflow-form{grid-template-columns:1fr}}
