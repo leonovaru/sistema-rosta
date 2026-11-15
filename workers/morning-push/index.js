@@ -26,7 +26,7 @@ async function importVapidPrivateKey(env){
     d:b64u(privateBytes),ext:true,key_ops:["sign"]
   },{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
 }
-async function vapidToken(endpoint,env){
+export async function vapidToken(endpoint,env){
   const audience=new URL(endpoint).origin,now=Math.floor(Date.now()/1000);
   const header=b64u(enc.encode(JSON.stringify({typ:"JWT",alg:"ES256"})));
   const payload=b64u(enc.encode(JSON.stringify({aud:audience,exp:now+12*60*60,sub:env.VAPID_SUBJECT})));
@@ -35,7 +35,7 @@ async function vapidToken(endpoint,env){
   const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},privateKey,enc.encode(unsigned));
   return unsigned+"."+b64u(signature);
 }
-async function encryptPayload(subscription,payload){
+export async function encryptPayload(subscription,payload){
   const uaPublic=unb64u(subscription.p256dh),authSecret=unb64u(subscription.auth);
   const uaKey=await crypto.subtle.importKey("raw",uaPublic,{name:"ECDH",namedCurve:"P-256"},false,[]);
   const serverKeys=await crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"},true,["deriveBits"]);
