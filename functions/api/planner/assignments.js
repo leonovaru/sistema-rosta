@@ -5,6 +5,7 @@ import { calculateCalendarBusyByDay } from "../../_lib/calendar-capacity.js";
 import { buildWeeklyWorkload } from "../../_lib/weekly-workload.js";
 import { validateDailyTaskMove } from "../../_lib/daily-task-move-validation.js";
 import { buildDailyBlockPlans } from "../../_lib/daily-block-plans.js";
+import { isTaskAvailableForPlanning } from "../../_lib/task-planning-availability.js";
 function addDays(date,days){const value=new Date(date+"T12:00:00Z");value.setUTCDate(value.getUTCDate()+days);return value.toISOString().slice(0,10);}
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));return values.year+"-"+values.month+"-"+values.day;}
 export async function onRequestGet({request,env}){
@@ -27,8 +28,9 @@ export async function onRequestPut({request,env}){
   const taskId=String(schedule?.task_id||"");
   if(!taskId||seenTasks.has(taskId)||!Array.isArray(schedule.allocations)||!schedule.allocations.length||schedule.allocations.length>7)return json({error:"Проверьте список задач и их дневных назначений"},400);
   seenTasks.add(taskId);
-  const task=await env.DB.prepare("SELECT id,status,due_date,estimated_minutes,actual_minutes FROM tasks WHERE id=? AND user_id=?").bind(taskId,user.id).first();
+  const task=await env.DB.prepare("SELECT t.id,t.status,t.due_date,t.estimated_minutes,t.actual_minutes,p.status AS project_status,c.status AS client_status,pc.status AS project_client_status FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN clients pc ON pc.id=p.client_id AND pc.user_id=p.user_id WHERE t.id=? AND t.user_id=?").bind(taskId,user.id).first();
   if(!task||!["todo","doing"].includes(task.status))return json({error:"Одна из задач не найдена или уже не активна"},404);
+  if(!isTaskAvailableForPlanning(task))return json({error:"Нельзя назначать задачи архивного проекта или закрытого клиента"},409);
   const remaining=Math.max(0,Number(task.estimated_minutes||0)-Math.max(0,Number(task.actual_minutes||0)));
   if(!remaining)return json({error:"У задачи нет оставшегося оценённого времени"},400);
   const seenDates=new Set();let total=0;const rows=[];
@@ -46,8 +48,8 @@ export async function onRequestPut({request,env}){
   const schedule=normalized.find(item=>item.taskId===taskId);
   if(!schedule||normalized.length!==1||!/^\d{4}-\d{2}-\d{2}$/.test(fromDate)||!/^\d{4}-\d{2}-\d{2}$/.test(toDate)||fromDate===toDate||!Number.isInteger(moveMinutes)||moveMinutes<=0||!/^\d{2}:\d{2}$/.test(String(move.start_time||""))||!/^\d{2}:\d{2}$/.test(String(move.end_time||"")))return json({error:"Параметры переноса некорректны"},400);
   const oldTask=await env.DB.prepare("SELECT id,status,due_date,estimated_minutes,actual_minutes FROM tasks WHERE id=? AND user_id=?").bind(taskId,user.id).first();
-  if(!oldTask||!["todo","doing"].includes(oldTask.status))return json({error:"Задача больше не активна"},409);
-  const allTasks=await env.DB.prepare("SELECT id,title,status,due_date,estimated_minutes,actual_minutes,project_id,life_area_id,direction_id,client_id FROM tasks WHERE user_id=? AND status IN ('todo','doing','waiting')").bind(user.id).all();
+  if(!oldTask||!["todo","doing"].includes(oldTask.status)||!isTaskAvailableForPlanning(oldTask))return json({error:"Задача больше не доступна для планирования"},409);
+  const allTasks=await env.DB.prepare("SELECT t.id,t.title,t.status,t.due_date,t.estimated_minutes,t.actual_minutes,t.project_id,t.life_area_id,t.direction_id,t.client_id,p.status AS project_status,c.status AS client_status,pc.status AS project_client_status FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN clients pc ON pc.id=p.client_id AND pc.user_id=p.user_id WHERE t.user_id=? AND t.status IN ('todo','doing','waiting')").bind(user.id).all();
   const calendarRows=await env.DB.prepare("SELECT id,title,event_type,start_at,end_at,actual_start_at,actual_end_at,status,repeat_rule,repeat_until FROM calendar_events WHERE user_id=? AND status!='cancelled' AND ((start_at < ? AND end_at > ?) OR (repeat_rule!='none' AND start_at < ? AND repeat_until >= ?)) ORDER BY start_at").bind(user.id,addDays(weekEnd,1)+"T00:00",today+"T00:00",addDays(weekEnd,1)+"T00:00",today).all();
   const events=expandRecurringEvents(calendarRows.results,today+"T00:00",addDays(weekEnd,1)+"T00:00");
   const calendarDays=calculateCalendarBusyByDay(events,today,7,workingDays);
