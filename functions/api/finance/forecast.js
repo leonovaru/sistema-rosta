@@ -30,7 +30,7 @@ export async function onRequestGet({request,env}){
   env.DB.prepare("SELECT title,balance,minimum_payment,due_day,status FROM debts WHERE user_id=? AND status='open'").bind(user.id).all(),
   env.DB.prepare("SELECT title,target_amount,current_amount,monthly_contribution,target_date,active FROM cash_reserves WHERE user_id=? AND active=1").bind(user.id).all(),
   env.DB.prepare("SELECT id,title,category,amount,next_date,frequency,recurrence_day FROM irregular_expenses WHERE user_id=? AND active=1 AND next_date<=? ORDER BY next_date").bind(user.id,end).all(),
-  env.DB.prepare("SELECT id,title,amount,probability_percent,expected_close_date FROM deals WHERE user_id=? AND stage NOT IN ('won','lost') AND expected_close_date>=? AND expected_close_date<=? ORDER BY expected_close_date").bind(user.id,today,end).all()
+  env.DB.prepare("SELECT id,title,amount,probability_percent,expected_close_date FROM deals WHERE user_id=? AND stage NOT IN ('won','lost') AND (expected_close_date IS NULL OR (expected_close_date>=? AND expected_close_date<=?)) ORDER BY expected_close_date").bind(user.id,today,end).all()
  ]);
  const forecast=buildCashflowForecast({today,horizonDays:horizon,startingBalance:settings?.starting_balance||0,planned:planned.results,obligations:obligations.results,debts:debts.results,variableExpensesByMonth,reserves:reserves.results,irregularExpenses:irregularExpenses.results,variableRecurringEvents:variableRecurring.events});
  const deal_scenarios=buildDealCashflowScenarios({days:forecast.days,deals:deals.results});
