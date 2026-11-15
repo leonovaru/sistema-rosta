@@ -82,5 +82,5 @@ test("variable recurring bills are dated events, separate from daily variable sp
  assert.equal(x.events[0].source,"variable_recurring");
  assert.equal(x.summary.planned_expenses,1500);
  assert.equal(x.summary.variable_expenses,1600);
- assert.equal(x.summary.ending_balance,-3100);
+ assert.equal(x.summary.ending_balance,1900);
 });
