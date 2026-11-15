@@ -27,7 +27,7 @@ async function makeEnv(fetchImpl, subscriptionCount = 1) {
       let values = [];
       const statement = {
         bind(...args) { values = args; return statement; },
-        async all() { return { results: subscriptions }; },
+        async all() { return { results: subscriptions.slice() }; },
         async first() {
           if (sql.includes("SELECT id,status FROM push_deliveries")) {
             const row = deliveries.get(values[0] + "|" + values[1]);
