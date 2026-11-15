@@ -1,4 +1,4 @@
-function dateValid(date){if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(String(date||"")))return false;const parsed=new Date(date+"T12:00:00Z");return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===date;}
+function dateValid(date){if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||"")))return false;const parsed=new Date(date+"T12:00:00Z");return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===date;}
 function remainingEstimate(task){const estimate=Number(task?.estimated_minutes);if(!Number.isFinite(estimate)||estimate<=0)return null;return Math.max(0,estimate-(task.status==="doing"?Math.max(0,Number(task.actual_minutes)||0):0));}
 export function applySavedDailyTaskAllocations(week,allocations=[],tasks=[]){
  const days=week?.days||[],dayByDate=new Map(days.map(day=>[day.date,day]));
