@@ -753,6 +753,7 @@ async function loadIncome() {
 async function loadSettings(actual) {
   const { settings } = await api("/api/settings");
   userSettings = settings || userSettings;
+  renderWorkCapacitySettings();
   const target = Number(userSettings.monthly_target || 0);
   $("target").textContent = money(target);
   $("gap").textContent = money(Math.max(0, target - actual));
@@ -913,6 +914,23 @@ function renderDayPlan() {
     (items.length ? '<ol class="planner-items">' + items.map(item => '<li><div><b>' + escapeHtml(item.title) + '</b><small>' + escapeHtml(item.reason || "") + '</small>' + (item.scheduled ? '<small class="planner-slot">' + item.start_at.slice(11,16) + '–' + item.end_at.slice(11,16) + '</small>' : item.scheduled === false ? '<small class="planner-unscheduled">' + escapeHtml(item.schedule_note || "Не помещается в свободные окна") + '</small>' : '') + '</div><span>' + duration(item.minutes) + '</span></li>').join("") + '</ol>' : '<p class="muted">Пока нет подходящих незавершённых задач. Добавь конкретные следующие шаги в список задач.</p>') +
     '<div class="planner-summary"><span>Свободно с учётом календаря: <b>' + duration(plan.available_minutes || 0) + '</b></span><span>Уже отработано: <b>' + duration(plan.work_already_done_minutes || 0) + '</b></span><span>Календарь занят: <b>' + duration(plan.calendar_busy_minutes_remaining || 0) + '</b></span><span>Запланировано: <b>' + duration(plan.total_minutes || 0) + '</b></span><span>Резерв: <b>' + duration(plan.reserve_minutes || 0) + '</b></span><span>Без временного слота: <b>' + Number(plan.unscheduled_count || 0) + '</b></span><span>Источник: <b>' + (plan.source === "ai" ? "ИИ" : "алгоритм") + '</b></span></div>';
 }
+function renderWorkCapacitySettings() {
+  const days=Array.isArray(userSettings.working_days)?userSettings.working_days:[];
+  document.querySelectorAll("[data-workday]").forEach(el=>{el.checked=days.includes(Number(el.dataset.workday));});
+  if(userSettings.daily_capacity_minutes)$("weekly-capacity").value=String(userSettings.daily_capacity_minutes);
+  $("work-capacity-status").textContent=userSettings.work_capacity_configured?"График сохранён. Ёмкость учитывается в оценке нагрузки; календарные события пока показываются отдельно.":"График ещё не настроен — оценка перегрузки отключена.";
+}
+$("save-work-capacity").addEventListener("click",async()=>{
+  const button=$("save-work-capacity"),days=[...document.querySelectorAll("[data-workday]:checked")].map(el=>Number(el.dataset.workday));
+  if(!days.length){$("work-capacity-status").textContent="Выбери хотя бы один рабочий день.";return;}
+  button.disabled=true;button.textContent="Сохраняю…";
+  try{
+    await api("/api/settings",{method:"PUT",body:JSON.stringify({monthly_target:userSettings.monthly_target||300000,timezone:userSettings.timezone||"Europe/Moscow",daily_capacity_minutes:Number($("weekly-capacity").value),working_days:days})});
+    const {settings}=await api("/api/settings");userSettings=settings||userSettings;renderWorkCapacitySettings();await loadWorkspace();
+    $("work-capacity-status").textContent="Рабочий график сохранён.";
+  }catch(err){$("work-capacity-status").textContent=err.message;}
+  finally{button.disabled=false;button.textContent="Сохранить рабочий график";}
+});
 $("make-day-plan").addEventListener("click", async () => {
   const button = $("make-day-plan");
   button.disabled = true; button.textContent = "Составляю план…";
