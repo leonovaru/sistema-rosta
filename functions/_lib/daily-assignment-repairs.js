@@ -1,3 +1,4 @@
+import { isTaskAvailableForPlanning } from "./task-planning-availability.js";
 function remaining(task){
  const estimate=Number(task?.estimated_minutes);
  if(!Number.isFinite(estimate)||estimate<=0)return 0;
@@ -18,7 +19,7 @@ export function buildDailyAssignmentRepairs(week,allocations=[],tasks=[]){
  // allocation rows behind. They are not candidates for a schedule repair.
  for(const taskId of [...affected]){
   const task=taskMap.get(taskId);
-  if(!task||!["todo","doing"].includes(task.status))affected.delete(taskId);
+  if(!task||!["todo","doing"].includes(task.status)||!isTaskAvailableForPlanning(task))affected.delete(taskId);
  }
  if(!affected.size)return {schedules:[],proposals:[],unresolved:[]};
  const rowsByTask=new Map();
@@ -37,7 +38,7 @@ export function buildDailyAssignmentRepairs(week,allocations=[],tasks=[]){
   const task=taskMap.get(taskId),oldRows=rowsByTask.get(taskId)||[];
   const totalOld=oldRows.reduce((sum,row)=>sum+row.minutes,0);
   const need=remaining(task);
-  if(!task||!["todo","doing"].includes(task.status)||!need){
+  if(!task||!["todo","doing"].includes(task.status)||!isTaskAvailableForPlanning(task)||!need){
    unresolved.push({task_id:taskId,title:task?.title||"Задача",minutes:need,reason:"Задача неактивна или у неё нет положительного актуального остатка."});
    continue;
   }
