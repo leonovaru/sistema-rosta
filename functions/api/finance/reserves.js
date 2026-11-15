@@ -1,0 +1,26 @@
+import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
+const DATE=/^\\d{4}-\\d{2}-\\d{2}$/;
+const clean=(v,n)=>String(v||"").trim().slice(0,n);
+function validDate(v){if(!v)return true;if(!DATE.test(v))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
+export async function onRequestGet({request,env}){
+ const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
+ const rows=await env.DB.prepare("SELECT * FROM cash_reserves WHERE user_id=? ORDER BY active DESC,target_date,title").bind(user.id).all();
+ return json({reserves:rows.results,summary:{target:rows.results.filter(x=>x.active).reduce((s,x)=>s+Number(x.target_amount),0),saved:rows.results.filter(x=>x.active).reduce((s,x)=>s+Number(x.current_amount),0),monthly:rows.results.filter(x=>x.active).reduce((s,x)=>s+Math.min(Number(x.monthly_contribution),Math.max(0,Number(x.target_amount)-Number(x.current_amount))),0)}});
+}
+export async function onRequestPost({request,env}){
+ const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
+ const b=await readJson(request)||{},action=String(b.action||"");
+ if(action==="delete"){
+  const id=clean(b.id,100),r=await env.DB.prepare("DELETE FROM cash_reserves WHERE id=? AND user_id=?").bind(id,user.id).run();
+  if(!r.meta.changes)return json({error:"Резерв не найден"},404);return json({ok:true});
+ }
+ const title=clean(b.title,160),purpose=clean(b.purpose,500),target=Number(b.target_amount),current=Number(b.current_amount||0),monthly=Number(b.monthly_contribution||0),date=b.target_date?String(b.target_date):null;
+ if(!title||!Number.isFinite(target)||target<=0||target>1000000000||!Number.isFinite(current)||current<0||current>target||!Number.isFinite(monthly)||monthly<0||monthly>target||!validDate(date))return json({error:"Проверь название, целевую сумму, накоплено, ежемесячный взнос и дату"},400);
+ if(action==="update"){
+  const id=clean(b.id,100),r=await env.DB.prepare("UPDATE cash_reserves SET title=?,purpose=?,target_amount=?,current_amount=?,monthly_contribution=?,target_date=?,active=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(title,purpose,target,current,monthly,date,b.active===false?0:1,id,user.id).run();
+  if(!r.meta.changes)return json({error:"Резерв не найден"},404);return json({ok:true,id});
+ }
+ const id=newId();
+ await env.DB.prepare("INSERT INTO cash_reserves (id,user_id,title,purpose,target_amount,current_amount,monthly_contribution,target_date) VALUES (?,?,?,?,?,?,?,?)").bind(id,user.id,title,purpose,target,current,monthly,date).run();
+ return json({ok:true,id},201);
+}
