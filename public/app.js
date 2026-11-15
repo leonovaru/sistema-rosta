@@ -71,6 +71,32 @@ $("income-form").addEventListener("submit", async e => {
     $("income-amount").value = ""; $("income-note").value = ""; await loadDashboardData(); await loadFinance();
   } catch (err) { alert(err.message); }
 });
+
+let analyticsData=null;
+function analyticsRows(items,empty){
+ if(!items?.length)return '<p class="muted">'+empty+'</p>';
+ return '<div class="analytics-list">'+items.map(x=>'<article class="analytics-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+Number(x.completed||0)+' из '+Number(x.tasks||0)+' задач · перерасход: '+Number(x.overrun_tasks||0)+'</small></div><div><strong>'+duration(x.actual_minutes)+'</strong><small>план '+duration(x.estimated_minutes)+' · '+(x.variance_minutes>0?'+':'')+duration(Math.abs(x.variance_minutes))+'</small></div></article>').join('')+'</div>';
+}
+async function loadAnalytics(){
+ const data=await api('/api/analytics');analyticsData=data;
+ const s=data.summary;
+ $('analytics-period').textContent=data.period.from+' — '+data.period.to;
+ $('analytics-summary').innerHTML=[
+ ['Задач в анализе',s.tasks+' · завершено '+s.completed],
+ ['Фактическое время',duration(s.actual_minutes)],
+ ['По плану',duration(s.estimated_minutes)],
+ ['Отклонение', (s.variance_minutes>0?'+':'')+duration(Math.abs(s.variance_minutes))],
+ ['Задачи с перерасходом',s.overrun_tasks+' · '+s.overrun_rate+'%'],
+ ['Время по таймерам',duration(data.time.tracked_minutes)]
+ ].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join('');
+ $('analytics-directions').innerHTML=analyticsRows(data.by_direction,'Нет задач по направлениям за выбранный период.');
+ $('analytics-projects').innerHTML=analyticsRows(data.by_project,'Нет задач по проектам за выбранный период.');
+ $('analytics-life-areas').innerHTML=analyticsRows(data.by_life_area,'Нет личных задач за выбранный период.');
+ $('analytics-months').innerHTML=analyticsRows(data.by_month,'Пока недостаточно данных для динамики.');
+ $('analytics-calendar').innerHTML=data.time.calendar_by_type.length?data.time.calendar_by_type.map(x=>'<article class="analytics-row"><div><b>'+escapeHtml(({meeting:'Встречи',travel:'Дорога',hobby:'Хобби',sleep:'Сон',work:'Работа',personal:'Личные дела',other:'Другое'})[x.event_type]||x.event_type)+'</b><small>'+x.events+' событий</small></div><div><strong>'+duration(Math.round(x.actual_minutes))+'</strong><small>план '+duration(Math.round(x.planned_minutes))+'</small></div></article>').join(''):'<p class="muted">Нет событий календаря за период.</p>';
+}
+$('refresh-analytics').addEventListener('click',async()=>{const b=$('refresh-analytics');b.disabled=true;try{await loadAnalytics();}catch(err){alert(err.message);}finally{b.disabled=false;}});
+
 let financeData = null;
 async function loadFinance() {
   financeData = await api("/api/finance");
@@ -467,7 +493,7 @@ async function boot() {
   try {
     const { user } = await api("/api/auth/me");
     if (!user) return showAuth();
-    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadWorkspace(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
+    showApp(user.email); await loadDashboardData(); await loadFinance(); await loadAnalytics(); await loadWorkspace(); await loadRecurringTemplates(); await loadTasks(); calendarSelected=localToday; calendarAnchor=new Date(localToday+"T12:00:00"); await loadCalendar(); await loadPlanner();
   } catch { showAuth(); }
 }
 boot();
