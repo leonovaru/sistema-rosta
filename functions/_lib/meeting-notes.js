@@ -16,3 +16,13 @@ export function normalizeMeetingAgreements(value,validProjectIds=new Set(),valid
   client_id:validClientIds.has(item?.client_id)?item.client_id:null
  })).filter(item=>item.task);
 }
+
+export function normalizeMeetingLinks(projectId,clientId,projects=[],clients=[]){
+ const project=projects.find(item=>item.id===projectId)||null;
+ let client=clients.find(item=>item.id===clientId)||null;
+ if(project?.client_id){
+  const projectClient=clients.find(item=>item.id===project.client_id)||null;
+  if(projectClient)client=projectClient;
+ }
+ return {project_id:project?.id||null,client_id:client?.id||null};
+}
