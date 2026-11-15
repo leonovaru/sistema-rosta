@@ -8,6 +8,7 @@ import { attachWeeklyActualTime } from "../../_lib/weekly-actual-time.js";
 import { buildEstimateAccuracy } from "../../_lib/estimate-accuracy.js";
 import { buildCalibratedWeeklyLoad, toCalibratedAdjustmentDays } from "../../_lib/calibrated-weekly-load.js";
 import { attachWeeklyTaskPriority } from "../../_lib/weekly-task-priority.js";
+import { buildWeeklyAttentionScenarios } from "../../_lib/weekly-attention-scenarios.js";
 function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const values=Object.fromEntries(parts.map(p=>[p.type,p.value]));return values.year+"-"+values.month+"-"+values.day;}
 function addDays(date,days){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 export async function onRequestGet({request,env}){
@@ -36,5 +37,6 @@ export async function onRequestGet({request,env}){
  week.calibrated_adjustment_proposals=buildWeeklyAdjustmentProposals(calibratedDays,taskRows.results);
 
  week.focus_scenarios=buildWeeklyFocusScenarios(week.area_balance,week.days);
+ week.attention_scenarios=buildWeeklyAttentionScenarios(week.days);
  return json({week});
 }
