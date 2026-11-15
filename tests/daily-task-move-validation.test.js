@@ -42,3 +42,26 @@ test("rejects a proposed interval shorter than the moved task remainder",()=>{
  assert.equal(result.ok,false);
  assert.match(result.error,/не подходит по длительности/);
 });
+
+const clearSlotPlan={free_windows:[{start_time:"09:00",end_time:"12:00"}],blocks:[{type:"focus",start_time:"09:00",end_time:"10:00"}]};
+test("accepts an exact interval that remains free after existing focus blocks",()=>{
+ assert.deepEqual(validateDailyTaskMove({week:fixture(),...common,targetSlotPlan:clearSlotPlan}),{ok:true});
+});
+test("rejects an interval overlapped by a newly scheduled focus block",()=>{
+ const targetSlotPlan={...clearSlotPlan,blocks:[...clearSlotPlan.blocks,{type:"focus",start_time:"10:30",end_time:"11:30"}]};
+ const result=validateDailyTaskMove({week:fixture(),...common,targetSlotPlan});
+ assert.equal(result.ok,false);
+ assert.match(result.error,/окно больше не свободно/);
+});
+test("rejects an interval removed from free windows by a calendar change",()=>{
+ const targetSlotPlan={free_windows:[{start_time:"09:00",end_time:"10:30"},{start_time:"11:30",end_time:"12:00"}],blocks:[]};
+ const result=validateDailyTaskMove({week:fixture(),...common,targetSlotPlan});
+ assert.equal(result.ok,false);
+ assert.match(result.error,/окно больше не свободно/);
+});
+test("rejects malformed and zero-length intervals",()=>{
+ for(const [startTime,endTime] of [["25:00","26:00"],["10:30","10:30"],["10:60","11:30"]]){
+  const result=validateDailyTaskMove({week:fixture(),...common,startTime,endTime,targetSlotPlan:clearSlotPlan});
+  assert.equal(result.ok,false);
+ }
+});
