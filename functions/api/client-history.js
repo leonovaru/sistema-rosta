@@ -27,7 +27,11 @@ export async function onRequestGet({request,env}){
   ...tasks.results.map(x=>({kind:"task",date:String(x.completed_at||x.due_date||x.created_at||"").slice(0,10),title:x.title,body:x.description,project_title:x.project_title,status:x.status,priority:x.priority,id:x.id})),
   ...projects.results.map(x=>({kind:"project",date:x.updated_at?.slice(0,10),title:x.title,body:x.expected_result,status:x.status,deadline:x.deadline,id:x.id}))
  ].filter(x=>x.date).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,250);
- return json({client,projects:projects.results,tasks:tasks.results,meetings:meetings.results.length,interactions:interactions.results.length,financial:{income:income.results.reduce((s,x)=>s+Number(x.amount||0),0),expenses:expenses.results.reduce((s,x)=>s+Number(x.amount||0),0),income_entries:income.results,expense_entries:expenses.results},timeline});
+ const allAgreements=meetings.results.flatMap(meeting=>parseArray(meeting.agreements_json).map((agreement,index)=>{const link=(linksByMeeting.get(meeting.id)||[]).find(item=>item.agreement_index===index);return {...agreement,task_id:link?.task_id||null,task_status:link?.task_status||null,task_due_date:link?.task_due_date||null};}));
+ const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+ const today=new Intl.DateTimeFormat("en-CA",{timeZone:settings?.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+ const followup_summary={agreements_total:allAgreements.length,linked_tasks:allAgreements.filter(x=>x.task_id).length,completed:allAgreements.filter(x=>x.task_status==="done").length,overdue:allAgreements.filter(x=>x.task_id&&x.task_status!=="done"&&(x.task_due_date||x.due_date)&&((x.task_due_date||x.due_date)<today)).length,pending:allAgreements.filter(x=>!x.task_id||x.task_status!=="done").length,open_questions:meetings.results.reduce((sum,x)=>sum+parseArray(x.open_questions_json).length,0)};
+ return json({client,projects:projects.results,tasks:tasks.results,meetings:meetings.results.length,interactions:interactions.results.length,followup_summary,today,financial:{income:income.results.reduce((s,x)=>s+Number(x.amount||0),0),expenses:expenses.results.reduce((s,x)=>s+Number(x.amount||0),0),income_entries:income.results,expense_entries:expenses.results},timeline});
 }
 function parseArray(value){try{const x=JSON.parse(value||"[]");return Array.isArray(x)?x:[]}catch{return[]}}
 
