@@ -80,3 +80,14 @@ test("coordinates capacity across multiple affected tasks without double countin
  ]);
  assert.equal(result.unresolved.length,0);
 });
+
+test("does not propose repairs for completed tasks with historical saved allocations",()=>{
+ const week=baseWeek();
+ week.daily_assignment_issues=[{task_id:"done-task",type:"stale"}];
+ const result=buildDailyAssignmentRepairs(week,[
+  {task_id:"done-task",allocation_date:"2026-11-16",minutes:60}
+ ],[
+  {id:"done-task",title:"Уже выполненная задача",status:"done",estimated_minutes:60,actual_minutes:60,due_date:"2026-11-16"}
+ ]);
+ assert.deepEqual(result,{schedules:[],proposals:[],unresolved:[]});
+});
