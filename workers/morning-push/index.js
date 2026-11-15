@@ -57,7 +57,7 @@ async function encryptPayload(subscription,payload){
 }
 async function sendPush(row,env,payload){
   const jwt=await vapidToken(row.endpoint,env),body=await encryptPayload(row,payload);
-  const response=await fetch(row.endpoint,{method:"POST",headers:{
+  const response=await fetch(row.endpoint,{method:"POST",signal:AbortSignal.timeout(10000),headers:{
     "Authorization":"vapid t="+jwt+", k="+env.VAPID_PUBLIC_KEY,
     "Content-Encoding":"aes128gcm","Content-Type":"application/octet-stream",
     "TTL":"86400","Urgency":"high"
@@ -83,8 +83,8 @@ export default {
       if(!isMorningDeliveryWindow(now,row.timezone))continue;
       const localDate=local.year+"-"+local.month+"-"+local.day;
       const id=crypto.randomUUID();
-      await env.DB.prepare(`INSERT OR IGNORE INTO push_deliveries (id,user_id,local_date,timezone,scheduled_at,status)
-        VALUES (?,?,?,?,?,'pending')`).bind(id,row.user_id,localDate,row.timezone,now.toISOString()).run();
+      await env.DB.prepare(`INSERT OR IGNORE INTO push_deliveries (id,user_id,subscription_id,local_date,timezone,scheduled_at,status)
+        VALUES (?,?,?,?,?,?,'pending')`).bind(id,row.user_id,row.id,localDate,row.timezone,now.toISOString()).run();
       const delivery=await env.DB.prepare("SELECT id,status FROM push_deliveries WHERE user_id=? AND local_date=?").bind(row.user_id,localDate).first();
       if(!delivery||delivery.status==="sent")continue;
       const deliveryId=delivery.id;
@@ -92,10 +92,10 @@ export default {
       if(!claimed.meta.changes)continue;
       try{
         await sendPush(row,env,{title:"Система роста",body:"Доброе утро! Ты уже проснулась?",tag:"morning-wake-"+localDate,url:"/?wake=1"});
-        await env.DB.prepare("UPDATE push_deliveries SET status='sent',sent_at=? WHERE id=?").bind(new Date().toISOString(),deliveryId).run();
+        await env.DB.prepare("UPDATE push_deliveries SET status='sent',sent_at=?,updated_at=datetime('now') WHERE id=?").bind(new Date().toISOString(),deliveryId).run();
       }catch(error){
         const message=String(error?.message||error).slice(0,500);
-        await env.DB.prepare("UPDATE push_deliveries SET status='failed',error=? WHERE id=?").bind(message,deliveryId).run();
+        await env.DB.prepare("UPDATE push_deliveries SET status='failed',error=?,updated_at=datetime('now') WHERE id=?").bind(message,deliveryId).run();
         if(message.includes("410")||message.includes("404"))await env.DB.prepare("DELETE FROM push_subscriptions WHERE id=?").bind(row.id).run();
       }
     }
