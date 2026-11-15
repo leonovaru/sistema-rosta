@@ -130,7 +130,8 @@
                   <label>Сумма, ₽<input id="deal-amount" type="number" min="0.01" max="100000000" step="0.01" required></label>
                   <label>Этап<select id="deal-stage"><option value="contact">Первичный контакт</option><option value="negotiation">Переговоры</option><option value="proposal">Предложение отправлено</option><option value="awaiting_payment">Ожидает оплаты</option><option value="won">Выиграна</option><option value="lost">Проиграна</option></select></label>
                   <label>Вероятность, %<input id="deal-probability" type="number" min="0" max="100" step="1" value="20"></label>
-                  <label>Ожидаемая дата оплаты<input id="deal-date" type="date"></label>
+                  <label>Ожидаемая дата закрытия сделки<input id="deal-date" type="date"></label>
+                  <label>Ожидаемая дата поступления оплаты<input id="deal-payment-date" type="date"></label>
                 </div>
                 <div id="deal-loss-fields" class="deal-loss-fields hidden">
                   <label>Почему сделка проиграна?<select id="deal-loss-reason"><option value="">Выберите причину</option><option value="price">Цена / бюджет</option><option value="timing">Сроки</option><option value="no_need">Нет потребности</option><option value="competitor">Выбрали конкурента</option><option value="no_response">Нет ответа</option><option value="trust">Недостаток доверия</option><option value="scope">Не подошёл объём / формат</option><option value="other">Другая причина</option></select></label>
