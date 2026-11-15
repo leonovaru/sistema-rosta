@@ -51,10 +51,13 @@ export async function onRequestPost({request,env}) {
     const title=String(b.title||"").trim(),clientId=b.client_id?String(b.client_id):null,directionId=b.direction_id?String(b.direction_id):null;
     if(!title||title.length>180)return json({error:"Укажи название проекта (до 180 символов)"},400);
     if(!(await owned(env,"clients",clientId,user.id))||!(await owned(env,"directions",directionId,user.id)))return json({error:"Клиент или направление не найдены"},404);
+    const client=clientId?await env.DB.prepare("SELECT direction_id FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first():null;
+    if(client?.direction_id&&directionId&&client.direction_id!==directionId)return json({error:"Проект должен относиться к направлению выбранного клиента"},400);
+    const finalDirectionId=directionId||client?.direction_id||null;
     const deadline=b.deadline?String(b.deadline):null;
     if(deadline&&!/^\d{4}-\d{2}-\d{2}$/.test(deadline))return json({error:"Проверь дату завершения"},400);
     await env.DB.prepare("INSERT INTO projects (id,user_id,client_id,direction_id,title,description,expected_result,deadline,budget,status) VALUES (?,?,?,?,?,?,?,?,?,?)")
-      .bind(id,user.id,clientId,directionId,title,String(b.description||"").slice(0,5000),String(b.expected_result||"").slice(0,2000),deadline,Math.max(0,Number(b.budget)||0),["draft","active","waiting","done","archived"].includes(b.status)?b.status:"active").run();
+      .bind(id,user.id,clientId,finalDirectionId,title,String(b.description||"").slice(0,5000),String(b.expected_result||"").slice(0,2000),deadline,Math.max(0,Number(b.budget)||0),["draft","active","waiting","done","archived"].includes(b.status)?b.status:"active").run();
     return json({ok:true,id},201);
   }
   if(type==="life_area") {
