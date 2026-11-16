@@ -16,7 +16,7 @@ function setupPaid(db,{bucket=true}={}){
  db.prepare("INSERT INTO irregular_expenses(id,user_id,title,category,amount,next_date,frequency) VALUES(?,?,?,?,?,?,?)").run("x","u","Страховка","Дом",60,"2026-11-10","yearly");
  if(bucket){
   db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("b","u","Дом",100);
-  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on,title) VALUES(?,?,?,?,?)").run("i","u",100,"2026-11-01","Доход");
+  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("i","u",100,"2026-11-01");
   db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
  }
  db.prepare("INSERT INTO expenses(id,user_id,category,title,amount,spent_on,note,bucket_id) VALUES(?,?,?,?,?,?,?,?)").run("e","u","Дом","Страховка",60,"2026-11-10","Оплата нерегулярного расхода",bucket?"b":null);

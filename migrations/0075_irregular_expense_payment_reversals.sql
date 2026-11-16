@@ -88,13 +88,13 @@ GROUP BY e.user_id,e.bucket_id;
 DROP TRIGGER IF EXISTS trg_bucket_expense_balance_insert;
 CREATE TRIGGER trg_bucket_expense_balance_insert
 BEFORE INSERT ON expenses
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS(
+WHEN NEW.bucket_id IS NOT NULL AND EXISTS(SELECT 1 FROM income_buckets active_bucket WHERE active_bucket.id=NEW.bucket_id AND active_bucket.user_id=NEW.user_id AND active_bucket.active=1) AND NOT EXISTS(
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
   - COALESCE((SELECT SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)) FROM expenses e WHERE e.user_id=NEW.user_id AND e.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
+  - (COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
+  - (COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
  )+0.0001>=NEW.amount
 )
 BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзине'); END;
@@ -102,13 +102,13 @@ BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзи�
 DROP TRIGGER IF EXISTS trg_bucket_expense_balance_update;
 CREATE TRIGGER trg_bucket_expense_balance_update
 BEFORE UPDATE OF amount,bucket_id,user_id ON expenses
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS(
+WHEN NEW.bucket_id IS NOT NULL AND EXISTS(SELECT 1 FROM income_buckets active_bucket WHERE active_bucket.id=NEW.bucket_id AND active_bucket.user_id=NEW.user_id AND active_bucket.active=1) AND NOT EXISTS(
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
   - COALESCE((SELECT SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)) FROM expenses e WHERE e.user_id=NEW.user_id AND e.bucket_id=NEW.bucket_id AND e.id<>OLD.id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
+  - (COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
+  - (COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
  )+0.0001>=NEW.amount
 )
 BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзине'); END;
@@ -116,13 +116,13 @@ BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзи�
 DROP TRIGGER IF EXISTS trg_bucket_debt_payment_balance_insert;
 CREATE TRIGGER trg_bucket_debt_payment_balance_insert
 BEFORE INSERT ON debt_payments
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS(
+WHEN NEW.bucket_id IS NOT NULL AND EXISTS(SELECT 1 FROM income_buckets active_bucket WHERE active_bucket.id=NEW.bucket_id AND active_bucket.user_id=NEW.user_id AND active_bucket.active=1) AND NOT EXISTS(
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
   - COALESCE((SELECT SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)) FROM expenses e WHERE e.user_id=NEW.user_id AND e.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
+  - (COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
+  - (COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
  )+0.0001>=NEW.amount
 )
 BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзине'); END;
@@ -130,13 +130,13 @@ BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзи�
 DROP TRIGGER IF EXISTS trg_bucket_debt_payment_balance_update;
 CREATE TRIGGER trg_bucket_debt_payment_balance_update
 BEFORE UPDATE OF amount,bucket_id,user_id ON debt_payments
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS(
+WHEN NEW.bucket_id IS NOT NULL AND EXISTS(SELECT 1 FROM income_buckets active_bucket WHERE active_bucket.id=NEW.bucket_id AND active_bucket.user_id=NEW.user_id AND active_bucket.active=1) AND NOT EXISTS(
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
   - COALESCE((SELECT SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)) FROM expenses e WHERE e.user_id=NEW.user_id AND e.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id AND p.id<>OLD.id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
+  - (COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id AND p.id<>OLD.id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
+  - (COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
  )+0.0001>=NEW.amount
 )
 BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзине'); END;
@@ -144,13 +144,13 @@ BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзи�
 DROP TRIGGER IF EXISTS trg_bucket_obligation_payment_balance_insert;
 CREATE TRIGGER trg_bucket_obligation_payment_balance_insert
 BEFORE INSERT ON obligation_payments
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS(
+WHEN NEW.bucket_id IS NOT NULL AND EXISTS(SELECT 1 FROM income_buckets active_bucket WHERE active_bucket.id=NEW.bucket_id AND active_bucket.user_id=NEW.user_id AND active_bucket.active=1) AND NOT EXISTS(
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
   - COALESCE((SELECT SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)) FROM expenses e WHERE e.user_id=NEW.user_id AND e.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
+  - (COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
+  - (COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
  )+0.0001>=NEW.amount
 )
 BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзине'); END;
@@ -158,13 +158,13 @@ BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзи�
 DROP TRIGGER IF EXISTS trg_bucket_obligation_payment_balance_update;
 CREATE TRIGGER trg_bucket_obligation_payment_balance_update
 BEFORE UPDATE OF amount,bucket_id,user_id ON obligation_payments
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS(
+WHEN NEW.bucket_id IS NOT NULL AND EXISTS(SELECT 1 FROM income_buckets active_bucket WHERE active_bucket.id=NEW.bucket_id AND active_bucket.user_id=NEW.user_id AND active_bucket.active=1) AND NOT EXISTS(
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
   - COALESCE((SELECT SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)) FROM expenses e WHERE e.user_id=NEW.user_id AND e.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id AND p.id<>OLD.id),0)
+  - (COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
+  - (COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id AND p.id<>OLD.id),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
  )+0.0001>=NEW.amount
 )
 BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзине'); END;
@@ -179,20 +179,20 @@ WHEN
  OR ((OLD.bucket_id<>NEW.bucket_id OR OLD.user_id<>NEW.user_id) AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=OLD.user_id AND a.bucket_id=OLD.bucket_id AND a.id<>OLD.id),0)
   - COALESCE((SELECT SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)) FROM expenses e WHERE e.user_id=OLD.user_id AND e.bucket_id=OLD.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=OLD.user_id AND p.bucket_id=OLD.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=OLD.user_id AND p.bucket_id=OLD.bucket_id),0)
+  - (COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=OLD.user_id AND p.bucket_id=OLD.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=OLD.user_id AND rp.bucket_id=OLD.bucket_id),0))
+  - (COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=OLD.user_id AND p.bucket_id=OLD.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.user_id=OLD.user_id AND rp.bucket_id=OLD.bucket_id),0))
  )+0.0001<0)
  OR ((OLD.bucket_id=NEW.bucket_id AND OLD.user_id=NEW.user_id) AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id AND a.id<>OLD.id),0)+NEW.amount
   - COALESCE((SELECT SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)) FROM expenses e WHERE e.user_id=NEW.user_id AND e.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
+  - (COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
+  - (COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
  )+0.0001<0)
  OR ((OLD.bucket_id<>NEW.bucket_id OR OLD.user_id<>NEW.user_id) AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)+NEW.amount
   - COALESCE((SELECT SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)) FROM expenses e WHERE e.user_id=NEW.user_id AND e.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
-  - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
+  - (COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
+  - (COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.user_id=NEW.user_id AND rp.bucket_id=NEW.bucket_id),0))
  )+0.0001<0)
 BEGIN SELECT RAISE(ABORT,'Нельзя изменить распределение: в корзине уже использованы эти деньги'); END;
 
@@ -202,7 +202,7 @@ BEFORE DELETE ON income_bucket_allocations
 WHEN (
  COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=OLD.user_id AND a.bucket_id=OLD.bucket_id AND a.id<>OLD.id),0)
  - COALESCE((SELECT SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)) FROM expenses e WHERE e.user_id=OLD.user_id AND e.bucket_id=OLD.bucket_id),0)
- - COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=OLD.user_id AND p.bucket_id=OLD.bucket_id),0)
- - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=OLD.user_id AND p.bucket_id=OLD.bucket_id),0)
+ - (COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=OLD.user_id AND p.bucket_id=OLD.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=OLD.user_id AND rp.bucket_id=OLD.bucket_id),0))
+ - (COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=OLD.user_id AND p.bucket_id=OLD.bucket_id),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.user_id=OLD.user_id AND rp.bucket_id=OLD.bucket_id),0))
 )+0.0001<0
 BEGIN SELECT RAISE(ABORT,'Нельзя удалить распределение: в корзине уже использованы эти деньги'); END;

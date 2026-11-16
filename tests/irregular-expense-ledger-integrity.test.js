@@ -59,7 +59,7 @@ test("the ledger rejects duplicate payments for the same schedule and date",()=>
   db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on,scheduled_due_date) VALUES(?,?,?,?,?,?)").run("p1","u","x",12000,"2026-11-16","2026-11-10");
   assert.throws(
    ()=>db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on,scheduled_due_date) VALUES(?,?,?,?,?,?)").run("p2","u","x",12000,"2026-11-17","2026-11-10"),
-   /UNIQUE constraint failed/
+   /UNIQUE constraint failed|Период нерегулярного расхода уже оплачен/g
   );
   assert.equal(db.prepare("SELECT COUNT(*) count FROM irregular_expense_payments WHERE irregular_expense_id='x' AND scheduled_due_date='2026-11-10'").get().count,1);
  }finally{db.close();}
