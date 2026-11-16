@@ -6,6 +6,7 @@ import {fileURLToPath} from "node:url";
 const root=join(dirname(fileURLToPath(import.meta.url)),"..");
 const finance=readFileSync(join(root,"functions/api/finance.js"),"utf8");
 const irregular=readFileSync(join(root,"functions/api/finance/irregular-expenses.js"),"utf8");
+const forecast=readFileSync(join(root,"functions/api/finance/forecast.js"),"utf8");
 test("debt payment retries require the same amount, date and note",()=>{
  assert.ok(finance.includes("SELECT id,debt_id,amount,paid_on,note FROM debt_payments WHERE user_id=? AND request_id=?"));
  assert.ok(finance.includes("prior.paid_on!==date||String(prior.note||\"\")!==String(body.note||\"\").slice(0,500)"));
@@ -30,4 +31,10 @@ test("database guards for already transferred bucket funds return conflict respo
  assert.ok(finance.includes('message.includes("Средства уже переведены из корзины")) return "bucket"'));
  assert.ok(finance.includes('message.includes("Средства уже переведены из корзины"))return json({error:"В корзине недостаточно свободных денег для новой суммы. Расход не изменён."},409)'));
  assert.ok(irregular.includes('message.includes("Средства уже переведены из корзины"))return json({error:"В выбранной корзине недостаточно свободных денег для оплаты."},409)'));
+});
+
+test("forecast API loads reopened unpaid occurrences even when the recurring cursor has advanced",()=>{
+ assert.ok(forecast.includes("AS unpaid_occurrences"));
+ assert.ok(forecast.includes("o.status='unpaid' AND o.scheduled_due_date<p.due_date"));
+ assert.ok(forecast.includes("u.status='unpaid' AND u.scheduled_due_date<p.due_date AND u.scheduled_due_date<=?"));
 });

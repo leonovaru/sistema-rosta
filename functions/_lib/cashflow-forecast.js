@@ -14,8 +14,14 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
   let due=row.due_date,guard=0,overdueCount=0,firstOverdueDate=null;
   // Preserve every missed recurring installment while skipping old cycles efficiently.
   const paidOccurrences=new Set(String(row.paid_occurrences||"").split(",").filter(Boolean));
+  const unpaidOccurrences=new Set(String(row.unpaid_occurrences||"").split(",").filter(Boolean));
+  for(const reopenedDate of unpaidOccurrences){
+   if(!dateValid(reopenedDate)||reopenedDate>end)continue;
+   if(reopenedDate<today){overdueCount++;if(!firstOverdueDate||reopenedDate<firstOverdueDate)firstOverdueDate=reopenedDate;}
+   else events.push({date:reopenedDate,type:"expense",title:row.title,amount:positive(row.amount),source:"reopened_obligation",original_due_date:reopenedDate});
+  }
   while(due&&due<=end&&guard++<10000){
-   if(!paidOccurrences.has(due)){
+   if(!paidOccurrences.has(due)&&!unpaidOccurrences.has(due)){
     if(due<today){overdueCount++;if(!firstOverdueDate)firstOverdueDate=due;}
     else events.push({date:due,type:"expense",title:row.title,amount:positive(row.amount),source:"obligation"});
    }

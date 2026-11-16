@@ -259,3 +259,14 @@ test("archived reserves retain their saved balance but stop future allocations",
  assert.equal(x.summary.new_reserve_allocations,0);
  assert.equal(x.summary.available_ending_balance,3800);
 });
+
+test("reopened historical recurring obligation occurrences remain visible after the schedule cursor advances",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:40,startingBalance:5000,obligations:[{due_date:"2026-12-10",frequency:"monthly",recurrence_day:10,title:"Аренда",amount:1500,paid_occurrences:"2026-11-10",unpaid_occurrences:"2026-10-10"}]});
+ assert.deepEqual(x.events.map(e=>[e.date,e.source,e.amount]),[["2026-11-15","overdue_obligation",1500],["2026-12-10","obligation",1500]]);
+ assert.equal(x.events[0].original_due_date,"2026-10-10");
+ assert.equal(x.events[0].overdue_occurrences,1);
+});
+test("reopened future obligation occurrences are forecast on their original dates",()=>{
+ const x=buildCashflowForecast({today:"2026-11-01",horizonDays:45,startingBalance:5000,obligations:[{due_date:"2026-12-10",frequency:"monthly",recurrence_day:10,title:"Аренда",amount:1500,unpaid_occurrences:"2026-11-15"}]});
+ assert.deepEqual(x.events.map(e=>[e.date,e.source]),[["2026-11-15","reopened_obligation"],["2026-12-10","obligation"]]);
+});
