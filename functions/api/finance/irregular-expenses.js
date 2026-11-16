@@ -15,6 +15,10 @@ export async function onRequestPost({request,env}){
  if(action==="paid"){
   const expenseId=clean(b.id,100),paidOn=String(b.paid_on||"");
   if(!expenseId||!validDate(paidOn))return json({error:"Укажи корректную дату оплаты"},400);
+  const requestId=String(b.request_id||"");
+  if(!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Не удалось подтвердить запрос оплаты"},400);
+  const prior=await env.DB.prepare("SELECT id,irregular_expense_id FROM irregular_expense_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+  if(prior){if(prior.irregular_expense_id!==expenseId)return json({error:"Идентификатор запроса уже использован"},409);return json({ok:true,payment_id:prior.id,replayed:true});}
   const item=await env.DB.prepare("SELECT * FROM irregular_expenses WHERE id=? AND user_id=? AND active=1").bind(expenseId,user.id).first();
   if(!item)return json({error:"Активный нерегулярный расход не найден"},404);
   if(await env.DB.prepare("SELECT id FROM irregular_expense_payments WHERE irregular_expense_id=? AND scheduled_due_date=? LIMIT 1").bind(expenseId,item.next_date).first())return json({error:"Этот период уже оплачен"},409);
@@ -36,11 +40,15 @@ export async function onRequestPost({request,env}){
   try{
    await env.DB.batch([
    env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id) VALUES (?,?,NULL,?,?,?,?,?,?)").bind(expenseEntryId,user.id,item.category,item.title,amount,paidOn,"Оплата нерегулярного расхода",bucket?.id||null),
-   env.DB.prepare("INSERT INTO irregular_expense_payments (id,user_id,irregular_expense_id,amount,paid_on,expense_id,scheduled_due_date) VALUES (?,?,?,?,?,?,?)").bind(paymentId,user.id,expenseId,amount,paidOn,expenseEntryId,item.next_date),
+   env.DB.prepare("INSERT INTO irregular_expense_payments (id,user_id,irregular_expense_id,amount,paid_on,expense_id,scheduled_due_date,request_id) VALUES (?,?,?,?,?,?,?,?)").bind(paymentId,user.id,expenseId,amount,paidOn,expenseEntryId,item.next_date,requestId),
    env.DB.prepare("UPDATE irregular_expenses SET next_date=COALESCE(?,next_date),active=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND next_date=?").bind(nextDate,active,expenseId,user.id,item.next_date)
    ]);
   }catch(error){
    const message=String(error?.message||error);
+   if(message.includes("irregular_expense_payments.user_id, irregular_expense_payments.request_id")&&message.includes("UNIQUE constraint failed")){
+    const existing=await env.DB.prepare("SELECT id,irregular_expense_id FROM irregular_expense_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+    if(existing&&existing.irregular_expense_id===expenseId)return json({ok:true,payment_id:existing.id,replayed:true});
+   }
    if(message.includes("scheduled_due_date")&&message.includes("UNIQUE constraint failed"))return json({error:"Этот период уже оплачен"},409);
    throw error;
   }

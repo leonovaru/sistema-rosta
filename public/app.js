@@ -636,7 +636,8 @@ $("irregular-expense-list").addEventListener("click",async e=>{
  const paid=e.target.closest("[data-irregular-paid]");
  if(paid){
   if(!confirm("Отметить расход оплаченным? Он попадёт в фактические расходы, а для повторяющегося платежа рассчитается следующая дата."))return;
-  try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({action:"paid",id:paid.dataset.irregularPaid,paid_on:financeData?.today||cashflowData?.period?.from})});await loadIrregularExpenses();await loadFinance();await loadCashflowForecast();}
+  paid.dataset.requestId=paid.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
+  try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({action:"paid",id:paid.dataset.irregularPaid,paid_on:financeData?.today||cashflowData?.period?.from,request_id:paid.dataset.requestId})});delete paid.dataset.requestId;await loadIrregularExpenses();await loadFinance();await loadCashflowForecast();}
   catch(err){alert(err.message);}
   return;
  }
@@ -892,7 +893,8 @@ $("recurring-expense-suggestions").addEventListener("click",async e=>{
 $("finance-obligations").addEventListener("click",async e=>{
   const button=e.target.closest("[data-obligation-paid]");if(!button)return;
   if(!confirm("Отметить платёж как оплаченный? Для повторяющегося платежа дата сдвинется на следующий период."))return;
-  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation_paid",obligation_id:button.dataset.obligationPaid,paid_on:financeData.today})});await loadFinance();}
+  button.dataset.requestId=button.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
+  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation_paid",obligation_id:button.dataset.obligationPaid,paid_on:financeData.today,request_id:button.dataset.requestId})});delete button.dataset.requestId;await loadFinance();}
   catch(err){alert(err.message);}
 });
 $("finance-expense-list").addEventListener("click",async e=>{

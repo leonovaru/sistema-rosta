@@ -22,7 +22,8 @@ async function commitBucketSpend(write) {
     if (message.includes("Недостаточно средств в корзине")) return "bucket";
     if (message.includes("UNIQUE constraint failed: obligation_payments.obligation_id, obligation_payments.scheduled_due_date")) return "occurrence";
     if (message.includes("Платёж превышает текущий остаток долга или долг уже закрыт")) return "debt";
-    if (message.includes("UNIQUE constraint failed: debt_payments.user_id, debt_payments.request_id")) return "duplicate";
+    if (message.includes("UNIQUE constraint failed: debt_payments.user_id, debt_payments.request_id")) return "duplicate_debt";
+    if (message.includes("UNIQUE constraint failed: obligation_payments.user_id, obligation_payments.request_id")) return "duplicate_obligation";
     throw error;
   }
 }
@@ -135,8 +136,10 @@ export async function onRequestPost({request,env}) {
     return json({ok:true,id,balance:Number(updatedDebt?.balance||0)},201);
   }
   if(action==="obligation_paid"){
-    const obligationId=String(body.obligation_id||""),date=String(body.paid_on||"");
-    if(!obligationId||!validDate(date))return json({error:"Проверь обязательство и дату оплаты"},400);
+    const obligationId=String(body.obligation_id||""),date=String(body.paid_on||""),requestId=String(body.request_id||"");
+    if(!obligationId||!validDate(date)||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Проверь обязательство, дату и идентификатор запроса"},400);
+    const prior=await env.DB.prepare("SELECT id,obligation_id FROM obligation_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+    if(prior){if(prior.obligation_id!==obligationId)return json({error:"Идентификатор запроса уже использован"},409);return json({ok:true,replayed:true});}
     const obligation=await env.DB.prepare("SELECT * FROM payment_obligations WHERE id=? AND user_id=? AND active=1").bind(obligationId,user.id).first();
     if(!obligation)return json({error:"Активный платёж не найден"},404);
     const bucket=await resolveBucket(env,user.id,String(obligation.category||"Долги и обязательства"));
@@ -144,12 +147,17 @@ export async function onRequestPost({request,env}) {
     const available=await bucketAvailable(env,user.id,bucket.id);
     if(Number(obligation.amount)>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     const nextDue=addPeriod(obligation.due_date,obligation.frequency,obligation.recurrence_day);
-    const statements=[env.DB.prepare("INSERT INTO obligation_payments (id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,obligationId,obligation.amount,date,bucket.id,obligation.due_date)];
+    const statements=[env.DB.prepare("INSERT INTO obligation_payments (id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES (?,?,?,?,?,?,?,?)").bind(id,user.id,obligationId,obligation.amount,date,bucket.id,obligation.due_date,requestId)];
     if(nextDue)statements.push(env.DB.prepare("UPDATE payment_obligations SET due_date=? WHERE id=? AND user_id=?").bind(nextDue,obligationId,user.id));
     else statements.push(env.DB.prepare("UPDATE payment_obligations SET active=0 WHERE id=? AND user_id=?").bind(obligationId,user.id));
     const saved=await commitBucketSpend(()=>env.DB.batch(statements));
     if(saved==="bucket")return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
     if(saved==="occurrence")return json({error:"Этот период обязательства уже оплачен. Обнови список платежей."},409);
+    if(saved==="duplicate_obligation"){
+      const existing=await env.DB.prepare("SELECT obligation_id FROM obligation_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+      if(!existing||existing.obligation_id!==obligationId)return json({error:"Идентификатор запроса уже использован"},409);
+      return json({ok:true,replayed:true});
+    }
     return json({ok:true,next_due_date:nextDue});
   }
   if(action==="obligation"){
