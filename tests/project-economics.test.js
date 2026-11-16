@@ -37,3 +37,12 @@ test("client economics leaves hourly rates blank when there is no tracked time",
  assert.equal(x.revenue_per_hour,null);
  assert.equal(x.contribution_per_hour,null);
 });
+
+test("completion or archival does not erase an outstanding project receivable",()=>{
+ for(const status of ["active","waiting","done","archived"]){
+  const x=calculateProjectEconomics({status,plannedRevenue:100000,received:65000,directExpenses:20000,minutes:600});
+  assert.equal(x.outstanding,35000,status);
+  assert.equal(x.contribution,45000,status);
+  assert.equal(x.status,"awaiting_payment",status);
+ }
+});
