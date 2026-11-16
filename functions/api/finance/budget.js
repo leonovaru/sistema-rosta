@@ -1,10 +1,11 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
 import { buildBudgetInsights } from "../../_lib/budget-insights.js";
 const MONTH=/^\d{4}-(0[1-9]|1[0-2])$/;
+export function isValidBudgetMonth(value){return typeof value==="string"&&MONTH.test(value);}
 export async function onRequestGet({request,env}) {
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const url=new URL(request.url),month=url.searchParams.get("month")||new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Moscow",year:"numeric",month:"2-digit"}).format(new Date());
- if(!MONTH.test(month))return json({error:"Некорректный месяц"},400);
+ if(!isValidBudgetMonth(month))return json({error:"Некорректный месяц"},400);
  const historyMonths=Array.from({length:3},(_,i)=>{const [y,m]=month.split("-").map(Number),d=new Date(Date.UTC(y,m-1-3+i,1,12));return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0");});
  const historyStart=historyMonths[0]+"-01",historyEnd=month+"-01";
  const [plans,facts,history,budgetHistory]=await Promise.all([
@@ -25,14 +26,14 @@ export async function onRequestGet({request,env}) {
 export async function onRequestPost({request,env}) {
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const body=await readJson(request),month=String(body?.month||""),category=String(body?.category||"").trim(),amount=Number(body?.planned_amount);
- if(!MONTH.test(month)||!category||category.length>80||!Number.isFinite(amount)||amount<0||amount>100000000)return json({error:"Проверь месяц, категорию и сумму бюджета"},400);
+ if(!isValidBudgetMonth(month)||!category||category.length>80||!Number.isFinite(amount)||amount<0||amount>100000000)return json({error:"Проверь месяц, категорию и сумму бюджета"},400);
  await env.DB.prepare("INSERT INTO category_budgets (id,user_id,month,category,planned_amount) VALUES (?,?,?,?,?) ON CONFLICT(user_id,month,category) DO UPDATE SET planned_amount=excluded.planned_amount,updated_at=datetime('now')").bind(newId(),user.id,month,category,amount).run();
  return json({ok:true});
 }
 export async function onRequestDelete({request,env}) {
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const body=await readJson(request),month=String(body?.month||""),category=String(body?.category||"").trim();
- if(!MONTH.test(month)||!category)return json({error:"Не указаны месяц и категория"},400);
+ if(!isValidBudgetMonth(month)||!category)return json({error:"Не указаны месяц и категория"},400);
  await env.DB.prepare("DELETE FROM category_budgets WHERE user_id=? AND month=? AND category=?").bind(user.id,month,category).run();
  return json({ok:true});
 }

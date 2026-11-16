@@ -2,7 +2,8 @@ import {json,requireUser,readJson,newId} from "../_lib/auth.js";
 import {summarizeProjectCashflow} from "../_lib/project-cashflow.js";
 import {isClientSelectable,isProjectSelectable} from "../_lib/workspace-entity-availability.js";
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
-function validDate(v){if(!DATE.test(v))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
+export function isValidProjectCashflowDate(value){if(typeof value!=="string"||!DATE.test(value))return false;const d=new Date(value+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value;}
+function validDate(v){return isValidProjectCashflowDate(v);}
 async function projectForUser(env,userId,projectId){return env.DB.prepare("SELECT id,client_id,status FROM projects WHERE id=? AND user_id=?").bind(projectId,userId).first();}
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
