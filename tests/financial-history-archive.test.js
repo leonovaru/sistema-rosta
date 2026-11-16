@@ -77,3 +77,12 @@ test("archived buckets reject new expenses, debt payments and obligation payment
   assert.equal(db.prepare("SELECT COUNT(*) count FROM obligation_payments WHERE bucket_id='archived'").get().count,0);
  }finally{db.close();}
 });
+
+test("database prevents archiving the last active income bucket",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("only","u","Единственная",100);
+  assert.throws(()=>db.prepare("UPDATE income_buckets SET active=0,percentage=0 WHERE id='only'").run(),/Нельзя архивировать последнюю активную корзину/);
+  assert.equal(db.prepare("SELECT active FROM income_buckets WHERE id='only'").get().active,1);
+ }finally{db.close();}
+});
