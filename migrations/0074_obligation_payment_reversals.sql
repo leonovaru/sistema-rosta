@@ -53,7 +53,8 @@ WHEN NOT EXISTS(
  AND NOT EXISTS(SELECT 1 FROM obligation_payment_reversals r WHERE r.obligation_payment_id=p.id)
 )
 BEGIN SELECT RAISE(ABORT,'Исходный платёж не найден, уже отменён или сумма не совпадает'); END;
-CREATE TRIGGER IF NOT EXISTS trg_obligation_payment_reversal_after_insert
+DROP TRIGGER IF EXISTS trg_obligation_payment_reversal_after_insert;
+CREATE TRIGGER trg_obligation_payment_reversal_after_insert
 AFTER INSERT ON obligation_payment_reversals
 BEGIN
  UPDATE obligation_payment_occurrences SET status='unpaid',payment_id=NULL,updated_at=datetime('now')
