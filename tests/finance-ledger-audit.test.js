@@ -38,11 +38,11 @@ test("read-only audit classifies ambiguous and unmatched irregular payment histo
   db.prepare("INSERT INTO expenses(id,user_id,category,title,amount,spent_on,note) VALUES(?,?,?,?,?,?,?)").run("e1","u","Дом","Страховка",12000,"2026-10-10","Оплата нерегулярного расхода");
   for(const id of ["p1","p2"])db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on) VALUES(?,?,?,?,?)").run(id,"u","sched",12000,"2026-10-10");
   db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on) VALUES(?,?,?,?,?)").run("p3","u","sched",5000,"2026-10-11");
-  const unlinked=db.prepare(queries()[0]).all();
+  const unlinked=db.prepare(queries[0]).all();
   assert.equal(unlinked.length,3);
   assert.equal(unlinked.find(x=>x.payment_id==="p1").audit_class,"ambiguous_match");
   assert.equal(unlinked.find(x=>x.payment_id==="p3").audit_class,"no_matching_expense");
-  const unmatchedExpenses=db.prepare(queries()[1]).all();
+  const unmatchedExpenses=db.prepare(queries[1]).all();
   assert.equal(unmatchedExpenses.length,0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses").get().count,1);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM irregular_expense_payments").get().count,3);
