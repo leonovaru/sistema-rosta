@@ -1,3 +1,47 @@
+-- Enforce the planned amount in the database, not only in the API.
+-- This also protects against two concurrent requests that both read the same
+-- remaining balance before either one inserts its realization.
+CREATE TRIGGER IF NOT EXISTS trg_cashflow_realization_before_insert
+BEFORE INSERT ON planned_cashflow_realizations
+WHEN NOT EXISTS (
+  SELECT 1
+  FROM planned_cashflows p
+  WHERE p.id=NEW.planned_cashflow_id
+    AND p.user_id=NEW.user_id
+    AND p.archived_at IS NULL
+    AND p.status<>'cancelled'
+    AND COALESCE((
+      SELECT SUM(existing.amount)
+      FROM planned_cashflow_realizations existing
+      WHERE existing.planned_cashflow_id=NEW.planned_cashflow_id
+        AND existing.user_id=NEW.user_id
+    ),0)+NEW.amount<=p.amount+0.005
+)
+BEGIN
+  SELECT RAISE(ABORT, 'Плановый платёж недоступен или превышен');
+END;
+
+-- Keep the plan status correct even when a realization is inserted outside
+-- the API handler.
+CREATE TRIGGER IF NOT EXISTS trg_cashflow_realization_after_insert
+AFTER INSERT ON planned_cashflow_realizations
+BEGIN
+  UPDATE planned_cashflows
+  SET status=CASE
+    WHEN status='cancelled' THEN 'cancelled'
+    WHEN COALESCE((
+      SELECT SUM(amount)
+      FROM planned_cashflow_realizations
+      WHERE planned_cashflow_id=NEW.planned_cashflow_id
+        AND user_id=NEW.user_id
+    ),0)>=amount-0.005 THEN 'realized'
+    ELSE 'planned'
+  END
+  WHERE id=NEW.planned_cashflow_id
+    AND user_id=NEW.user_id
+    AND archived_at IS NULL;
+END;
+
 -- Keep a planned payment's execution state consistent when a linked
 -- income/expense is deleted and its realization row is removed by FK cascade.
 CREATE TRIGGER IF NOT EXISTS trg_cashflow_realization_after_delete
