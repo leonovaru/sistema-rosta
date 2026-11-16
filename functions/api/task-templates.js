@@ -3,6 +3,12 @@ import { recurringTaskDates, normalizeRecurringSteps } from "../_lib/recurring-t
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(value){if(!DATE.test(value))return false;const date=new Date(value+"T12:00:00Z");return !Number.isNaN(date.getTime())&&date.toISOString().slice(0,10)===value;}
+export function isRecurringTemplateAvailable(template){
+ if(!template||!Number(template.active))return false;
+ if(template.life_area_id&&Number(template.life_area_active)===0)return false;
+ if(template.direction_id&&Number(template.direction_active)===0)return false;
+ return true;
+}
 function todayInZone(timezone){
  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
  const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));
@@ -15,12 +21,13 @@ export async function onRequestGet({request,env}){
  if(!user)return json({error:"Необходим вход"},401);
  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
  const today=todayInZone(settings?.timezone),horizon=shift(today,30);
- const {results:templates}=await env.DB.prepare("SELECT t.*,a.title AS life_area_title,d.title AS direction_title,(SELECT COUNT(*) FROM tasks x WHERE x.template_id=t.id AND x.user_id=t.user_id AND x.status!='done') AS open_instances FROM task_templates t LEFT JOIN life_areas a ON a.id=t.life_area_id AND a.user_id=t.user_id LEFT JOIN directions d ON d.id=t.direction_id AND d.user_id=t.user_id WHERE t.user_id=? ORDER BY t.active DESC,t.created_at DESC").bind(user.id).all();
+ const {results:templates}=await env.DB.prepare("SELECT t.*,a.title AS life_area_title,a.active AS life_area_active,d.title AS direction_title,d.active AS direction_active,(SELECT COUNT(*) FROM tasks x WHERE x.template_id=t.id AND x.user_id=t.user_id AND x.status!='done') AS open_instances FROM task_templates t LEFT JOIN life_areas a ON a.id=t.life_area_id AND a.user_id=t.user_id LEFT JOIN directions d ON d.id=t.direction_id AND d.user_id=t.user_id WHERE t.user_id=? ORDER BY t.active DESC,t.created_at DESC").bind(user.id).all();
  const {results:steps}=await env.DB.prepare("SELECT id,template_id,title,sort_order FROM task_template_steps WHERE user_id=? ORDER BY template_id,sort_order").bind(user.id).all();
  const byTemplate=new Map();
  for(const step of steps){if(!byTemplate.has(step.template_id))byTemplate.set(step.template_id,[]);byTemplate.get(step.template_id).push(step);}
+ const generatableTemplates=templates.filter(isRecurringTemplateAvailable);
  const statements=[];
- for(const template of templates.filter(x=>x.active)){
+ for(const template of generatableTemplates){
   const dates=recurringTaskDates(template,today,horizon);
   for(const dueDate of dates){
    statements.push(env.DB.prepare("INSERT OR IGNORE INTO tasks (id,user_id,direction_id,life_area_id,title,description,status,priority,due_date,estimated_minutes,template_id) VALUES (?,?,?,?,?,?,'todo',?,?,?,?)")
@@ -29,7 +36,7 @@ export async function onRequestGet({request,env}){
  }
  for(let i=0;i<statements.length;i+=80)await env.DB.batch(statements.slice(i,i+80));
  const childStatements=[];
- for(const template of templates.filter(x=>x.active)){
+ for(const template of generatableTemplates){
   const templateSteps=byTemplate.get(template.id)||[];
   if(!templateSteps.length)continue;
   for(const dueDate of recurringTaskDates(template,today,horizon)){
