@@ -11,6 +11,23 @@ export async function onRequestGet({request,env}){
 export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const b=await readJson(request)||{},action=String(b.action||"");
+ if(action==="contribution"||action==="withdrawal"){
+  const id=clean(b.id,100),amount=Number(b.amount),note=clean(b.note,500);
+  if(!id||!Number.isFinite(amount)||amount<=0||amount>100000000)return json({error:"Проверь сумму операции"},400);
+  const reserve=await env.DB.prepare("SELECT id,current_amount,target_amount FROM cash_reserves WHERE id=? AND user_id=? AND active=1").bind(id,user.id).first();
+  if(!reserve)return json({error:"Активный резерв не найден"},404);
+  const current=Number(reserve.current_amount||0),delta=action==="contribution"?amount:-amount,next=Math.round((current+delta)*100)/100;
+  if(next<0)return json({error:"Сумма снятия превышает накопленный остаток"},400);
+  if(next>Number(reserve.target_amount))return json({error:"Пополнение превысит целевую сумму резерва"},400);
+  const transactionId=newId();
+  await env.DB.batch([
+   env.DB.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) VALUES(?,?,?,?,?,?,?)").bind(transactionId,user.id,id,action,amount,next,note),
+   env.DB.prepare("UPDATE cash_reserves SET current_amount=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND current_amount=? AND active=1").bind(next,id,user.id,current)
+  ]);
+  const updated=await env.DB.prepare("SELECT current_amount FROM cash_reserves WHERE id=? AND user_id=?").bind(id,user.id).first();
+  if(Number(updated?.current_amount)!==next)return json({error:"Остаток резерва изменился. Обнови данные и повтори операцию."},409);
+  return json({ok:true,transaction_id:transactionId,current_amount:next});
+ }
  if(action==="delete"){
   const id=clean(b.id,100);
   const reserve=await env.DB.prepare("SELECT id FROM cash_reserves WHERE id=? AND user_id=?").bind(id,user.id).first();
@@ -26,7 +43,7 @@ export async function onRequestPost({request,env}){
  const title=clean(b.title,160),purpose=clean(b.purpose,500),target=Number(b.target_amount),current=Number(b.current_amount||0),monthly=Number(b.monthly_contribution||0),date=b.target_date?String(b.target_date):null;
  if(!title||!Number.isFinite(target)||target<=0||target>1000000000||!Number.isFinite(current)||current<0||current>target||!Number.isFinite(monthly)||monthly<0||monthly>target||!validDate(date))return json({error:"Проверь название, целевую сумму, накоплено, ежемесячный взнос и дату"},400);
  if(action==="update"){
-  const id=clean(b.id,100),r=await env.DB.prepare("UPDATE cash_reserves SET title=?,purpose=?,target_amount=?,current_amount=?,monthly_contribution=?,target_date=?,active=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(title,purpose,target,current,monthly,date,b.active===false?0:1,id,user.id).run();
+  const id=clean(b.id,100),r=await env.DB.prepare("UPDATE cash_reserves SET title=?,purpose=?,target_amount=?,monthly_contribution=?,target_date=?,active=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND current_amount<=?").bind(title,purpose,target,monthly,date,b.active===false?0:1,id,user.id,target).run();
   if(!r.meta.changes)return json({error:"Резерв не найден"},404);return json({ok:true,id});
  }
  const id=newId();
