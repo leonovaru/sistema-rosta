@@ -76,3 +76,18 @@ test("reserve transfer reversal is blocked after its balance has been spent",()=
   assert.equal(db.prepare("SELECT COUNT(*) count FROM bucket_funding_transfer_reversals").get().count,0);
  }finally{db.close();}
 });
+
+test("archived reserves and goals retain transfer history and reject new funding",()=>{
+ const db=dbWithSchema();
+ try{
+  db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("reserve_archive_transfer","u","b","reserve","r",20,"2026-11-16","request-reserve-archive");
+  db.prepare("UPDATE cash_reserves SET active=0 WHERE id='r'").run();
+  assert.throws(()=>db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("reserve_archived_new","u","b","reserve","r",10,"2026-11-17","request-reserve-archived"),/Цель или резерв недоступны/);
+  assert.throws(()=>db.prepare("DELETE FROM cash_reserves WHERE id='r'").run(),/FOREIGN KEY constraint failed/);
+  db.prepare("INSERT INTO bucket_funding_transfer_reversals(id,user_id,transfer_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("reserve_archive_reverse","u","reserve_archive_transfer",20,"2026-11-18","Отмена после архивации","reverse-reserve-archive");
+  assert.equal(db.prepare("SELECT current_amount FROM cash_reserves WHERE id='r'").get().current_amount,10);
+  db.prepare("UPDATE financial_goals SET status='archived' WHERE id='g'").run();
+  assert.throws(()=>db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("goal_archived_new","u","b","goal","g",10,"2026-11-19","request-goal-archived"),/Цель или резерв недоступны/);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM bucket_funding_transfers WHERE target_id='g'").get().count,0);
+ }finally{db.close();}
+});
