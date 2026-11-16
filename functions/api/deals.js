@@ -7,6 +7,10 @@ const STAGES=new Set(["contact","negotiation","proposal","awaiting_payment","won
 const LOSS_REASONS=new Set(["price","timing","no_need","competitor","no_response","trust","scope","other"]);
 const LOSS_LABELS={price:"Цена / бюджет",timing:"Сроки",no_need:"Нет потребности",competitor:"Выбрали конкурента",no_response:"Нет ответа",trust:"Недостаток доверия",scope:"Не подошёл объём / формат",other:"Другая причина"};
 const validDate=value=>!value||(/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+"T00:00:00Z"))&&new Date(value+"T00:00:00Z").toISOString().slice(0,10)===value);
+export function resolveDealDirection(client,directionId){
+ if(client?.direction_id&&directionId&&client.direction_id!==directionId)return {ok:false,direction_id:null};
+ return {ok:true,direction_id:directionId||client?.direction_id||null};
+}
 async function owned(env,table,id,userId){if(!id)return true;return Boolean(await env.DB.prepare("SELECT id FROM "+table+" WHERE id=? AND user_id=?").bind(id,userId).first());}
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
@@ -43,22 +47,27 @@ export async function onRequestPost({request,env}){
  if(action==="update"&&!oldDeal)return json({error:"Сделка не найдена"},404);
  const title=String(b.title||"").trim(),clientId=b.client_id?String(b.client_id):null,directionId=b.direction_id?String(b.direction_id):null,amount=Number(b.amount),probability=Number(b.probability_percent),stage=String(b.stage||"contact"),date=b.expected_close_date?String(b.expected_close_date):null,paymentDate=b.expected_payment_date?String(b.expected_payment_date):null,notes=String(b.notes||"").slice(0,1500),lossCategory=stage==="lost"?String(b.loss_reason_category||""):"",lossDetails=stage==="lost"?String(b.loss_reason_details||"").trim().slice(0,1200):"";
  if(!title||title.length>180||!Number.isFinite(amount)||amount<=0||amount>100000000||!Number.isInteger(probability)||probability<0||probability>100||!STAGES.has(stage)||!validDate(date)||!validDate(paymentDate)||(stage==="lost"&&(!LOSS_REASONS.has(lossCategory)||(lossCategory==="other"&&!lossDetails))))return json({error:"Проверь название, сумму, этап, вероятность, дату и причину проигрыша"},400);
- if(clientId){const client=await env.DB.prepare("SELECT id,status FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first();if(!client)return json({error:"Клиент не найден"},404);if(!isClientSelectable(client)&&!(oldDeal&&oldDeal.client_id===clientId))return json({error:"Нельзя привязать сделку к закрытому клиенту"},409);}
- if(directionId){const direction=await env.DB.prepare("SELECT id,active FROM directions WHERE id=? AND user_id=?").bind(directionId,user.id).first();if(!direction)return json({error:"Направление не найдено"},404);if(!isDirectionSelectable(direction))return json({error:"Направление отключено"},409);}
+ const client=clientId?await env.DB.prepare("SELECT id,status,direction_id FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first():null;
+ if(clientId&&!client)return json({error:"Клиент не найден"},404);
+ if(clientId&&!isClientSelectable(client)&&!(oldDeal&&oldDeal.client_id===clientId))return json({error:"Нельзя привязать сделку к закрытому клиенту"},409);
+ const directionResolution=resolveDealDirection(client,directionId);
+ if(!directionResolution.ok)return json({error:"Направление сделки должно соответствовать направлению клиента"},400);
+ const effectiveDirectionId=directionResolution.direction_id;
+ if(effectiveDirectionId){const direction=await env.DB.prepare("SELECT id,active FROM directions WHERE id=? AND user_id=?").bind(effectiveDirectionId,user.id).first();if(!direction)return json({error:"Направление не найдено"},404);if(!isDirectionSelectable(direction))return json({error:"Направление отключено"},409);}
  if(action==="update"){
   const changes=[];
-  for(const [field,label,next] of [["title","Название",title],["amount","Сумма",amount],["stage","Этап",stage],["probability_percent","Вероятность",probability],["expected_close_date","Ожидаемая дата закрытия",date],["expected_payment_date","Ожидаемая дата оплаты",paymentDate],["client_id","Клиент",clientId],["direction_id","Направление",directionId],["notes","Комментарий",notes],["loss_reason_category","Причина проигрыша",lossCategory||null],["loss_reason_details","Пояснение причины",lossDetails]])if((oldDeal[field]??null)!==(next??null))changes.push({field,label,from:oldDeal[field]??null,to:next??null});
+  for(const [field,label,next] of [["title","Название",title],["amount","Сумма",amount],["stage","Этап",stage],["probability_percent","Вероятность",probability],["expected_close_date","Ожидаемая дата закрытия",date],["expected_payment_date","Ожидаемая дата оплаты",paymentDate],["client_id","Клиент",clientId],["direction_id","Направление",effectiveDirectionId],["notes","Комментарий",notes],["loss_reason_category","Причина проигрыша",lossCategory||null],["loss_reason_details","Пояснение причины",lossDetails]])if((oldDeal[field]??null)!==(next??null))changes.push({field,label,from:oldDeal[field]??null,to:next??null});
   if(!changes.length)return json({ok:true,id,unchanged:true});
   await env.DB.batch([
-   env.DB.prepare("UPDATE deals SET client_id=?,direction_id=?,title=?,amount=?,stage=?,probability_percent=?,expected_close_date=?,expected_payment_date=?,notes=?,loss_reason_category=?,loss_reason_details=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND archived_at IS NULL").bind(clientId,directionId,title,amount,stage,probability,date,paymentDate,notes,lossCategory||null,lossDetails,id,user.id),
-   env.DB.prepare("INSERT INTO deal_events (id,user_id,deal_id,event_type,changes_json,direction_id_snapshot,client_id_snapshot) VALUES (?,?,?,'updated',?,?,?)").bind(newId(),user.id,id,JSON.stringify(changes),directionId,clientId)
+   env.DB.prepare("UPDATE deals SET client_id=?,direction_id=?,title=?,amount=?,stage=?,probability_percent=?,expected_close_date=?,expected_payment_date=?,notes=?,loss_reason_category=?,loss_reason_details=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND archived_at IS NULL").bind(clientId,effectiveDirectionId,title,amount,stage,probability,date,paymentDate,notes,lossCategory||null,lossDetails,id,user.id),
+   env.DB.prepare("INSERT INTO deal_events (id,user_id,deal_id,event_type,changes_json,direction_id_snapshot,client_id_snapshot) VALUES (?,?,?,'updated',?,?,?)").bind(newId(),user.id,id,JSON.stringify(changes),effectiveDirectionId,clientId)
   ]);
   return json({ok:true,id});
  }
  if(action!=="create")return json({error:"Неизвестное действие"},400);
  await env.DB.batch([
-  env.DB.prepare("INSERT INTO deals (id,user_id,client_id,direction_id,title,amount,stage,probability_percent,expected_close_date,expected_payment_date,notes,loss_reason_category,loss_reason_details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,clientId,directionId,title,amount,stage,probability,date,paymentDate,notes,lossCategory||null,lossDetails),
-  env.DB.prepare("INSERT INTO deal_events (id,user_id,deal_id,event_type,changes_json,direction_id_snapshot,client_id_snapshot) VALUES (?,?,?,'created',?,?,?)").bind(newId(),user.id,id,JSON.stringify([{field:"created",label:"Сделка создана",to:title}]),directionId,clientId)
+  env.DB.prepare("INSERT INTO deals (id,user_id,client_id,direction_id,title,amount,stage,probability_percent,expected_close_date,expected_payment_date,notes,loss_reason_category,loss_reason_details) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,clientId,effectiveDirectionId,title,amount,stage,probability,date,paymentDate,notes,lossCategory||null,lossDetails),
+  env.DB.prepare("INSERT INTO deal_events (id,user_id,deal_id,event_type,changes_json,direction_id_snapshot,client_id_snapshot) VALUES (?,?,?,'created',?,?,?)").bind(newId(),user.id,id,JSON.stringify([{field:"created",label:"Сделка создана",to:title}]),effectiveDirectionId,clientId)
  ]);
  return json({ok:true,id},201);
 }
