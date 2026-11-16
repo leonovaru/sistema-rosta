@@ -115,7 +115,8 @@ test("editing an ordinary expense updates its values and rechecks bucket balance
   db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
   db.prepare("INSERT INTO expenses(id,user_id,title,category,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?,?)").run("e","u","Покупка","Прочее",40,"2026-11-16","b");
   db.prepare("UPDATE expenses SET title=?,category=?,amount=?,spent_on=? WHERE id=? AND user_id=?").run("Аренда","Жильё",65,"2026-11-15","e","u");
-  assert.deepEqual(db.prepare("SELECT title,category,amount,spent_on FROM expenses WHERE id='e' AND user_id='u'").get(),{title:"Аренда",category:"Жильё",amount:65,spent_on:"2026-11-15"});
+  const edited=db.prepare("SELECT title,category,amount,spent_on FROM expenses WHERE id='e' AND user_id='u'").get();
+  assert.equal(edited.title,"Аренда");assert.equal(edited.category,"Жильё");assert.equal(edited.amount,65);assert.equal(edited.spent_on,"2026-11-15");
   assert.throws(()=>db.prepare("UPDATE expenses SET amount=101 WHERE id='e' AND user_id='u'").run(),/Недостаточно средств в корзине/);
   assert.equal(db.prepare("SELECT amount FROM expenses WHERE id='e'").get().amount,65);
   assert.equal(db.prepare("SELECT 100-COALESCE(SUM(amount),0) available FROM expenses WHERE user_id='u' AND bucket_id='b'").get().available,35);
