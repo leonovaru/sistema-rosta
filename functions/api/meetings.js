@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
-import { isValidMeetingDate, cleanMeetingItems, normalizeMeetingAgreements, normalizeMeetingLinks, isMeetingTaskLinkCompatible } from "../_lib/meeting-notes.js";
+import { isValidMeetingDate, cleanMeetingItems, normalizeMeetingAgreements, normalizeMeetingLinks, isMeetingTaskLinkCompatible, shouldResetMeetingTaskLinks } from "../_lib/meeting-notes.js";
 import { summarizeMeetingFollowup, listMeetingFollowups, listMeetingOpenQuestions } from "../_lib/meeting-followup.js";
 
 function parseModelJson(value){
@@ -73,10 +73,13 @@ export async function onRequestPost({request,env}){
   const values=[links.project_id,links.client_id,title,meetingDate,String(body.participants||"").slice(0,1000),String(body.summary||"").slice(0,5000),JSON.stringify(decisions),JSON.stringify(agreements),JSON.stringify(questions),transcript];
   const existingId=String(body.id||"");
   if(existingId){
-   const result=await env.DB.prepare("UPDATE meeting_notes SET project_id=?,client_id=?,title=?,meeting_date=?,participants=?,summary=?,decisions_json=?,agreements_json=?,open_questions_json=?,transcript=?,updated_at=datetime('now') WHERE id=? AND user_id=?")
-    .bind(...values,existingId,user.id).run();
-   if(!result.meta.changes)return json({error:"Протокол не найден"},404);
-   return json({ok:true,id:existingId,updated:true});
+   const existing=await env.DB.prepare("SELECT id,project_id,client_id,agreements_json FROM meeting_notes WHERE id=? AND user_id=?").bind(existingId,user.id).first();
+   if(!existing)return json({error:"Протокол не найден"},404);
+   const resetLinks=shouldResetMeetingTaskLinks(existing,{project_id:links.project_id,client_id:links.client_id,agreements});
+   const statements=[env.DB.prepare("UPDATE meeting_notes SET project_id=?,client_id=?,title=?,meeting_date=?,participants=?,summary=?,decisions_json=?,agreements_json=?,open_questions_json=?,transcript=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(...values,existingId,user.id)];
+   if(resetLinks)statements.push(env.DB.prepare("DELETE FROM meeting_task_links WHERE meeting_id=? AND user_id=?").bind(existingId,user.id));
+   await env.DB.batch(statements);
+   return json({ok:true,id:existingId,updated:true,task_links_reset:resetLinks});
   }
   const id=newId();
   await env.DB.prepare("INSERT INTO meeting_notes (id,user_id,project_id,client_id,title,meeting_date,participants,summary,decisions_json,agreements_json,open_questions_json,transcript) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")

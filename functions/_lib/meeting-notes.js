@@ -34,3 +34,10 @@ export function isMeetingTaskLinkCompatible(agreement,task){
  if(agreement.client_id&&taskClientId&&agreement.client_id!==taskClientId)return false;
  return true;
 }
+
+export function shouldResetMeetingTaskLinks(existing,next){
+ if(!existing)return false;
+ return (existing.project_id||null)!==(next.project_id||null)
+  ||(existing.client_id||null)!==(next.client_id||null)
+  ||String(existing.agreements_json||"[]")!==JSON.stringify(next.agreements||[]);
+}
