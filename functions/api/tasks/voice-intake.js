@@ -51,6 +51,11 @@ export async function onRequestPost({request,env}){
    env.DB.prepare("SELECT id FROM tasks WHERE user_id=? AND status!='done'").bind(user.id).all()
   ]);
   const allowed={direction_id:new Set(dirs.results.filter(isDirectionSelectable).map(x=>x.id)),client_id:new Set(clients.results.filter(isClientSelectable).map(x=>x.id)),project_id:new Set(projects.results.filter(isVoiceProjectSelectable).map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
+  if(requestedTasks.some(t=>t.project_id&&!allowed.project_id.has(t.project_id)))return json({error:"Одна из задач относится к завершённому проекту, архиву или проекту закрытого клиента"},409);
+  if(requestedTasks.some(t=>t.client_id&&!allowed.client_id.has(t.client_id)))return json({error:"Нельзя создавать задачи для закрытого клиента"},409);
+  if(requestedTasks.some(t=>t.direction_id&&!allowed.direction_id.has(t.direction_id)))return json({error:"Нельзя создавать задачи в отключённом направлении"},409);
+  if(workspaceItems.some(item=>item.type==="project"&&item.client_id&&!allowed.client_id.has(item.client_id)))return json({error:"Нельзя создавать проект для закрытого клиента"},409);
+  if(workspaceItems.some(item=>item.type==="project"&&item.direction_id&&!allowed.direction_id.has(item.direction_id)))return json({error:"Нельзя создавать проект в отключённом направлении"},409);
   const allowedTaskIds=new Set(openTasks.results.map(x=>x.id));
   const meetingId=String(body.meeting_id||"");
   let meetingAgreements=[];
@@ -122,7 +127,7 @@ export async function onRequestPost({request,env}){
    const nextClient=Object.prototype.hasOwnProperty.call(changes,"client_id")?changes.client_id:current.client_id;
    const nextDirection=Object.prototype.hasOwnProperty.call(changes,"direction_id")?changes.direction_id:current.direction_id;
    const nextStatus=Object.prototype.hasOwnProperty.call(changes,"status")?changes.status:current.status;
-   if(nextClient){const client=await env.DB.prepare("SELECT id,status,direction_id FROM clients WHERE id=? AND user_id=?").bind(nextClient,user.id).first();if(!isClientSelectable(client))return json({error:"Нельзя привязать проект к закрытому клиенту"},409);if(nextDirection&&client.direction_id&&client.direction_id!==nextDirection)return json({error:"Клиент и проект должны относиться к одному направлению"},400);}
+   if(nextClient&&!["done","archived"].includes(nextStatus)){const client=await env.DB.prepare("SELECT id,status,direction_id FROM clients WHERE id=? AND user_id=?").bind(nextClient,user.id).first();if(!isClientSelectable(client))return json({error:"Нельзя привязать активный проект к закрытому клиенту"},409);if(nextDirection&&client.direction_id&&client.direction_id!==nextDirection)return json({error:"Клиент и проект должны относиться к одному направлению"},400);}
    if(nextDirection){const direction=await env.DB.prepare("SELECT id,active FROM directions WHERE id=? AND user_id=?").bind(nextDirection,user.id).first();if(!isDirectionSelectable(direction))return json({error:"Выбранное направление отключено"},409);}
    if(["done","archived"].includes(nextStatus)){
     const activeTimer=await env.DB.prepare("SELECT e.id FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id WHERE e.user_id=? AND e.ended_at IS NULL AND t.project_id=? LIMIT 1").bind(user.id,projectId).first();
