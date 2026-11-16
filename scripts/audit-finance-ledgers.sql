@@ -50,6 +50,8 @@ ORDER BY d.user_id,d.title;
 -- AUDIT: obligation payment history totals (schedule amount is not a ledger balance)
 SELECT o.user_id,o.id AS obligation_id,o.title,o.amount AS scheduled_amount,
  COUNT(p.id) AS payment_count,COALESCE(SUM(p.amount),0) AS recorded_paid,
+ COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.obligation_id=o.id AND rp.user_id=o.user_id),0) AS reversed_paid,
+ COALESCE(SUM(p.amount),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments rp ON rp.id=r.obligation_payment_id WHERE rp.obligation_id=o.id AND rp.user_id=o.user_id),0) AS net_paid,
  MIN(p.paid_on) AS first_paid_on,MAX(p.paid_on) AS last_paid_on
 FROM payment_obligations o
 LEFT JOIN obligation_payments p ON p.obligation_id=o.id AND p.user_id=o.user_id
@@ -64,13 +66,15 @@ SELECT b.user_id,b.id AS bucket_id,b.title,
  COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS debt_paid_gross,
  COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments p ON p.id=r.debt_payment_id WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS debt_reversed,
  COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments p ON p.id=r.debt_payment_id WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS debt_paid,
- COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS obligations_paid,
+ COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS obligations_paid_gross,
+ COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments p ON p.id=r.obligation_payment_id WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS obligations_reversed,
+ COALESCE((SELECT amount FROM obligation_payment_bucket_net n WHERE n.user_id=b.user_id AND n.bucket_id=b.id),0) AS obligations_paid,
  ROUND(
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=b.user_id AND a.bucket_id=b.id),0)
   -COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0)
   -COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0)
   +COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments p ON p.id=r.debt_payment_id WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0)
-  -COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0),2
+  -COALESCE((SELECT amount FROM obligation_payment_bucket_net n WHERE n.user_id=b.user_id AND n.bucket_id=b.id),0),2
  ) AS available
 FROM income_buckets b
 ORDER BY b.user_id,b.sort_order,b.title;

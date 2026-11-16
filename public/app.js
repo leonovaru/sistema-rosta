@@ -854,6 +854,7 @@ async function loadFinance() {
   $("finance-debts").innerHTML=financeData.debts.length?financeData.debts.map(debt=>'<article class="finance-row"><div><b>'+escapeHtml(debt.title)+'</b><small>'+escapeHtml(debt.creditor||"")+(Number(debt.interest_rate)>0?" · "+debt.interest_rate+"% годовых":"")+(Number(debt.minimum_payment)>0?" · платёж "+money(debt.minimum_payment):"")+(debt.due_day?" · до "+debt.due_day+" числа":"")+'</small></div><strong>'+money(debt.balance)+'</strong></article>').join(""):'<p class="muted">Долги пока не добавлены.</p>';
   $("finance-debt-payments").innerHTML=financeData.debt_payments.length?financeData.debt_payments.map(payment=>'<article class="finance-row"><div><b>'+escapeHtml(payment.debt_title)+' · '+money(payment.amount)+'</b><small>'+payment.paid_on+(payment.reversal_id?' · Отменён '+payment.reversed_on+' · '+escapeHtml(payment.reversal_reason):' · Записан платеж')+'</small></div>'+(payment.reversal_id?'<span class="muted">Отменён</span>':'<button class="button ghost" data-debt-payment-reverse="'+escapeHtml(payment.id)+'">Исправить</button>')+'</article>').join(""):'<p class="muted">Платежей по долгам пока нет.</p>';
   $("finance-obligations").innerHTML=financeData.obligations.length?financeData.obligations.map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.due_date+' · '+(item.frequency==="monthly"?"ежемесячно":item.frequency==="weekly"?"еженедельно":"один раз")+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-obligation-paid="'+escapeHtml(item.id)+'">Оплачено</button></article>').join(""):'<p class="muted">Предстоящих платежей пока нет.</p>';
+  $("finance-obligation-payments").innerHTML=(financeData.obligation_payments||[]).length?financeData.obligation_payments.map(payment=>'<article class="finance-row"><div><b>'+escapeHtml(payment.obligation_title)+' · '+money(payment.amount)+'</b><small>Период: '+escapeHtml(payment.scheduled_due_date||"не сохранён")+' · Оплачено: '+payment.paid_on+(payment.reversal_id?' · Отменён '+payment.reversed_on+' · '+escapeHtml(payment.reversal_reason):'')+'</small></div>'+(payment.reversal_id?'<button class="button ghost" data-obligation-repay="'+escapeHtml(payment.obligation_id)+'" data-obligation-period="'+escapeHtml(payment.scheduled_due_date||"")+'">Оплатить период повторно</button>':'<button class="button ghost" data-obligation-reverse="'+escapeHtml(payment.id)+'">Исправить</button>')+'</article>').join(""):'<p class="muted">Оплат обязательств пока нет.</p>';
   const suggestions=financeData.recurring_expense_suggestions||[];
   $("recurring-expense-suggestions").innerHTML=suggestions.length?'<h4>Возможные регулярные платежи</h4><p class="fine">Нашла похожие расходы в истории. Ничего не добавляется автоматически — проверь суммы и даты, затем подтверди создание обязательства.</p>'+suggestions.map((x,i)=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+escapeHtml(x.category)+' · '+x.occurrences+' раза · '+(x.frequency==="monthly"?"ежемесячно":"еженедельно")+' · средняя сумма '+money(x.amount)+'</small><small>Последняя оплата: '+x.last_paid_on+' · следующая дата: '+x.next_date+'</small></div><button class="button ghost" data-recurring-add="'+i+'">Добавить в обязательства</button></article>').join(""):'<p class="muted">Пока не обнаружено достаточно устойчивых повторяющихся расходов. Для предложения нужны минимум три похожие оплаты с близкими суммами и интервалами.</p>';
   $("finance-expense-list").innerHTML=financeData.expenses.length?financeData.expenses.slice(0,12).map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.spent_on+' · '+escapeHtml(item.category)+(item.direction_title?' · '+escapeHtml(item.direction_title):' · не распределён')+(item.bucket_title?' · корзина: '+escapeHtml(item.bucket_title):'')+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-expense-delete="'+escapeHtml(item.id)+'">×</button></article>').join(""):'<p class="muted">Расходов пока нет.</p>';
@@ -904,6 +905,25 @@ $("recurring-expense-suggestions").addEventListener("click",async e=>{
  const item=(financeData?.recurring_expense_suggestions||[])[Number(button.dataset.recurringAdd)];if(!item)return;
  if(!confirm('Добавить «'+item.title+'» как '+(item.frequency==="monthly"?"ежемесячный":"еженедельный")+' обязательный платёж на '+money(item.amount)+'?'))return;
  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation",title:item.title,amount:item.amount,due_date:item.next_date,frequency:item.frequency,recurrence_day:item.frequency==="monthly"?Number(item.last_paid_on.slice(8,10)):null,category:item.category,notes:"Создано из предложения по истории расходов. Проверь сумму и дату."})});await loadFinance();}
+ catch(err){alert(err.message);}
+});
+$("finance-obligation-payments").addEventListener("click",async e=>{
+ const reverse=e.target.closest("[data-obligation-reverse]");
+ if(reverse){
+  const payment=(financeData?.obligation_payments||[]).find(row=>row.id===reverse.dataset.obligationReverse);
+  if(!payment||payment.reversal_id)return;
+  if(!confirm("Отменить оплату периода "+payment.scheduled_due_date+" на "+money(payment.amount)+"? Сумма вернётся в исходную корзину, запись останется в истории."))return;
+  const reason=prompt("Укажи причину корректировки (от 3 до 500 символов):");if(reason===null)return;
+  if(reason.trim().length<3||reason.trim().length>500){alert("Причина должна содержать от 3 до 500 символов.");return;}
+  reverse.disabled=true;reverse.dataset.requestId=reverse.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
+  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation_payment_reverse",obligation_payment_id:payment.id,reversed_on:financeData.today,reason:reason.trim(),request_id:reverse.dataset.requestId})});await loadFinance();}
+  catch(err){reverse.disabled=false;alert(err.message);}return;
+ }
+ const repay=e.target.closest("[data-obligation-repay]");if(!repay)return;
+ if(!repay.dataset.obligationPeriod){alert("У этой старой оплаты не сохранён период. Нужна ручная проверка.");return;}
+ if(!confirm("Повторно оплатить период "+repay.dataset.obligationPeriod+"?"))return;
+ repay.dataset.requestId=repay.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
+ try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation_paid",obligation_id:repay.dataset.obligationRepay,scheduled_due_date:repay.dataset.obligationPeriod,paid_on:financeData.today,request_id:repay.dataset.requestId})});await loadFinance();}
  catch(err){alert(err.message);}
 });
 $("finance-obligations").addEventListener("click",async e=>{

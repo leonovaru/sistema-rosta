@@ -77,6 +77,8 @@ test("ledger audit reconciles debt, obligation and irregular expense without dou
   assert.deepEqual(db.prepare(queries[3]).all(),[]);
   const obligation=db.prepare(queries[4]).get();
   assert.equal(obligation.recorded_paid,15);
+  assert.equal(obligation.reversed_paid,0);
+  assert.equal(obligation.net_paid,15);
   const bucket=db.prepare(queries[5]).get();
   assert.equal(bucket.allocated,100);
   assert.equal(bucket.expenses_spent,10);
@@ -127,5 +129,36 @@ test("restored debt-payment amount is spendable under database bucket guards",()
   db.prepare("INSERT INTO expenses(id,user_id,category,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?,?)").run("e","u","Прочее","Расход",30,"2026-11-13","b");
   assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,50);
   assert.equal(db.prepare("SELECT amount FROM debt_payment_bucket_net WHERE user_id='u' AND bucket_id='b'").get().amount,0);
+ }finally{db.close();}
+});
+
+test("obligation payment reversal reopens only its occurrence and preserves later schedule cursor",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("b","u","Основная",100);
+  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("i","u",100,"2026-11-01");
+  db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
+  db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date,frequency,recurrence_day,category) VALUES(?,?,?,?,?,?,?,?)").run("o","u","Интернет",15,"2026-10-01","monthly",1,"Долги и обязательства");
+  db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("op1","u","o",15,"2026-10-01","b","2026-10-01","request-obligation-1");
+  db.prepare("UPDATE payment_obligations SET due_date='2026-11-01' WHERE id='o'");
+  db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("op2","u","o",15,"2026-11-01","b","2026-11-01","request-obligation-2");
+  db.prepare("UPDATE payment_obligations SET due_date='2026-12-01' WHERE id='o'");
+  db.prepare("INSERT INTO obligation_payment_reversals(id,user_id,obligation_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("or1","u","op1",15,"2026-11-15","Ошибочная оплата","reverse-obligation-1");
+  assert.equal(db.prepare("SELECT status FROM obligation_payment_occurrences WHERE obligation_id='o' AND scheduled_due_date='2026-10-01'").get().status,"unpaid");
+  assert.equal(db.prepare("SELECT status FROM obligation_payment_occurrences WHERE obligation_id='o' AND scheduled_due_date='2026-11-01'").get().status,"paid");
+  assert.equal(db.prepare("SELECT due_date FROM payment_obligations WHERE id='o'").get().due_date,"2026-12-01");
+  assert.equal(db.prepare("SELECT amount FROM obligation_payment_bucket_net WHERE user_id='u' AND bucket_id='b'").get().amount,15);
+  assert.throws(()=>db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date) VALUES(?,?,?,?,?,?,?)").run("op3","u","o",15,"2026-11-16","b","2026-11-01"));
+  db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("op4","u","o",15,"2026-11-16","b","2026-10-01","request-obligation-4");
+  assert.equal(db.prepare("SELECT status FROM obligation_payment_occurrences WHERE obligation_id='o' AND scheduled_due_date='2026-10-01'").get().status,"paid");
+  assert.equal(db.prepare("SELECT due_date FROM payment_obligations WHERE id='o'").get().due_date,"2026-12-01");
+  assert.equal(db.prepare("SELECT amount FROM obligation_payment_bucket_net WHERE user_id='u' AND bucket_id='b'").get().amount,30);
+  const audited=db.prepare(statements()[5]).get();
+  assert.equal(audited.obligations_paid_gross,45);
+  assert.equal(audited.obligations_reversed,15);
+  assert.equal(audited.obligations_paid,30);
+  assert.equal(audited.available,70);
+  assert.throws(()=>db.prepare("UPDATE obligation_payment_reversals SET reason='изменено'"));
+  assert.throws(()=>db.prepare("DELETE FROM obligation_payment_reversals"));
  }finally{db.close();}
 });
