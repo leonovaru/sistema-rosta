@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
-const DATE=/^\\d{4}-\\d{2}-\\d{2}$/;
+const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const clean=(v,n)=>String(v||"").trim().slice(0,n);
 const validDate=v=>DATE.test(v)&&!Number.isNaN(Date.parse(v+"T12:00:00Z"))&&new Date(v+"T12:00:00Z").toISOString().slice(0,10)===v;
 export async function onRequestGet({request,env}){
