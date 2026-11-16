@@ -16,7 +16,7 @@ export async function onRequestGet({request,env}){
  if(![30,90].includes(horizon))return json({error:"Период прогноза должен быть 30 или 90 дней"},400);
  const end=addDays(today,horizon),monthStart=today.slice(0,7)+"-01";
  const [rawExpenseHistory,budgets]=await Promise.all([
-  env.DB.prepare("SELECT id,title,category,amount,spent_on FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<? ORDER BY spent_on").bind(user.id,shiftMonth(monthStart,-6),monthStart).all(),
+  env.DB.prepare("SELECT e.id,e.title,e.category,e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0) AS amount,e.spent_on FROM expenses e WHERE e.user_id=? AND e.spent_on>=? AND e.spent_on<? ORDER BY e.spent_on").bind(user.id,shiftMonth(monthStart,-6),monthStart).all(),
   env.DB.prepare("SELECT month,category,planned_amount FROM category_budgets WHERE user_id=? AND month>=? AND month<=?").bind(user.id,today.slice(0,7),addDays(end,0).slice(0,7)).all()
  ]);
  const variableRecurring=detectVariableRecurringExpenses(rawExpenseHistory.results,{today,horizonDays:horizon});

@@ -33,7 +33,7 @@ async function resolveBucket(env,userId,preferredTitle){
 async function bucketAvailable(env,userId,bucketId){
   const [allocated,expenses,debt,obligations]=await Promise.all([
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_bucket_allocations WHERE user_id=? AND bucket_id=?").bind(userId,bucketId).first(),
-    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id=? AND bucket_id=?").bind(userId,bucketId).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)),0) total FROM expenses e WHERE e.user_id=? AND e.bucket_id=?").bind(userId,bucketId).first(),
     env.DB.prepare("SELECT COALESCE(SUM(p.amount),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=p.user_id AND rp.bucket_id=p.bucket_id),0) total FROM debt_payments p WHERE p.user_id=? AND p.bucket_id=?").bind(userId,bucketId).first(),
     env.DB.prepare("SELECT COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=? AND p.bucket_id=?),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments p ON p.id=r.obligation_payment_id WHERE p.user_id=? AND p.bucket_id=?),0) total").bind(userId,bucketId,userId,bucketId).first()
   ]);
@@ -46,7 +46,7 @@ export async function onRequestGet({request,env}) {
   const today=dateInZone(settings?.timezone||"Europe/Moscow"),monthStart=today.slice(0,7)+"-01",next30=addDays(today,30);
   const [income,expenses,debtPayments,obligationPayments,debtRows,expenseRows,obligations,paymentRows,obligationPaymentRows,patternRows]=await Promise.all([
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=?").bind(user.id,monthStart,today).first(),
-    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<=?").bind(user.id,monthStart,today).first(),
+    env.DB.prepare("SELECT COALESCE((SELECT SUM(amount) FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<=?),0)-COALESCE((SELECT SUM(amount) FROM irregular_expense_payment_reversals WHERE user_id=? AND reversed_on>=? AND reversed_on<=?),0) total").bind(user.id,monthStart,today,user.id,monthStart,today).first(),
     env.DB.prepare("SELECT COALESCE((SELECT SUM(amount) FROM debt_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?),0)-COALESCE((SELECT SUM(amount) FROM debt_payment_reversals WHERE user_id=? AND reversed_on>=? AND reversed_on<=?),0) total").bind(user.id,monthStart,today,user.id,monthStart,today).first(),
     env.DB.prepare("SELECT COALESCE((SELECT SUM(amount) FROM obligation_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?),0)-COALESCE((SELECT SUM(amount) FROM obligation_payment_reversals WHERE user_id=? AND reversed_on>=? AND reversed_on<=?),0) total").bind(user.id,monthStart,today,user.id,monthStart,today).first(),
     env.DB.prepare("SELECT * FROM debts WHERE user_id=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, balance DESC").bind(user.id).all(),
