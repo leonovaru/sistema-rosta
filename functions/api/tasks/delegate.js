@@ -1,4 +1,5 @@
 import { json, requireUser, readJson } from "../../_lib/auth.js";
+import { isTaskAvailableForPlanning } from "../../_lib/task-planning-availability.js";
 
 export async function onRequestPost({ request, env }) {
   const user = await requireUser(request, env);
@@ -10,8 +11,9 @@ export async function onRequestPost({ request, env }) {
   const taskId = body?.task_id ? String(body.task_id) : null;
   if (!title || title.length > 240 || description.length > 2000) return json({ error: "Укажите задачу и контекст (до 2000 символов)" }, 400);
   if (taskId) {
-    const task = await env.DB.prepare("SELECT id FROM tasks WHERE id=? AND user_id=?").bind(taskId,user.id).first();
+    const task = await env.DB.prepare("SELECT t.id,p.status AS project_status,c.status AS client_status,pc.status AS project_client_status FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN clients pc ON pc.id=p.client_id AND pc.user_id=p.user_id WHERE t.id=? AND t.user_id=?").bind(taskId,user.id).first();
     if (!task) return json({ error: "Задача не найдена" }, 404);
+    if (!isTaskAvailableForPlanning(task)) return json({ error: "Нельзя поручать ИИ задачи завершённого или архивного проекта либо закрытого клиента" }, 409);
   }
   try {
     const result = await env.AI.run("@cf/google/gemma-4-26b-a4b-it", {
