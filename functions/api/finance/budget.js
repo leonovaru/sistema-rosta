@@ -9,8 +9,8 @@ export async function onRequestGet({request,env}) {
  const historyStart=historyMonths[0]+"-01",historyEnd=month+"-01";
  const [plans,facts,history,budgetHistory]=await Promise.all([
   env.DB.prepare("SELECT category,planned_amount FROM category_budgets WHERE user_id=? AND month=? ORDER BY category").bind(user.id,month).all(),
-  env.DB.prepare("SELECT category,SUM(amount) actual FROM expenses WHERE user_id=? AND substr(spent_on,1,7)=? GROUP BY category").bind(user.id,month).all(),
-  env.DB.prepare("SELECT category,substr(spent_on,1,7) month,SUM(amount) actual FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<? GROUP BY category,substr(spent_on,1,7)").bind(user.id,historyStart,historyEnd).all(),
+  env.DB.prepare("SELECT category,SUM(amount) actual FROM (SELECT category,amount,spent_on AS event_date FROM expenses WHERE user_id=? UNION ALL SELECT e.category,-r.amount,r.reversed_on FROM irregular_expense_payment_reversals r JOIN expenses e ON e.id=r.expense_id AND e.user_id=r.user_id WHERE r.user_id=?) WHERE substr(event_date,1,7)=? GROUP BY category").bind(user.id,user.id,month).all(),
+  env.DB.prepare("SELECT category,substr(event_date,1,7) month,SUM(amount) actual FROM (SELECT category,amount,spent_on AS event_date FROM expenses WHERE user_id=? UNION ALL SELECT e.category,-r.amount,r.reversed_on FROM irregular_expense_payment_reversals r JOIN expenses e ON e.id=r.expense_id AND e.user_id=r.user_id WHERE r.user_id=?) WHERE event_date>=? AND event_date<? GROUP BY category,substr(event_date,1,7)").bind(user.id,user.id,historyStart,historyEnd).all(),
   env.DB.prepare("SELECT category,month,planned_amount FROM category_budgets WHERE user_id=? AND month>=? AND month<?").bind(user.id,historyMonths[0],month).all()
  ]);
  const actual=new Map(facts.results.map(x=>[x.category,Number(x.actual)||0]));
