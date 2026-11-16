@@ -31,6 +31,7 @@ test("finance ledger audit contains SELECT-only reports and executes against mig
 });
 
 test("read-only audit classifies ambiguous and unmatched irregular payment history",()=>{
+ const queries=statements();
  const db=database();
  try{
   db.prepare("INSERT INTO irregular_expenses(id,user_id,title,category,amount,next_date,frequency) VALUES(?,?,?,?,?,?,?)").run("sched","u","Страховка","Дом",12000,"2026-11-16","yearly");
@@ -49,6 +50,7 @@ test("read-only audit classifies ambiguous and unmatched irregular payment histo
 });
 
 test("audit identifies generated expense rows that have no corresponding payment",()=>{
+ const queries=statements();
  const db=database();
  try{
   db.prepare("INSERT INTO expenses(id,user_id,category,title,amount,spent_on,note) VALUES(?,?,?,?,?,?,?)").run("orphan","u","Дом","Старая оплата",800,"2026-01-01","Оплата нерегулярного расхода");
