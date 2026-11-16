@@ -11,12 +11,15 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
  }
  for(const row of variableRecurringEvents){if(dateValid(row.date)&&row.date>=today&&row.date<=end)events.push({...row,amount:positive(row.amount),type:"expense",source:"variable_recurring"});}
  for(const row of obligations){
-  let due=row.due_date,guard=0;
-  // Skip long-overdue recurrence history so the next future occurrence remains visible.
+  let due=row.due_date,guard=0,overdueCount=0,firstOverdueDate=null;
+  // Preserve every missed recurring installment while skipping old cycles efficiently.
   while(due&&due<=end&&guard++<10000){
-   if(due>=today)events.push({date:due,type:"expense",title:row.title,amount:positive(row.amount),source:"obligation"});
-   else if(guard===1)events.push({date:today,type:"expense",title:row.title,amount:positive(row.amount),source:"overdue_obligation",original_due_date:due,overdue_days:Math.floor((Date.parse(today+"T12:00:00Z")-Date.parse(due+"T12:00:00Z"))/86400000)});
+   if(due<today){overdueCount++;if(!firstOverdueDate)firstOverdueDate=due;}
+   else events.push({date:due,type:"expense",title:row.title,amount:positive(row.amount),source:"obligation"});
    due=addPeriod(due,row.frequency,row.recurrence_day);
+  }
+  if(overdueCount){
+   events.push({date:today,type:"expense",title:row.title,amount:positive(row.amount)*overdueCount,source:"overdue_obligation",original_due_date:firstOverdueDate,overdue_days:Math.floor((Date.parse(today+"T12:00:00Z")-Date.parse(firstOverdueDate+"T12:00:00Z"))/86400000),overdue_occurrences:overdueCount});
   }
  }
  for(const row of irregularExpenses){
