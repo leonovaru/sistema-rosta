@@ -109,3 +109,26 @@ test("SQL trigger recalculates plan status when a realization is edited",()=>{
   assert.equal(planStatus(db),"planned");
  }finally{db.close();}
 });
+
+test("SQL insert trigger prevents concurrent-style over-allocation and updates status",()=>{
+ const db=createDb();
+ try{
+  seedPlan(db);seedIncome(db,"i1",60);seedIncome(db,"i2",50);seedIncome(db,"i3",40);
+  link(db,{id:"r1",incomeId:"i1",amount:60});
+  assert.equal(planStatus(db),"planned");
+  assert.throws(()=>link(db,{id:"r2",incomeId:"i2",amount:50}),/Плановый платёж недоступен или превышен/);
+  link(db,{id:"r3",incomeId:"i3",amount:40});
+  assert.equal(planStatus(db),"realized");
+ }finally{db.close();}
+});
+
+test("SQL insert trigger rejects archived and cancelled plans",()=>{
+ const db=createDb();
+ try{
+  seedPlan(db,{id:"cancelled",status:"cancelled"});
+  seedPlan(db,{id:"archived"});db.prepare("UPDATE planned_cashflows SET archived_at='2026-11-16' WHERE id='archived'").run();
+  seedIncome(db,"i1",10);seedIncome(db,"i2",10);
+  assert.throws(()=>link(db,{id:"r1",planId:"cancelled",incomeId:"i1",amount:10}),/Плановый платёж недоступен или превышен/);
+  assert.throws(()=>link(db,{id:"r2",planId:"archived",incomeId:"i2",amount:10}),/Плановый платёж недоступен или превышен/);
+ }finally{db.close();}
+});
