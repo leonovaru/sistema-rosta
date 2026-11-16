@@ -58,8 +58,7 @@ AFTER INSERT ON obligation_payment_reversals
 BEGIN
  UPDATE obligation_payment_occurrences SET status='unpaid',payment_id=NULL,updated_at=datetime('now')
  WHERE user_id=NEW.user_id AND payment_id=NEW.obligation_payment_id;
- UPDATE payment_obligations SET active=1
- WHERE user_id=NEW.user_id AND id=(SELECT p.obligation_id FROM obligation_payments p WHERE p.id=NEW.obligation_payment_id) AND frequency='once';
+ -- One-time schedule cursor is restored atomically by the authenticated API operation.
 END;
 CREATE TRIGGER IF NOT EXISTS trg_obligation_payment_reversal_immutable_update
 BEFORE UPDATE ON obligation_payment_reversals
