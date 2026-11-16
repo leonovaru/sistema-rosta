@@ -90,3 +90,19 @@ test("income deletion is rejected when historical debt or obligation payments wo
   }finally{db.close();}
  }
 });
+
+test("ordinary expense deletion is allowed but linked irregular payment expenses remain protected",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO irregular_expenses(id,user_id,title,category,amount,next_date,frequency) VALUES(?,?,?,?,?,?,?)").run("ir","u","Страховка","Дом",100,"2026-12-01","yearly");
+  db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on) VALUES(?,?,?,?,?)").run("ordinary","u","Обычная покупка",25,"2026-11-10");
+  db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on) VALUES(?,?,?,?,?)").run("linked","u","Страховка",100,"2026-11-11");
+  db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on,expense_id) VALUES(?,?,?,?,?,?)").run("payment","u","ir",100,"2026-11-11","linked");
+  db.prepare("DELETE FROM expenses WHERE id='ordinary' AND user_id='u'").run();
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses WHERE id='ordinary'").get().count,0);
+  assert.throws(()=>db.prepare("DELETE FROM expenses WHERE id='linked' AND user_id='u'").run(),/Расход по оплате нерегулярного платежа нельзя удалить/);
+  assert.throws(()=>db.prepare("UPDATE expenses SET amount=1 WHERE id='linked' AND user_id='u'").run(),/Расход по оплате нерегулярного платежа нельзя изменить/);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses WHERE id='linked'").get().count,1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM irregular_expense_payments WHERE expense_id='linked'").get().count,1);
+ }finally{db.close();}
+});

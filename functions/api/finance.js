@@ -50,7 +50,7 @@ export async function onRequestGet({request,env}) {
     env.DB.prepare("SELECT COALESCE((SELECT SUM(amount) FROM debt_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?),0)-COALESCE((SELECT SUM(amount) FROM debt_payment_reversals WHERE user_id=? AND reversed_on>=? AND reversed_on<=?),0) total").bind(user.id,monthStart,today,user.id,monthStart,today).first(),
     env.DB.prepare("SELECT COALESCE((SELECT SUM(amount) FROM obligation_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?),0)-COALESCE((SELECT SUM(amount) FROM obligation_payment_reversals WHERE user_id=? AND reversed_on>=? AND reversed_on<=?),0) total").bind(user.id,monthStart,today,user.id,monthStart,today).first(),
     env.DB.prepare("SELECT * FROM debts WHERE user_id=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, balance DESC").bind(user.id).all(),
-    env.DB.prepare("SELECT e.*,COALESCE(e.direction_title_snapshot,d.title) AS direction_title,b.title AS bucket_title,r.id AS irregular_reversal_id,r.reversed_on AS irregular_reversed_on FROM expenses e LEFT JOIN directions d ON d.id=COALESCE(e.direction_id_snapshot,e.direction_id) AND d.user_id=e.user_id LEFT JOIN income_buckets b ON b.id=e.bucket_id AND b.user_id=e.user_id LEFT JOIN irregular_expense_payment_reversals r ON r.expense_id=e.id AND r.user_id=e.user_id WHERE e.user_id=? ORDER BY e.spent_on DESC,e.created_at DESC LIMIT 100").bind(user.id).all(),
+    env.DB.prepare("SELECT e.*,COALESCE(e.direction_title_snapshot,d.title) AS direction_title,b.title AS bucket_title,r.id AS irregular_reversal_id,r.reversed_on AS irregular_reversed_on,p.id AS irregular_payment_id FROM expenses e LEFT JOIN directions d ON d.id=COALESCE(e.direction_id_snapshot,e.direction_id) AND d.user_id=e.user_id LEFT JOIN income_buckets b ON b.id=e.bucket_id AND b.user_id=e.user_id LEFT JOIN irregular_expense_payment_reversals r ON r.expense_id=e.id AND r.user_id=e.user_id LEFT JOIN irregular_expense_payments p ON p.expense_id=e.id AND p.user_id=e.user_id WHERE e.user_id=? ORDER BY e.spent_on DESC,e.created_at DESC LIMIT 100").bind(user.id).all(),
     env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 ORDER BY due_date LIMIT 100").bind(user.id).all(),
     env.DB.prepare("SELECT p.*,d.title AS debt_title,r.id AS reversal_id,r.reversed_on,r.reason AS reversal_reason FROM debt_payments p JOIN debts d ON d.id=p.debt_id LEFT JOIN debt_payment_reversals r ON r.debt_payment_id=p.id AND r.user_id=p.user_id WHERE p.user_id=? ORDER BY p.paid_on DESC,p.created_at DESC LIMIT 50").bind(user.id).all(),
     env.DB.prepare("SELECT p.*,o.title AS obligation_title,r.id AS reversal_id,r.reversed_on,r.reason AS reversal_reason FROM obligation_payments p JOIN payment_obligations o ON o.id=p.obligation_id LEFT JOIN obligation_payment_reversals r ON r.obligation_payment_id=p.id AND r.user_id=p.user_id WHERE p.user_id=? ORDER BY p.paid_on DESC,p.created_at DESC LIMIT 50").bind(user.id).all()
@@ -244,6 +244,10 @@ export async function onRequestDelete({request,env}) {
       await env.DB.prepare("UPDATE payment_obligations SET active=0 WHERE id=? AND user_id=?").bind(id,user.id).run();
       return json({ok:true,archived:true,preserved_payments:true});
     }
+  }
+  if(type==="expense"){
+    const linked=await env.DB.prepare("SELECT id FROM irregular_expense_payments WHERE expense_id=? AND user_id=? LIMIT 1").bind(id,user.id).first();
+    if(linked)return json({error:"Эта запись связана с оплатой нерегулярного расхода. Исправляй её через журнал оплат, чтобы сохранить историю."},409);
   }
   const table=type==="expense"?"expenses":"payment_obligations";
   const result=await env.DB.prepare("DELETE FROM "+table+" WHERE id=? AND user_id=?").bind(id,user.id).run();
