@@ -160,3 +160,21 @@ test("forecast aggregates every missed monthly obligation installment",()=>{
  assert.equal(x.summary.planned_expenses,10000);
  assert.equal(x.summary.ending_balance,0);
 });
+
+test("overdue one-time irregular expenses remain visible until paid",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:10,startingBalance:2000,irregularExpenses:[{id:"once-overdue",title:"Страховка",amount:900,next_date:"2026-11-10",frequency:"once"}]});
+ assert.equal(x.events.length,1);
+ assert.equal(x.events[0].source,"overdue_irregular_expense");
+ assert.equal(x.events[0].date,"2026-11-15");
+ assert.equal(x.events[0].original_due_date,"2026-11-10");
+ assert.equal(x.events[0].overdue_days,5);
+ assert.equal(x.summary.ending_balance,1100);
+});
+test("missed quarterly irregular expenses accumulate and keep the next due date",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:20,startingBalance:10000,irregularExpenses:[{id:"quarterly",title:"Обслуживание",amount:3000,next_date:"2026-05-31",frequency:"quarterly",recurrence_day:31}]});
+ assert.deepEqual(x.events.map(e=>[e.date,e.source,e.amount]),[["2026-11-15","overdue_irregular_expense",6000],["2026-11-30","irregular_expense",3000]]);
+ assert.equal(x.events[0].original_due_date,"2026-05-31");
+ assert.equal(x.events[0].overdue_occurrences,2);
+ assert.equal(x.summary.planned_expenses,9000);
+ assert.equal(x.summary.ending_balance,1000);
+});
