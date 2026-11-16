@@ -176,7 +176,10 @@ export async function onRequestPost({request,env}) {
     if(!payment.scheduled_due_date)return json({error:"У этой старой оплаты не сохранён период. Нужна ручная проверка."},409);
     const existing=await env.DB.prepare("SELECT id FROM obligation_payment_reversals WHERE obligation_payment_id=? AND user_id=?").bind(paymentId,user.id).first();
     if(existing)return json({error:"Этот период уже отменён"},409);
-    try{await env.DB.prepare("INSERT INTO obligation_payment_reversals(id,user_id,obligation_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").bind(id,user.id,paymentId,payment.amount,date,reason,requestId).run();}
+    const sourceObligation=await env.DB.prepare("SELECT frequency FROM payment_obligations WHERE id=? AND user_id=?").bind(payment.obligation_id,user.id).first();
+    const reverseStatements=[env.DB.prepare("INSERT INTO obligation_payment_reversals(id,user_id,obligation_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").bind(id,user.id,paymentId,payment.amount,date,reason,requestId)];
+    if(sourceObligation?.frequency==="once")reverseStatements.push(env.DB.prepare("UPDATE payment_obligations SET due_date=? WHERE id=? AND user_id=?").bind(payment.scheduled_due_date,payment.obligation_id,user.id));
+    try{await env.DB.batch(reverseStatements);}
     catch(error){
       const message=String(error?.message||error);
       if(message.includes("UNIQUE constraint failed: obligation_payment_reversals.obligation_payment_id"))return json({error:"Этот платёж уже отменён. Обнови историю."},409);
