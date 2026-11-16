@@ -27,6 +27,12 @@ export function resolveSleepWallTime(value,timezone){
   }
   return matches.size===1?[...matches][0]:null;
 }
+export function isValidSleepSequence(entries=[]){
+  try{
+    const instants=entries.filter(entry=>entry?.value).map(entry=>resolveSleepWallTime(entry.value,entry.timezone||"Europe/Moscow"));
+    return instants.every(value=>value!==null)&&instants.every((value,index)=>index===0||value>instants[index-1]);
+  }catch{return false;}
+}
 export function calculateSleepDurationMinutes(start,end,startTimezone="Europe/Moscow",endTimezone=startTimezone){
   if(!start||!end)return null;
   try{

@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
-import { resolveSleepWallTime } from "../_lib/sleep.js";
+import { isValidSleepSequence } from "../_lib/sleep.js";
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const LOCAL_DATE_TIME=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
@@ -57,18 +57,13 @@ export async function onRequestPost({request,env}){
     const row=await ensureSession(env,user.id,today,timezone);
     const bedTimezone=row.bed_timezone||row.timezone||timezone;
     const asleepTimezone=row.asleep_timezone||row.timezone||timezone;
-    if(action==="bed"&&row.fell_asleep_at){
-      const a=resolveSleepWallTime(value,timezone),b=resolveSleepWallTime(row.fell_asleep_at,asleepTimezone);
-      if(a===null||b===null||a>=b)return json({error:"Не удалось однозначно проверить порядок времени. Уточните часовой пояс или время засыпания"},400);
-    }
-    if(action==="asleep"&&row.went_to_bed_at){
-      const a=resolveSleepWallTime(row.went_to_bed_at,bedTimezone),b=resolveSleepWallTime(value,timezone);
-      if(a===null||b===null||b<=a)return json({error:"Время засыпания должно быть позже отхода ко сну"},400);
-    }
-    if(action==="asleep"&&row.woke_at){
-      const a=resolveSleepWallTime(value,timezone),b=resolveSleepWallTime(row.woke_at,row.wake_timezone||row.timezone||timezone);
-      if(a===null||b===null||a>=b)return json({error:"Время засыпания должно быть раньше пробуждения"},400);
-    }
+    const wakeTimezone=row.wake_timezone||row.timezone||timezone;
+    const sequence=action==="bed"
+      ? [{value,timezone},{value:row.fell_asleep_at,timezone:asleepTimezone},{value:row.woke_at,timezone:wakeTimezone}]
+      : [{value:row.went_to_bed_at,timezone:bedTimezone},{value,timezone},{value:row.woke_at,timezone:wakeTimezone}];
+    if(!isValidSleepSequence(sequence))return json({error:action==="bed"
+      ?"Время отхода ко сну должно быть раньше засыпания и пробуждения"
+      :"Проверьте последовательность: отход ко сну, засыпание, пробуждение"},400);
     const field=action==="bed"?"went_to_bed_at":"fell_asleep_at";
     const source=action==="bed"?"bed_source":"asleep_source";
     const confidence=action==="bed"?"bed_confidence":"asleep_confidence";
@@ -105,9 +100,11 @@ export async function onRequestPost({request,env}){
     const asleepTimezone=String(body.asleep_timezone||existing.asleep_timezone||existing.timezone||timezone);
     const wakeTimezone=String(body.wake_timezone||existing.wake_timezone||existing.timezone||timezone);
     if(!validTimezone(bedTimezone)||!validTimezone(asleepTimezone)||!validTimezone(wakeTimezone))return json({error:"Проверьте часовой пояс. Нужен формат IANA, например Europe/Amsterdam"},400);
-    const ordered=[[bed,bedTimezone],[asleep,asleepTimezone],[wake,wakeTimezone]].filter(([value])=>value);
-    const instants=ordered.map(([value,tz])=>resolveSleepWallTime(value,tz));
-    if(instants.some(value=>value===null)||instants.some((value,index)=>index>0&&value<=instants[index-1]))return json({error:"Проверьте последовательность времени и часовые пояса: отход ко сну, засыпание, пробуждение"},400);
+    if(!isValidSleepSequence([
+      {value:bed,timezone:bedTimezone},
+      {value:asleep,timezone:asleepTimezone},
+      {value:wake,timezone:wakeTimezone}
+    ]))return json({error:"Проверьте последовательность времени и часовые пояса: отход ко сну, засыпание, пробуждение"},400);
     const source=(v)=>SOURCES.includes(v)?v:"manual";
     const confidence=(v)=>CONFIDENCE.includes(v)?v:"approximate";
     const note=String(body?.note||"").trim().slice(0,1000);
