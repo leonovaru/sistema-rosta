@@ -42,16 +42,19 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
   assert.equal(db.prepare("SELECT status FROM planned_cashflows WHERE id='plan1'").get().status,"planned");
   db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on,project_id) VALUES(?,?,?,?,?)").run("income2","u1",1200,"2026-11-17","project1");
   assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real2","u1","plan1","income2",1200),/Плановый платёж недоступен или превышен/);
-  // The same actual income cannot be attached to another plan, even if a caller bypasses the API.
-  db.prepare("INSERT INTO planned_cashflows(id,user_id,flow_type,title,amount,expected_date,project_id) VALUES(?,?,?,?,?,?,?)").run("plan2","u1","income","Другой этап",1000,"2026-12-02","project1");
-  assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real_duplicate","u1","plan2","income2",1200),/UNIQUE constraint failed/);
+  // A valid actual can be linked once; unique indexes protect duplicate/concurrent links.
+  db.prepare("INSERT INTO planned_cashflows(id,user_id,flow_type,title,amount,expected_date,project_id) VALUES(?,?,?,?,?,?,?)").run("plan2","u1","income","Другой этап",1500,"2026-12-02","project1");
+  db.prepare("INSERT INTO planned_cashflows(id,user_id,flow_type,title,amount,expected_date,project_id) VALUES(?,?,?,?,?,?,?)").run("plan3","u1","income","Третий этап",1500,"2026-12-03","project1");
+  db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real2","u1","plan2","income2",1200);
+  assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real_duplicate","u1","plan3","income2",1200),/UNIQUE constraint failed/);
   // A realization must match the actual operation's amount, project, owner and flow type.
-  assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real_wrong_amount","u1","plan2","income2",900),/не соответствует фактической операции/);
+  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on,project_id) VALUES(?,?,?,?,?)").run("income3","u1",1000,"2026-11-18","project1");
+  assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real_wrong_amount","u1","plan3","income3",900),/Связь не соответствует фактической операции/);
   db.prepare("INSERT INTO users(id,email,password_hash,password_salt) VALUES(?,?,?,?)").run("u2","u2@example.test","hash","salt");
-  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("income_other_user","u2",100,"2026-11-18");
-  assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real_wrong_owner","u1","plan2","income_other_user",100),/не соответствует фактической операции/);
-  db.prepare("INSERT INTO planned_cashflows(id,user_id,flow_type,title,amount,expected_date,project_id) VALUES(?,?,?,?,?,?,?)").run("wrong_type_plan","u1","expense","Неверный тип",1000,"2026-12-03","project1");
-  assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real_wrong_type","u1","wrong_type_plan","income2",1200),/не соответствует фактической операции/);
+  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("income_other_user","u2",100,"2026-11-19");
+  assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real_wrong_owner","u1","plan3","income_other_user",100),/Связь не соответствует фактической операции/);
+  db.prepare("INSERT INTO planned_cashflows(id,user_id,flow_type,title,amount,expected_date,project_id) VALUES(?,?,?,?,?,?,?)").run("wrong_type_plan","u1","expense","Неверный тип",1500,"2026-12-04","project1");
+  assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real_wrong_type","u1","wrong_type_plan","income3",1000),/Связь не соответствует фактической операции/);
   // Expense realizations follow the same partial/full, amount-sync and delete rules.
   db.prepare("INSERT INTO planned_cashflows(id,user_id,flow_type,title,amount,expected_date,project_id) VALUES(?,?,?,?,?,?,?)").run("expense_plan","u1","expense","Расход проекта",500,"2026-12-10","project1");
   db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on,project_id) VALUES(?,?,?,?,?,?)").run("expense_actual","u1","Первая часть",300,"2026-11-16","project1");
