@@ -241,7 +241,7 @@ test("goal baseline savings and net transfers reduce spendable money exactly onc
 test("active goal contributions reduce spendable cash and stop at the remaining target",()=>{
  const x=buildCashflowForecast({today:"2026-11-01",horizonDays:29,startingBalance:5000,goalFundings:900,goals:[{status:"active",target_amount:1200,effective_saved_amount:900,monthly_contribution:600}]});
  assert.equal(x.summary.existing_goal_fundings,900);
- assert.equal(x.summary.new_goal_allocations,180);
+ assert.equal(x.summary.new_goal_allocations,300);
  assert.equal(x.summary.available_ending_balance,3800);
  assert.equal(x.days[0].goal_allocations,10);
 });
