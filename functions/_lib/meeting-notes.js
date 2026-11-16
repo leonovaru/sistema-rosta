@@ -26,3 +26,11 @@ export function normalizeMeetingLinks(projectId,clientId,projects=[],clients=[])
  }
  return {project_id:project?.id||null,client_id:client?.id||null};
 }
+
+export function isMeetingTaskLinkCompatible(agreement,task){
+ if(!agreement||!task)return false;
+ if(agreement.project_id&&task.project_id&&agreement.project_id!==task.project_id)return false;
+ const taskClientId=task.client_id||task.project_client_id||null;
+ if(agreement.client_id&&taskClientId&&agreement.client_id!==taskClientId)return false;
+ return true;
+}

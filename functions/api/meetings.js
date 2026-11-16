@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
-import { isValidMeetingDate, cleanMeetingItems, normalizeMeetingAgreements, normalizeMeetingLinks } from "../_lib/meeting-notes.js";
+import { isValidMeetingDate, cleanMeetingItems, normalizeMeetingAgreements, normalizeMeetingLinks, isMeetingTaskLinkCompatible } from "../_lib/meeting-notes.js";
 import { summarizeMeetingFollowup, listMeetingFollowups, listMeetingOpenQuestions } from "../_lib/meeting-followup.js";
 
 function parseModelJson(value){
@@ -44,12 +44,14 @@ export async function onRequestPost({request,env}){
   const agreements=parseModelJson(meetingRow.agreements_json)||[];
   const links=Array.isArray(body.links)?body.links.slice(0,20):[];
   if(!links.length)return json({error:"Нет задач для привязки"},400);
-  const statements=[];
+  const statements=[],seenAgreementIndexes=new Set();
   for(const link of links){
    const index=Number(link.agreement_index),taskId=String(link.task_id||"");
-   if(!Number.isInteger(index)||index<0||index>=agreements.length||!taskId)return json({error:"Некорректная связь поручения и задачи"},400);
-   const taskRow=await env.DB.prepare("SELECT id FROM tasks WHERE id=? AND user_id=?").bind(taskId,user.id).first();
+   if(!Number.isInteger(index)||index<0||index>=agreements.length||!taskId||seenAgreementIndexes.has(index))return json({error:"Некорректная или повторяющаяся связь поручения и задачи"},400);
+   seenAgreementIndexes.add(index);
+   const taskRow=await env.DB.prepare("SELECT t.id,t.project_id,t.client_id,p.client_id AS project_client_id FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id WHERE t.id=? AND t.user_id=?").bind(taskId,user.id).first();
    if(!taskRow)return json({error:"Одна из задач не найдена"},404);
+   if(!isMeetingTaskLinkCompatible(agreements[index],taskRow))return json({error:"Задача относится к другому проекту или клиенту, чем поручение встречи"},409);
    statements.push(env.DB.prepare("INSERT INTO meeting_task_links (user_id,meeting_id,agreement_index,task_id) VALUES (?,?,?,?) ON CONFLICT(meeting_id,agreement_index) DO UPDATE SET task_id=excluded.task_id,user_id=excluded.user_id").bind(user.id,meetingId,index,taskId));
   }
   await env.DB.batch(statements);
