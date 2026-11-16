@@ -15,10 +15,10 @@ test("payment below monthly interest reports growing balance and unresolved debt
  assert.equal(r.limited,true);
 });
 test("final payment is capped at principal plus that month's interest",()=>{
- const r=forecastDebt({balance:1000,interest_rate:12,minimum_payment:1000});
- assert.equal(r.schedule[0].interest,10);
- assert.equal(r.schedule[0].payment,1010);
+ const r=forecastDebt({balance:500,interest_rate:12,minimum_payment:1000});
+ assert.equal(r.schedule[0].interest,5);
+ assert.equal(r.schedule[0].payment,505);
  assert.equal(r.schedule[0].closing_balance,0);
- assert.equal(r.total_paid,1010);
+ assert.equal(r.total_paid,505);
  assert.equal(r.months_to_payoff,1);
 });
