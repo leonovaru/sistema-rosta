@@ -237,3 +237,25 @@ test("goal baseline savings and net transfers reduce spendable money exactly onc
  assert.equal(x.summary.available_ending_balance,15000);
  assert.equal(x.summary.total_expenses,0);
 });
+ 
+test("active goal contributions reduce spendable cash and stop at the remaining target",()=>{
+ const x=buildCashflowForecast({today:"2026-11-01",horizonDays:9,startingBalance:5000,goalFundings:900,goals:[{status:"active",target_amount:1200,effective_saved_amount:900,monthly_contribution:600}]});
+ assert.equal(x.summary.existing_goal_fundings,900);
+ assert.equal(x.summary.new_goal_allocations,180);
+ assert.equal(x.summary.available_ending_balance,3920);
+ assert.equal(x.days[0].goal_allocations,20);
+});
+ 
+test("paused and archived goals keep existing savings earmarked but add no future contributions",()=>{
+ const x=buildCashflowForecast({today:"2026-11-01",horizonDays:9,startingBalance:5000,goalFundings:1500,goals:[{status:"paused",target_amount:3000,effective_saved_amount:1000,monthly_contribution:500},{status:"archived",target_amount:2000,effective_saved_amount:500,monthly_contribution:300}]});
+ assert.equal(x.summary.existing_goal_fundings,1500);
+ assert.equal(x.summary.new_goal_allocations,0);
+ assert.equal(x.summary.available_ending_balance,3500);
+});
+ 
+test("archived reserves retain their saved balance but stop future allocations",()=>{
+ const x=buildCashflowForecast({today:"2026-11-01",horizonDays:9,startingBalance:5000,reserves:[{title:"Архивный резерв",target_amount:5000,current_amount:1200,monthly_contribution:500,active:0}]});
+ assert.equal(x.summary.existing_reserves,1200);
+ assert.equal(x.summary.new_reserve_allocations,0);
+ assert.equal(x.summary.available_ending_balance,3800);
+});
