@@ -51,3 +51,10 @@ test("irregular payment retries compare only request fields, not mutable current
  assert.ok(!irregular.includes("Number(prior.amount)-Number(item.amount)"));
  assert.ok(!irregular.includes("Number(existing.amount)-amount"));
 });
+
+test("debt, obligation and irregular payment actions reuse request IDs for identical retries",()=>{
+ const app=readFileSync(join(root,"public/app.js"),"utf8");
+ for(const key of ["finance:debt-payment:","finance:debt-payment-reverse:","finance:obligation-paid:","finance:obligation-repay:","finance:obligation-reverse:","finance:irregular-paid:","finance:irregular-repay:","finance:irregular-reverse:"]){assert.ok(app.includes(key),key);}
+ assert.ok(app.includes("financeRequestIdFor(requestKey,payload)"));
+ assert.ok(app.includes("clearFinanceRequestId(requestKey,requestId)"));
+});

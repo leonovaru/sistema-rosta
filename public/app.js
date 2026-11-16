@@ -725,16 +725,18 @@ $("irregular-expense-list").addEventListener("click",async e=>{
   if(reverse){
    const reason=prompt("Укажи причину исправления оплаты (например, платёж отмечен ошибочно):");if(reason===null)return;if(reason.trim().length<3){alert("Причина должна содержать не менее 3 символов.");return;}
    if(!confirm("Отменить эту оплату? Исходная запись останется в истории, сумма вернётся в доступный остаток корзины."))return;
-   try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({action:"reverse",payment_id:reverse.dataset.irregularReverse,reversed_on:financeData?.today||cashflowData?.period?.from,reason:reason.trim(),request_id:crypto.randomUUID().replace(/-/g,"")})});await loadIrregularExpenses();await loadFinance();await loadCashflowForecast();}
+   const payload={action:"reverse",payment_id:reverse.dataset.irregularReverse,reversed_on:financeData?.today||cashflowData?.period?.from,reason:reason.trim()},requestKey="finance:irregular-reverse:"+reverse.dataset.irregularReverse,requestId=financeRequestIdFor(requestKey,payload);
+   try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});clearFinanceRequestId(requestKey,requestId);await loadIrregularExpenses();await loadFinance();await loadCashflowForecast();}
    catch(err){alert(err.message);}return;
   }
   const repay=e.target.closest("[data-irregular-repay]");
-  if(repay){if(!confirm("Повторно отметить этот период оплаченным?"))return;try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({action:"paid",id:repay.dataset.irregularRepay,scheduled_due_date:repay.dataset.irregularPeriod,paid_on:financeData?.today||cashflowData?.period?.from,request_id:crypto.randomUUID().replace(/-/g,"")})});await loadIrregularExpenses();await loadFinance();await loadCashflowForecast();}catch(err){alert(err.message);}return;}
+  if(repay){if(!confirm("Повторно отметить этот период оплаченным?"))return;const payload={action:"paid",id:repay.dataset.irregularRepay,scheduled_due_date:repay.dataset.irregularPeriod,paid_on:financeData?.today||cashflowData?.period?.from},requestKey="finance:irregular-repay:"+repay.dataset.irregularRepay+":"+repay.dataset.irregularPeriod,requestId=financeRequestIdFor(requestKey,payload);try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});clearFinanceRequestId(requestKey,requestId);await loadIrregularExpenses();await loadFinance();await loadCashflowForecast();}catch(err){alert(err.message);}return;}
 const paid=e.target.closest("[data-irregular-paid]");
  if(paid){
   if(!confirm("Отметить расход оплаченным? Он попадёт в фактические расходы, а для повторяющегося платежа рассчитается следующая дата."))return;
-  paid.dataset.requestId=paid.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
-  try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({action:"paid",id:paid.dataset.irregularPaid,paid_on:financeData?.today||cashflowData?.period?.from,request_id:paid.dataset.requestId})});delete paid.dataset.requestId;await loadIrregularExpenses();await loadFinance();await loadCashflowForecast();}
+  const item=(irregularExpenseData?.items||[]).find(row=>row.id===paid.dataset.irregularPaid);
+  const payload={action:"paid",id:paid.dataset.irregularPaid,scheduled_due_date:item?.next_date,paid_on:financeData?.today||cashflowData?.period?.from},requestKey="finance:irregular-paid:"+paid.dataset.irregularPaid,requestId=financeRequestIdFor(requestKey,payload);
+  try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});clearFinanceRequestId(requestKey,requestId);await loadIrregularExpenses();await loadFinance();await loadCashflowForecast();}
   catch(err){alert(err.message);}
   return;
  }
@@ -1001,9 +1003,8 @@ $("finance-debts").addEventListener("click",async e=>{
 });
 $("debt-payment-form").addEventListener("submit",async e=>{
   e.preventDefault();
-  const form=$("debt-payment-form");
-  form.dataset.requestId=form.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
-  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"debt_payment",debt_id:$("payment-debt").value,amount:$("debt-payment-amount").value,paid_on:$("debt-payment-date").value,request_id:form.dataset.requestId})});delete form.dataset.requestId;$("debt-payment-amount").value="";await loadFinance();}
+  const payload={action:"debt_payment",debt_id:$("payment-debt").value,amount:$("debt-payment-amount").value,paid_on:$("debt-payment-date").value},requestKey="finance:debt-payment:"+$("payment-debt").value,requestId=financeRequestIdFor(requestKey,payload);
+  try{await api("/api/finance",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});clearFinanceRequestId(requestKey,requestId);$("debt-payment-amount").value="";await loadFinance();}
   catch(err){alert(err.message);}
 });
 $("finance-debt-payments").addEventListener("click",async e=>{
@@ -1015,10 +1016,10 @@ $("finance-debt-payments").addEventListener("click",async e=>{
  if(reason===null)return;
  if(reason.trim().length<3||reason.trim().length>500){alert("Причина должна содержать от 3 до 500 символов.");return;}
  button.disabled=true;
- button.dataset.requestId=button.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
+ const payload={action:"debt_payment_reverse",debt_payment_id:payment.id,reversed_on:financeData.today,reason:reason.trim()},requestKey="finance:debt-payment-reverse:"+payment.id,requestId=financeRequestIdFor(requestKey,payload);
  try{
-  await api("/api/finance",{method:"POST",body:JSON.stringify({action:"debt_payment_reverse",debt_payment_id:payment.id,reversed_on:financeData.today,reason:reason.trim(),request_id:button.dataset.requestId})});
-  await loadFinance();
+  await api("/api/finance",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});
+  clearFinanceRequestId(requestKey,requestId);await loadFinance();
  }catch(err){button.disabled=false;alert(err.message);}
 });
 $("recurring-expense-suggestions").addEventListener("click",async e=>{
@@ -1036,22 +1037,24 @@ $("finance-obligation-payments").addEventListener("click",async e=>{
   if(!confirm("Отменить оплату периода "+payment.scheduled_due_date+" на "+money(payment.amount)+"? Сумма вернётся в исходную корзину, запись останется в истории."))return;
   const reason=prompt("Укажи причину корректировки (от 3 до 500 символов):");if(reason===null)return;
   if(reason.trim().length<3||reason.trim().length>500){alert("Причина должна содержать от 3 до 500 символов.");return;}
-  reverse.disabled=true;reverse.dataset.requestId=reverse.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
-  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation_payment_reverse",obligation_payment_id:payment.id,reversed_on:financeData.today,reason:reason.trim(),request_id:reverse.dataset.requestId})});await loadFinance();}
+  reverse.disabled=true;
+  const payload={action:"obligation_payment_reverse",obligation_payment_id:payment.id,reversed_on:financeData.today,reason:reason.trim()},requestKey="finance:obligation-reverse:"+payment.id,requestId=financeRequestIdFor(requestKey,payload);
+  try{await api("/api/finance",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});clearFinanceRequestId(requestKey,requestId);await loadFinance();}
   catch(err){reverse.disabled=false;alert(err.message);}return;
  }
  const repay=e.target.closest("[data-obligation-repay]");if(!repay)return;
  if(!repay.dataset.obligationPeriod){alert("У этой старой оплаты не сохранён период. Нужна ручная проверка.");return;}
  if(!confirm("Повторно оплатить период "+repay.dataset.obligationPeriod+"?"))return;
- repay.dataset.requestId=repay.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
- try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation_paid",obligation_id:repay.dataset.obligationRepay,scheduled_due_date:repay.dataset.obligationPeriod,paid_on:financeData.today,request_id:repay.dataset.requestId})});await loadFinance();}
+ const payload={action:"obligation_paid",obligation_id:repay.dataset.obligationRepay,scheduled_due_date:repay.dataset.obligationPeriod,paid_on:financeData.today},requestKey="finance:obligation-repay:"+repay.dataset.obligationRepay+":"+repay.dataset.obligationPeriod,requestId=financeRequestIdFor(requestKey,payload);
+ try{await api("/api/finance",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});clearFinanceRequestId(requestKey,requestId);await loadFinance();}
  catch(err){alert(err.message);}
 });
 $("finance-obligations").addEventListener("click",async e=>{
   const button=e.target.closest("[data-obligation-paid]");if(!button)return;
   if(!confirm("Отметить платёж как оплаченный? Для повторяющегося платежа дата сдвинется на следующий период."))return;
-  button.dataset.requestId=button.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
-  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation_paid",obligation_id:button.dataset.obligationPaid,paid_on:financeData.today,request_id:button.dataset.requestId})});delete button.dataset.requestId;await loadFinance();}
+  const obligation=(financeData?.obligations||[]).find(row=>row.id===button.dataset.obligationPaid);
+  const payload={action:"obligation_paid",obligation_id:button.dataset.obligationPaid,scheduled_due_date:obligation?.due_date,paid_on:financeData.today},requestKey="finance:obligation-paid:"+button.dataset.obligationPaid,requestId=financeRequestIdFor(requestKey,payload);
+  try{await api("/api/finance",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});clearFinanceRequestId(requestKey,requestId);await loadFinance();}
   catch(err){alert(err.message);}
 });
 $("finance-expense-list").addEventListener("click",async e=>{
