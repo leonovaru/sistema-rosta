@@ -17,7 +17,9 @@ export async function onRequestPost({request,env}){
   if(prior){if(prior.source_bucket_id!==source||prior.target_type!==type||prior.target_id!==target||Math.abs(Number(prior.amount)-amount)>0.0001||prior.transferred_on!==date)return json({error:"Идентификатор уже использован для другой операции"},409);return json({ok:true,id:prior.id,idempotent:true});}
   if(!await env.DB.prepare("SELECT id FROM income_buckets WHERE id=? AND user_id=? AND active=1").bind(source,user.id).first())return json({error:"Активная корзина не найдена"},404);
   const id=newId();try{await env.DB.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,note,request_id) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,user.id,source,type,target,amount,date,note,rid).run();}
-  catch(e){const msg=String(e?.message||e);if(/Недостаточно средств|Цель или резерв/.test(msg))return json({error:msg},409);if(/UNIQUE constraint failed/.test(msg))return json({error:"Операция с таким идентификатором уже существует"},409);throw e;}
+  catch(e){const msg=String(e?.message||e);if(/Недостаточно средств|Цель или резерв|Перевод превысит целевую сумму/.test(msg))return json({error:msg},409);
+   if(/UNIQUE constraint failed/.test(msg)){const duplicate=await env.DB.prepare("SELECT id,source_bucket_id,target_type,target_id,amount,transferred_on FROM bucket_funding_transfers WHERE user_id=? AND request_id=?").bind(user.id,rid).first();if(duplicate&&duplicate.source_bucket_id===source&&duplicate.target_type===type&&duplicate.target_id===target&&Math.abs(Number(duplicate.amount)-amount)<0.0001&&duplicate.transferred_on===date)return json({ok:true,id:duplicate.id,idempotent:true});return json({error:"Операция с таким идентификатором уже существует"},409);}
+   throw e;}
   return json({ok:true,id},201);
  }
  if(action==="reverse"){
@@ -28,7 +30,7 @@ export async function onRequestPost({request,env}){
   const t=await env.DB.prepare("SELECT id,amount,target_type,target_id FROM bucket_funding_transfers WHERE id=? AND user_id=?").bind(tid,user.id).first();if(!t)return json({error:"Перевод не найден"},404);
   if(t.target_type==="reserve"){const reserve=await env.DB.prepare("SELECT current_amount FROM cash_reserves WHERE id=? AND user_id=?").bind(t.target_id,user.id).first();if(!reserve||Number(reserve.current_amount)+0.0001<Number(t.amount))return json({error:"В резерве уже использована часть перевода. Восстанови остаток перед полной отменой."},409);}
   const id=newId();try{await env.DB.prepare("INSERT INTO bucket_funding_transfer_reversals(id,user_id,transfer_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").bind(id,user.id,tid,t.amount,date,reason,rid).run();}
-  catch(e){if(/UNIQUE constraint failed/.test(String(e?.message||e)))return json({error:"Этот перевод уже отменён"},409);if(/В резерве уже использована часть перевода/.test(String(e?.message||e)))return json({error:"В резерве уже использована часть перевода. Восстанови остаток перед полной отменой."},409);throw e;}
+  catch(e){const msg=String(e?.message||e);if(/UNIQUE constraint failed/.test(msg)){const duplicate=await env.DB.prepare("SELECT id,transfer_id FROM bucket_funding_transfer_reversals WHERE user_id=? AND request_id=?").bind(user.id,rid).first();if(duplicate&&duplicate.transfer_id===tid)return json({ok:true,id:duplicate.id,idempotent:true});return json({error:"Этот перевод уже отменён или идентификатор занят"},409);}if(/В резерве уже использована часть перевода/.test(msg))return json({error:"В резерве уже использована часть перевода. Восстанови остаток перед полной отменой."},409);throw e;}
   return json({ok:true,id});
  }
  return json({error:"Неизвестное действие"},400);
