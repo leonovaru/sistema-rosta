@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, addPeriod, nextIrregularDate } from "../functions/_lib/finance.js";
+import { addDays, addPeriod, nextIrregularDate, dateInZone } from "../functions/_lib/finance.js";
 
 test("weekly obligations advance by seven calendar days",()=>{
   assert.equal(addPeriod("2026-11-15","weekly"),"2026-11-22");
@@ -31,7 +31,6 @@ test("one-time irregular expenses have no next date",()=>{
 });
 
 test("dateInZone uses the user's calendar date rather than UTC date",()=>{
- const {dateInZone}=awaitImportFinance();
  assert.equal(dateInZone("Europe/Moscow",new Date("2026-11-15T22:30:00.000Z")),"2026-11-16");
  assert.equal(dateInZone("America/Los_Angeles",new Date("2026-11-16T02:00:00.000Z")),"2026-11-15");
 });
