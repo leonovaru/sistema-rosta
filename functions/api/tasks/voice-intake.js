@@ -1,4 +1,6 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
+import { isValidCalendarDate } from "../../_lib/calendar.js";
+import { isClientSelectable, isProjectActiveForWork, isDirectionSelectable } from "../../_lib/workspace-entity-availability.js";
 
 function parseJson(value){
  if(typeof value!=="string")return value;
@@ -26,12 +28,12 @@ export function buildProjectContext(projects=[],tasks=[],steps=[]){
  });
 }
 
-function safeDate(value){
- if(!value)return null;
- const s=String(value);
- if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return null;
- const d=new Date(s+"T00:00:00Z");
- return Number.isNaN(d.getTime())||d.toISOString().slice(0,10)!==s?null:s;
+export function safeDate(value){
+ if(value===null||value===undefined||value==="")return null;
+ return isValidCalendarDate(value)?value:undefined;
+}
+export function isVoiceProjectSelectable(project){
+ return isProjectActiveForWork(project)&&(!project.client_id||isClientSelectable({status:project.client_status}));
 }
 export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);
@@ -42,13 +44,13 @@ export async function onRequestPost({request,env}){
   const requestedTasks=Array.isArray(body.tasks)?body.tasks:[];
   if(requestedTasks.length>15||(!requestedTasks.length&&!workspaceItems.length))return json({error:"Проверь список изменений"},400);
   const [dirs,clients,projects,areas,openTasks]=await Promise.all([
-   env.DB.prepare("SELECT id FROM directions WHERE user_id=?").bind(user.id).all(),
-   env.DB.prepare("SELECT id FROM clients WHERE user_id=?").bind(user.id).all(),
-   env.DB.prepare("SELECT id FROM projects WHERE user_id=?").bind(user.id).all(),
+   env.DB.prepare("SELECT id,active FROM directions WHERE user_id=?").bind(user.id).all(),
+   env.DB.prepare("SELECT id,status FROM clients WHERE user_id=?").bind(user.id).all(),
+   env.DB.prepare("SELECT p.id,p.client_id,p.direction_id,p.status,c.status AS client_status FROM projects p LEFT JOIN clients c ON c.id=p.client_id AND c.user_id=p.user_id WHERE p.user_id=?").bind(user.id).all(),
    env.DB.prepare("SELECT id FROM life_areas WHERE user_id=?").bind(user.id).all(),
    env.DB.prepare("SELECT id FROM tasks WHERE user_id=? AND status!='done'").bind(user.id).all()
   ]);
-  const allowed={direction_id:new Set(dirs.results.map(x=>x.id)),client_id:new Set(clients.results.map(x=>x.id)),project_id:new Set(projects.results.map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
+  const allowed={direction_id:new Set(dirs.results.filter(isDirectionSelectable).map(x=>x.id)),client_id:new Set(clients.results.filter(isClientSelectable).map(x=>x.id)),project_id:new Set(projects.results.filter(isVoiceProjectSelectable).map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
   const allowedTaskIds=new Set(openTasks.results.map(x=>x.id));
   const meetingId=String(body.meeting_id||"");
   let meetingAgreements=[];
@@ -80,6 +82,8 @@ export async function onRequestPost({request,env}){
    const linked=new Set(existing.results.map(x=>x.agreement_index));
    if(indices.some(index=>linked.has(index)))return json({error:"Одно из поручений уже связано с задачей. Обнови протокол перед повторным созданием."},409);
   }
+  if(prepared.some(t=>t.due_date===undefined))return json({error:"Проверь сроки задач: дата должна существовать в календаре."},400);
+  if(workspaceItems.some(item=>item.type==="project"&&item.include!==false&&item.deadline===undefined))return json({error:"Проверь срок нового проекта: дата должна существовать в календаре."},400);
   if(prepared.some(t=>!t.title))return json({error:"У каждой задачи должно быть название. Проверь пустые строки в черновике."},400);
   if(prepared.some(t=>t.parent_index!==null&&t.parent_index>=prepared.length))return json({error:"Проверь связь подзадач с родительскими задачами."},400);
   if(!prepared.length&&!workspaceItems.length)return json({error:"Не найдено изменений для сохранения"},400);
@@ -99,7 +103,7 @@ export async function onRequestPost({request,env}){
   }
   for(const item of workspaceItems.filter(x=>x.type==="project_update"&&x.include!==false)){
    const projectId=String(item.project_id||"");
-   const current=await env.DB.prepare("SELECT id,client_id,direction_id FROM projects WHERE id=? AND user_id=? AND status NOT IN ('done','archived')").bind(projectId,user.id).first();
+   const current=await env.DB.prepare("SELECT p.id,p.client_id,p.direction_id,p.status,c.status AS client_status FROM projects p LEFT JOIN clients c ON c.id=p.client_id AND c.user_id=p.user_id WHERE p.id=? AND p.user_id=? AND p.status NOT IN ('done','archived')").bind(projectId,user.id).first();
    if(!current)return json({error:"Проект для изменения больше не найден или уже закрыт. Повтори разбор."},409);
    const allowedFields=["title","description","expected_result","deadline","status","client_id","direction_id"];
    const changes=item.changes&&typeof item.changes==="object"?item.changes:{};
@@ -117,9 +121,15 @@ export async function onRequestPost({request,env}){
    if(!sets.length)return json({error:"Не указано, что именно изменить в проекте"},400);
    const nextClient=Object.prototype.hasOwnProperty.call(changes,"client_id")?changes.client_id:current.client_id;
    const nextDirection=Object.prototype.hasOwnProperty.call(changes,"direction_id")?changes.direction_id:current.direction_id;
-   if(nextClient&&nextDirection){const client=await env.DB.prepare("SELECT direction_id FROM clients WHERE id=? AND user_id=?").bind(nextClient,user.id).first();if(client?.direction_id&&client.direction_id!==nextDirection)return json({error:"Клиент и проект должны относиться к одному направлению"},400);}
+   const nextStatus=Object.prototype.hasOwnProperty.call(changes,"status")?changes.status:current.status;
+   if(nextClient){const client=await env.DB.prepare("SELECT id,status,direction_id FROM clients WHERE id=? AND user_id=?").bind(nextClient,user.id).first();if(!isClientSelectable(client))return json({error:"Нельзя привязать проект к закрытому клиенту"},409);if(nextDirection&&client.direction_id&&client.direction_id!==nextDirection)return json({error:"Клиент и проект должны относиться к одному направлению"},400);}
+   if(nextDirection){const direction=await env.DB.prepare("SELECT id,active FROM directions WHERE id=? AND user_id=?").bind(nextDirection,user.id).first();if(!isDirectionSelectable(direction))return json({error:"Выбранное направление отключено"},409);}
+   if(["done","archived"].includes(nextStatus)){
+    const activeTimer=await env.DB.prepare("SELECT e.id FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id WHERE e.user_id=? AND e.ended_at IS NULL AND t.project_id=? LIMIT 1").bind(user.id,projectId).first();
+    if(activeTimer)return json({error:"Сначала поставь на паузу таймеры задач проекта"},409);
+   }
    sets.push("updated_at=CURRENT_TIMESTAMP");values.push(projectId,user.id);
-   statements.push(env.DB.prepare("UPDATE projects SET "+sets.join(",")+" WHERE id=? AND user_id=?").bind(...values));
+   statements.push(env.DB.prepare("UPDATE projects SET "+sets.join(",")+" WHERE id=? AND user_id=? AND (? NOT IN ('done','archived') OR NOT EXISTS (SELECT 1 FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id WHERE e.user_id=projects.user_id AND e.ended_at IS NULL AND t.project_id=projects.id)) AND (? IS NULL OR NOT EXISTS (SELECT 1 FROM clients c WHERE c.id=? AND c.user_id=projects.user_id AND c.status='closed'))").bind(...values,nextStatus,nextClient,nextClient));
    updatedProjects++;
   }
   for(const item of workspaceItems.filter(x=>x.type==="project"&&x.include!==false)){
@@ -173,8 +183,8 @@ export async function onRequestPost({request,env}){
  const [settings,dirs,clients,projects,areas,existingTasks,existingSteps]=await Promise.all([
   env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first(),
   env.DB.prepare("SELECT id,title FROM directions WHERE user_id=? ORDER BY sort_order").bind(user.id).all(),
-  env.DB.prepare("SELECT id,name,direction_id FROM clients WHERE user_id=? AND status IN ('lead','active','paused')").bind(user.id).all(),
-  env.DB.prepare("SELECT id,title,client_id,direction_id,description,expected_result,deadline FROM projects WHERE user_id=? AND status NOT IN ('done','archived')").bind(user.id).all(),
+  env.DB.prepare("SELECT id,name,direction_id,status FROM clients WHERE user_id=? AND status IN ('lead','active','paused')").bind(user.id).all(),
+  env.DB.prepare("SELECT p.id,p.title,p.client_id,p.direction_id,p.description,p.expected_result,p.deadline,p.status,c.status AS client_status FROM projects p LEFT JOIN clients c ON c.id=p.client_id AND c.user_id=p.user_id WHERE p.user_id=? AND p.status NOT IN ('done','archived')").bind(user.id).all(),
   env.DB.prepare("SELECT id,title,description FROM life_areas WHERE user_id=? ORDER BY title").bind(user.id).all(),
   env.DB.prepare("SELECT id,title,description,status,priority,project_id,client_id,direction_id,life_area_id,due_date,parent_task_id,estimated_minutes FROM tasks WHERE user_id=? AND status!='done' ORDER BY created_at DESC LIMIT 200").bind(user.id).all(),
   env.DB.prepare("SELECT s.task_id,s.title,s.status FROM task_steps s JOIN tasks t ON t.id=s.task_id WHERE s.user_id=? AND t.status!='done' ORDER BY s.sort_order LIMIT 400").bind(user.id).all()
@@ -194,7 +204,7 @@ export async function onRequestPost({request,env}){
   const modelText=response?.response ?? response?.choices?.[0]?.message?.content ?? response?.result?.response;
   const parsed=typeof modelText==="string"?parseJson(modelText):(modelText&&typeof modelText==="object"?modelText:null);
   if(!parsed||(!Array.isArray(parsed.tasks)||!parsed.tasks.length)&&(!Array.isArray(parsed.workspace_items)||!parsed.workspace_items.length))throw new Error("Invalid response");
-  const allowed={direction_id:new Set(dirs.results.map(x=>x.id)),client_id:new Set(clients.results.map(x=>x.id)),project_id:new Set(projects.results.map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
+  const allowed={direction_id:new Set(dirs.results.filter(isDirectionSelectable).map(x=>x.id)),client_id:new Set(clients.results.filter(isClientSelectable).map(x=>x.id)),project_id:new Set(projects.results.filter(isVoiceProjectSelectable).map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
   const clarifyingQuestions=Array.isArray(parsed.clarifying_questions)?parsed.clarifying_questions.slice(0,5).map(x=>String(x).slice(0,300)):[];
   const existingById=new Map(existingTasks.results.map(task=>[task.id,task]));
   const workspaceItems=(Array.isArray(parsed.workspace_items)?parsed.workspace_items:[]).slice(0,8).map(item=>item.type==="client"?{type:"client",name:String(item.name||"").trim().slice(0,160),direction_id:allowed.direction_id.has(item.direction_id)?item.direction_id:null,contact:String(item.contact||"").slice(0,240),notes:String(item.notes||"").slice(0,3000)}:item.type==="project"?{type:"project",include:item.include!==false,title:String(item.title||"").trim().slice(0,180),description:String(item.description||"").slice(0,5000),expected_result:String(item.expected_result||"").slice(0,2000),deadline:safeDate(item.deadline),client_id:allowed.client_id.has(item.client_id)?item.client_id:null,client_draft_index:Number.isInteger(item.client_draft_index)&&item.client_draft_index>=0?item.client_draft_index:null,direction_id:allowed.direction_id.has(item.direction_id)?item.direction_id:null}:item.type==="project_update"&&projects.results.some(p=>p.id===item.project_id)?{type:"project_update",include:item.include!==false,project_id:item.project_id,project_title:projects.results.find(p=>p.id===item.project_id)?.title||"Проект",changes:Object.fromEntries(Object.entries(item.changes||{}).filter(([key])=>["title","description","expected_result","deadline","status","client_id","direction_id"].includes(key)).map(([key,value])=>[key,key==="client_id"?(allowed.client_id.has(value)?value:null):key==="direction_id"?(allowed.direction_id.has(value)?value:null):key==="deadline"?(value===null?null:safeDate(value)):value]))}:null).filter(Boolean);
@@ -213,7 +223,8 @@ export async function onRequestPost({request,env}){
    target_task_id:existingById.has(t.target_task_id)?t.target_task_id:null,
    possible_duplicate_task_id:existingById.has(t.possible_duplicate_task_id)?t.possible_duplicate_task_id:null
   }));
-  if(tasks.some(task=>!task.title))throw new Error("Some tasks have no title");
+  if(tasks.some(task=>!task.title||task.due_date===undefined))throw new Error("Some tasks have no title or invalid date");
+  if(workspaceItems.some(item=>item.type==="project"&&item.deadline===undefined))throw new Error("Invalid project deadline");
   for(const task of tasks){
    if(task.operation!=="update"&&!task.possible_duplicate_task_id){
     const candidate=existingTasks.results

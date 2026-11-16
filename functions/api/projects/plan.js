@@ -1,4 +1,10 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
+import { isValidCalendarDate } from "../../_lib/calendar.js";
+import { isClientSelectable, isProjectActiveForWork } from "../../_lib/workspace-entity-availability.js";
+
+export function isProjectPlanSaveAllowed(project){
+  return isProjectActiveForWork(project)&&(!project.client_id||isClientSelectable({status:project.client_status}));
+}
 
 function parseJson(value) {
   if(typeof value!=="string")return value;
@@ -10,12 +16,14 @@ export async function onRequestPost({request,env}) {
   const user=await requireUser(request,env);
   if(!user)return json({error:"Необходим вход"},401);
   const body=await readJson(request)||{},projectId=String(body.project_id||"");
-  const project=await env.DB.prepare("SELECT p.*,c.name AS client_name,d.title AS direction_title FROM projects p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN directions d ON d.id=p.direction_id WHERE p.id=? AND p.user_id=?").bind(projectId,user.id).first();
+  const project=await env.DB.prepare("SELECT p.*,c.name AS client_name,c.status AS client_status,d.title AS direction_title FROM projects p LEFT JOIN clients c ON c.id=p.client_id LEFT JOIN directions d ON d.id=p.direction_id WHERE p.id=? AND p.user_id=?").bind(projectId,user.id).first();
   if(!project)return json({error:"Проект не найден"},404);
   if(body.action==="save") {
+    if(!isProjectPlanSaveAllowed(project))return json({error:"Нельзя добавлять задачи в завершённый или архивный проект либо проект закрытого клиента"},409);
     if(!Array.isArray(body.steps)||!body.steps.length||body.steps.length>30)return json({error:"Проверь список задач"},400);
-    const tasks=body.steps.map((step,i)=>({id:newId(),title:String(step.title||"").trim().slice(0,240),description:String(step.description||"").slice(0,2000),minutes:Math.max(5,Math.min(10000,Math.round(Number(step.minutes)||30))),priority:["low","medium","high"].includes(step.priority)?step.priority:"medium",due_date:step.due_date||null,sort_order:i})).filter(x=>x.title);
+    const tasks=body.steps.map((step,i)=>({id:newId(),title:String(step.title||"").trim().slice(0,240),description:String(step.description||"").slice(0,2000),minutes:Math.max(5,Math.min(10000,Math.round(Number(step.minutes)||30))),priority:["low","medium","high"].includes(step.priority)?step.priority:"medium",due_date:step.due_date?String(step.due_date):null,sort_order:i})).filter(x=>x.title);
     if(!tasks.length)return json({error:"Нет задач для сохранения"},400);
+    if(tasks.some(task=>task.due_date&&!isValidCalendarDate(task.due_date)))return json({error:"Проверь сроки задач: дата должна существовать в календаре"},400);
     await env.DB.batch(tasks.map(t=>env.DB.prepare("INSERT INTO tasks (id,user_id,direction_id,client_id,project_id,title,description,due_date,priority,estimated_minutes) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(t.id,user.id,project.direction_id,project.client_id,project.id,t.title,t.description,t.due_date,t.priority,t.minutes)));
     return json({ok:true,created:tasks.length});
   }
