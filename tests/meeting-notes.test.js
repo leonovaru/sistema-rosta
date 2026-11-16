@@ -71,3 +71,13 @@ test("outstanding meeting commitments include missing tasks and overdue flags bu
  assert.equal(items[1].task_missing,true);
  assert.equal(items[1].overdue,false);
 });
+
+test("meeting agreements inherit the client of their selected project",()=>{
+  const projects=[{id:"p1",client_id:"c1"},{id:"p2",client_id:null}];
+  const result=normalizeMeetingAgreements([
+    {task:"Prepare report",project_id:"p1",client_id:"c2"},
+    {task:"Send invoice",project_id:"p2",client_id:"c2"}
+  ],new Set(["p1","p2"]),new Set(["c1","c2"]),projects);
+  assert.equal(result[0].client_id,"c1");
+  assert.equal(result[1].client_id,"c2");
+});

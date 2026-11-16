@@ -69,7 +69,7 @@ export async function onRequestPost({request,env}){
   ]);
   const links=normalizeMeetingLinks(body.project_id,body.client_id,projects.results,clients.results);
   const projectIds=new Set(projects.results.map(x=>x.id)),clientIds=new Set(clients.results.map(x=>x.id));
-  const decisions=cleanMeetingItems(body.decisions),agreements=normalizeMeetingAgreements(body.agreements,projectIds,clientIds),questions=cleanMeetingItems(body.open_questions);
+  const decisions=cleanMeetingItems(body.decisions),agreements=normalizeMeetingAgreements(body.agreements,projectIds,clientIds,projects.results),questions=cleanMeetingItems(body.open_questions);
   const values=[links.project_id,links.client_id,title,meetingDate,String(body.participants||"").slice(0,1000),String(body.summary||"").slice(0,5000),JSON.stringify(decisions),JSON.stringify(agreements),JSON.stringify(questions),transcript];
   const existingId=String(body.id||"");
   if(existingId){
@@ -111,6 +111,6 @@ export async function onRequestPost({request,env}){
   if(!parsed||!Array.isArray(parsed.agreements)||!Array.isArray(parsed.decisions))throw new Error("Invalid meeting response");
   const projectIds=new Set(projects.results.map(x=>x.id)),clientIds=new Set(clients.results.map(x=>x.id));
   const links=normalizeMeetingLinks(parsed.project_id,parsed.client_id,projects.results,clients.results);
-  return json({ok:true,source:"ai",transcript,title:String(parsed.title||"Встреча").slice(0,180),meeting_date:isValidMeetingDate(parsed.meeting_date)?parsed.meeting_date:today,participants:String(parsed.participants||"").slice(0,1000),project_id:links.project_id,client_id:links.client_id,summary:String(parsed.summary||"").slice(0,5000),decisions:cleanMeetingItems(parsed.decisions),agreements:normalizeMeetingAgreements(parsed.agreements,projectIds,clientIds),proposed_actions:cleanMeetingItems(parsed.proposed_actions),open_questions:cleanMeetingItems(parsed.open_questions),clarifying_questions:cleanMeetingItems(parsed.clarifying_questions)});
+  return json({ok:true,source:"ai",transcript,title:String(parsed.title||"Встреча").slice(0,180),meeting_date:isValidMeetingDate(parsed.meeting_date)?parsed.meeting_date:today,participants:String(parsed.participants||"").slice(0,1000),project_id:links.project_id,client_id:links.client_id,summary:String(parsed.summary||"").slice(0,5000),decisions:cleanMeetingItems(parsed.decisions),agreements:normalizeMeetingAgreements(parsed.agreements,projectIds,clientIds,projects.results),proposed_actions:cleanMeetingItems(parsed.proposed_actions),open_questions:cleanMeetingItems(parsed.open_questions),clarifying_questions:cleanMeetingItems(parsed.clarifying_questions)});
  }catch(error){return json({error:"Не удалось разобрать встречу. Проверь текст и попробуй ещё раз.",details:String(error?.message||error).slice(0,300)},502);}
 }

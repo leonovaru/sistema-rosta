@@ -7,14 +7,19 @@ export function isValidMeetingDate(value){
 export function cleanMeetingItems(value,max=20){
  return (Array.isArray(value)?value:[]).slice(0,max).map(item=>String(item||"").trim().slice(0,1000)).filter(Boolean);
 }
-export function normalizeMeetingAgreements(value,validProjectIds=new Set(),validClientIds=new Set()){
- return (Array.isArray(value)?value:[]).slice(0,20).map(item=>({
-  task:String(item?.task||"").trim().slice(0,240),
-  assignee:item?.assignee?String(item.assignee).trim().slice(0,160):null,
-  due_date:isValidMeetingDate(item?.due_date)?item.due_date:null,
-  project_id:validProjectIds.has(item?.project_id)?item.project_id:null,
-  client_id:validClientIds.has(item?.client_id)?item.client_id:null
- })).filter(item=>item.task);
+export function normalizeMeetingAgreements(value,validProjectIds=new Set(),validClientIds=new Set(),projects=[]){
+ return (Array.isArray(value)?value:[]).slice(0,20).map(item=>{
+  const projectId=validProjectIds.has(item?.project_id)?item.project_id:null;
+  const project=projects.find(row=>row.id===projectId)||null;
+  const clientId=project?.client_id&&validClientIds.has(project.client_id)?project.client_id:(validClientIds.has(item?.client_id)?item.client_id:null);
+  return {
+   task:String(item?.task||"").trim().slice(0,240),
+   assignee:item?.assignee?String(item.assignee).trim().slice(0,160):null,
+   due_date:isValidMeetingDate(item?.due_date)?item.due_date:null,
+   project_id:projectId,
+   client_id:clientId
+  };
+ }).filter(item=>item.task);
 }
 
 export function normalizeMeetingLinks(projectId,clientId,projects=[],clients=[]){
