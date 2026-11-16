@@ -183,3 +183,10 @@ BEFORE DELETE ON debt_payment_reversals
 BEGIN
   SELECT RAISE(ABORT,'Корректировку платежа нельзя удалить');
 END;
+
+DROP TRIGGER IF EXISTS zz_debt_payment_reversals_immutable;
+CREATE TRIGGER zz_debt_payment_reversals_immutable
+BEFORE UPDATE ON debt_payment_reversals
+BEGIN
+  SELECT RAISE(ABORT,'Корректировка платежа является неизменяемой записью');
+END;
