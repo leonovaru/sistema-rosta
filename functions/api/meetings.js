@@ -39,7 +39,7 @@ export async function onRequestPost({request,env}){
  const body=await readJson(request)||{};
  if(body.action==="link_tasks"){
   const meetingId=String(body.meeting_id||"");
-  const meetingRow=await env.DB.prepare("SELECT id,agreements_json FROM meeting_notes WHERE id=? AND user_id=?").bind(meetingId,user.id).first();
+  const meetingRow=await env.DB.prepare("SELECT id,project_id,client_id,agreements_json FROM meeting_notes WHERE id=? AND user_id=?").bind(meetingId,user.id).first();
   if(!meetingRow)return json({error:"Протокол не найден"},404);
   const agreements=parseModelJson(meetingRow.agreements_json)||[];
   const links=Array.isArray(body.links)?body.links.slice(0,20):[];
@@ -51,7 +51,8 @@ export async function onRequestPost({request,env}){
    seenAgreementIndexes.add(index);
    const taskRow=await env.DB.prepare("SELECT t.id,t.project_id,t.client_id,p.client_id AS project_client_id FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id WHERE t.id=? AND t.user_id=?").bind(taskId,user.id).first();
    if(!taskRow)return json({error:"Одна из задач не найдена"},404);
-   if(!isMeetingTaskLinkCompatible(agreements[index],taskRow))return json({error:"Задача относится к другому проекту или клиенту, чем поручение встречи"},409);
+   const agreementScope={...agreements[index],project_id:agreements[index]?.project_id||meetingRow.project_id,client_id:agreements[index]?.client_id||meetingRow.client_id};
+   if(!isMeetingTaskLinkCompatible(agreementScope,taskRow))return json({error:"Задача относится к другому проекту или клиенту, чем поручение встречи"},409);
    statements.push(env.DB.prepare("INSERT INTO meeting_task_links (user_id,meeting_id,agreement_index,task_id) VALUES (?,?,?,?) ON CONFLICT(meeting_id,agreement_index) DO UPDATE SET task_id=excluded.task_id,user_id=excluded.user_id").bind(user.id,meetingId,index,taskId));
   }
   await env.DB.batch(statements);
