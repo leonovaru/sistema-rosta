@@ -431,6 +431,17 @@ $("voice-analyze").addEventListener("click",async()=>{
 });
 initVoiceInput();
 
+$("income-recent").addEventListener("click", async e => {
+  const button=e.target.closest("[data-income-delete]");
+  if(!button)return;
+  if(!confirm("Удалить это поступление и его распределение? Если деньги уже использованы, система сохранит запись и не позволит удалить её."))return;
+  try {
+    await api("/api/income",{method:"DELETE",body:JSON.stringify({id:button.dataset.incomeDelete})});
+    await loadDashboardData();
+    await loadFinance();
+  } catch(err) { alert(err.message); }
+});
+
 $("income-form").addEventListener("submit", async e => {
   e.preventDefault();
   try {
@@ -1169,7 +1180,9 @@ document.querySelectorAll("[data-task-filter]").forEach(button => button.addEven
 async function loadIncome() {
   const data = await api("/api/income");
   $("actual").textContent = money(data.month_total);
-  $("income-recent").textContent = data.entries.length ? "Последнее: " + money(data.entries[0].amount) + " · " + data.entries[0].received_on : "Поступлений пока нет";
+  $("income-recent").innerHTML = data.entries.length
+    ? '<div class="income-history"><h3>Последние поступления</h3>' + data.entries.slice(0,8).map(item => '<article class="finance-row"><div><b>'+money(item.amount)+'</b><small>'+escapeHtml(item.received_on)+(item.direction_title?' · '+escapeHtml(item.direction_title):'')+(item.note?' · '+escapeHtml(item.note):'')+'</small></div><button type="button" class="button ghost" data-income-delete="'+escapeHtml(item.id)+'" aria-label="Удалить поступление">×</button></article>').join('') + '</div>'
+    : '<p class="muted">Поступлений пока нет.</p>';
   $("income-date").value = data.today;
   localToday = data.today; $("task-date").value = data.today;
   return data;
