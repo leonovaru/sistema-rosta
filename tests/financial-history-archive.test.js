@@ -19,7 +19,9 @@ test("reserve balance changes are journaled and a reserve with history cannot be
  try{
   db.prepare("INSERT INTO cash_reserves(id,user_id,title,target_amount,current_amount) VALUES(?,?,?,?,?)").run("r","u","Подушка",50000,10000);
   const opening=db.prepare("SELECT transaction_type,amount,balance_after FROM cash_reserve_transactions WHERE reserve_id='r'").get();
-  assert.deepEqual(opening,{transaction_type:"opening",amount:10000,balance_after:10000});
+  assert.equal(opening.transaction_type,"opening");
+  assert.equal(opening.amount,10000);
+  assert.equal(opening.balance_after,10000);
   db.prepare("UPDATE cash_reserves SET current_amount=12500 WHERE id='r'").run();
   const adjustment=db.prepare("SELECT transaction_type,amount,balance_after FROM cash_reserve_transactions WHERE reserve_id='r' ORDER BY created_at DESC,id DESC LIMIT 1").get();
   assert.equal(adjustment.transaction_type,"adjustment");
