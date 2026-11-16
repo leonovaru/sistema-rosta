@@ -669,8 +669,18 @@ $("cash-reserves").addEventListener("click",async e=>{
   if(raw===null)return;
   const amount=Number(raw);
   if(!Number.isFinite(amount)||amount<=0||amount>limit){alert("Укажи положительную сумму в пределах доступного остатка.");return;}
-  try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({action:isWithdrawal?"withdrawal":"contribution",id:r.id,amount,note:isWithdrawal?"Снятие из резерва":"Пополнение резерва"})});await loadCashReserves();await loadCashflowForecast();}
-  catch(err){alert(err.message);}
+  const operationNote=isWithdrawal?"Снятие из резерва":"Пополнение резерва";
+  if(operation.disabled)return;
+  if(!operation.dataset.requestId||operation.dataset.requestAmount!==String(amount)){
+   operation.dataset.requestId=crypto.randomUUID().replace(/-/g,"");
+   operation.dataset.requestAmount=String(amount);
+  }
+  operation.disabled=true;
+  try{
+   await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({action:isWithdrawal?"withdrawal":"contribution",id:r.id,amount,note:operationNote,request_id:operation.dataset.requestId})});
+   await loadCashReserves();
+   try{await loadCashflowForecast();}catch(error){console.error("Не удалось обновить прогноз после операции с резервом",error);}
+  }catch(err){operation.disabled=false;alert(err.message);}
   return;
  }
  const b=e.target.closest("[data-reserve-delete]");if(!b)return;

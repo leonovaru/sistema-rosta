@@ -12,20 +12,35 @@ export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const b=await readJson(request)||{},action=String(b.action||"");
  if(action==="contribution"||action==="withdrawal"){
-  const id=clean(b.id,100),amount=Number(b.amount),note=clean(b.note,500);
-  if(!id||!Number.isFinite(amount)||amount<=0||amount>100000000)return json({error:"Проверь сумму операции"},400);
+  const id=clean(b.id,100),amount=Number(b.amount),note=clean(b.note,500),requestId=clean(b.request_id,100);
+  if(!id||!Number.isFinite(amount)||amount<=0||amount>100000000||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Проверь сумму операции и идентификатор запроса"},400);
+  const transactionType=action==="contribution"?"contribution":"withdrawal";
+  const prior=await env.DB.prepare("SELECT id,reserve_id,transaction_type,amount,note FROM cash_reserve_transactions WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+  if(prior){if(prior.reserve_id!==id||prior.transaction_type!==transactionType||Math.abs(Number(prior.amount)-amount)>0.0001||String(prior.note||"")!==note)return json({error:"Идентификатор уже использован для другой операции"},409);return json({ok:true,transaction_id:prior.id,idempotent:true});}
   const reserve=await env.DB.prepare("SELECT id,current_amount,target_amount FROM cash_reserves WHERE id=? AND user_id=? AND active=1").bind(id,user.id).first();
   if(!reserve)return json({error:"Активный резерв не найден"},404);
   const current=Number(reserve.current_amount||0),delta=action==="contribution"?amount:-amount,next=Math.round((current+delta)*100)/100;
   if(next<0)return json({error:"Сумма снятия превышает накопленный остаток"},400);
   if(next>Number(reserve.target_amount))return json({error:"Пополнение превысит целевую сумму резерва"},400);
   const transactionId=newId();
-  await env.DB.batch([
-   env.DB.prepare("UPDATE cash_reserves SET current_amount=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND current_amount=? AND active=1").bind(next,id,user.id,current),
-   env.DB.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) SELECT ?,?,?,?,?,?,? WHERE changes()=1").bind(transactionId,user.id,id,action,amount,next,note)
-  ]);
-  const saved=await env.DB.prepare("SELECT id FROM cash_reserve_transactions WHERE id=? AND user_id=?").bind(transactionId,user.id).first();
-  if(!saved)return json({error:"Остаток резерва изменился. Обнови данные и повтори операцию."},409);
+  const payloadMatches=row=>row&&row.reserve_id===id&&row.transaction_type===transactionType&&Math.abs(Number(row.amount)-amount)<0.0001&&String(row.note||"")===note;
+  try{
+   await env.DB.batch([
+    env.DB.prepare("UPDATE cash_reserves SET current_amount=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND current_amount=? AND active=1").bind(next,id,user.id,current),
+    env.DB.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note,request_id) SELECT ?,?,?,?,?,?,?,? WHERE changes()=1").bind(transactionId,user.id,id,transactionType,amount,next,note,requestId)
+   ]);
+  }catch(error){
+   const replay=await env.DB.prepare("SELECT id,reserve_id,transaction_type,amount,note FROM cash_reserve_transactions WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+   if(payloadMatches(replay))return json({ok:true,transaction_id:replay.id,idempotent:true});
+   if(/UNIQUE constraint failed/.test(String(error?.message||error)))return json({error:"Идентификатор уже использован для другой операции"},409);
+   throw error;
+  }
+  const saved=await env.DB.prepare("SELECT id,reserve_id,transaction_type,amount,note FROM cash_reserve_transactions WHERE id=? AND user_id=?").bind(transactionId,user.id).first();
+  if(!saved){
+   const replay=await env.DB.prepare("SELECT id,reserve_id,transaction_type,amount,note FROM cash_reserve_transactions WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+   if(payloadMatches(replay))return json({ok:true,transaction_id:replay.id,idempotent:true});
+   return json({error:"Остаток резерва изменился. Обнови данные и повтори операцию."},409);
+  }
   return json({ok:true,transaction_id:transactionId,current_amount:next});
  }
  if(action==="delete"){
