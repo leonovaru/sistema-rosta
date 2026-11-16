@@ -80,9 +80,49 @@ test("ledger audit reconciles debt, obligation and irregular expense without dou
   const bucket=db.prepare(queries[5]).get();
   assert.equal(bucket.allocated,100);
   assert.equal(bucket.expenses_spent,10);
+  assert.equal(bucket.debt_paid_gross,20);
+  assert.equal(bucket.debt_reversed,0);
   assert.equal(bucket.debt_paid,20);
   assert.equal(bucket.obligations_paid,15);
   assert.equal(bucket.available,55);
   assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,80);
+ }finally{db.close();}
+});
+
+
+test("debt payment reversal restores debt and bucket exactly once without mutating source ledger",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("b","u","Долги и обязательства",100);
+  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("i","u",100,"2026-11-01");
+  db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
+  db.prepare("INSERT INTO debts(id,user_id,title,initial_amount,balance) VALUES(?,?,?,?,?)").run("d","u","Кредит",100,100);
+  db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,bucket_id) VALUES(?,?,?,?,?,?)").run("dp","u","d",40,"2026-11-10","b");
+  assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,60);
+  db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("rev","u","dp",40,"2026-11-12","Платёж внесён ошибочно","request-123456789");
+  assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,100);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payments").get().count,1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payment_reversals").get().count,1);
+  assert.throws(()=>db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason) VALUES(?,?,?,?,?,?)").run("rev2","u","dp",40,"2026-11-13","Повторная отмена"));
+  assert.throws(()=>db.prepare("UPDATE debt_payment_reversals SET reason='изменено' WHERE id='rev'"));
+  assert.throws(()=>db.prepare("DELETE FROM debt_payment_reversals WHERE id='rev'"));
+  const bucket=db.prepare("SELECT 100-COALESCE((SELECT amount FROM debt_payment_bucket_net WHERE user_id='u' AND bucket_id='b'),0) available").get();
+  assert.equal(bucket.available,100);
+  assert.throws(()=>db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason) VALUES(?,?,?,?,?,?)").run("bad","u","dp",39,"2026-11-13","Неверная сумма"));
+ }finally{db.close();}
+});
+
+test("restored debt-payment amount is spendable under database bucket guards",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("b","u","Основная",100);
+  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("i","u",50,"2026-11-01");
+  db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,50);
+  db.prepare("INSERT INTO debts(id,user_id,title,initial_amount,balance) VALUES(?,?,?,?,?)").run("d","u","Кредит",50,50);
+  db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,bucket_id) VALUES(?,?,?,?,?,?)").run("dp","u","d",30,"2026-11-10","b");
+  db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason) VALUES(?,?,?,?,?,?)").run("rev","u","dp",30,"2026-11-12","Исправление ошибочной оплаты");
+  db.prepare("INSERT INTO expenses(id,user_id,category,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?,?)").run("e","u","Прочее","Расход",30,"2026-11-13","b");
+  assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,50);
+  assert.equal(db.prepare("SELECT amount FROM debt_payment_bucket_net WHERE user_id='u' AND bucket_id='b'").get().amount,0);
  }finally{db.close();}
 });

@@ -34,7 +34,7 @@ async function bucketAvailable(env,userId,bucketId){
   const [allocated,expenses,debt,obligations]=await Promise.all([
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_bucket_allocations WHERE user_id=? AND bucket_id=?").bind(userId,bucketId).first(),
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id=? AND bucket_id=?").bind(userId,bucketId).first(),
-    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM debt_payments WHERE user_id=? AND bucket_id=?").bind(userId,bucketId).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(p.amount),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=p.user_id AND rp.bucket_id=p.bucket_id),0) total FROM debt_payments p WHERE p.user_id=? AND p.bucket_id=?").bind(userId,bucketId).first(),
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM obligation_payments WHERE user_id=? AND bucket_id=?").bind(userId,bucketId).first()
   ]);
   return Number(allocated.total||0)-Number(expenses.total||0)-Number(debt.total||0)-Number(obligations.total||0);
@@ -47,12 +47,12 @@ export async function onRequestGet({request,env}) {
   const [income,expenses,debtPayments,obligationPayments,debtRows,expenseRows,obligations,paymentRows,patternRows]=await Promise.all([
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=?").bind(user.id,monthStart,today).first(),
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<=?").bind(user.id,monthStart,today).first(),
-    env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM debt_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?").bind(user.id,monthStart,today).first(),
+    env.DB.prepare("SELECT COALESCE((SELECT SUM(amount) FROM debt_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?),0)-COALESCE((SELECT SUM(amount) FROM debt_payment_reversals WHERE user_id=? AND reversed_on>=? AND reversed_on<=?),0) total").bind(user.id,monthStart,today,user.id,monthStart,today).first(),
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM obligation_payments WHERE user_id=? AND paid_on>=? AND paid_on<=?").bind(user.id,monthStart,today).first(),
     env.DB.prepare("SELECT * FROM debts WHERE user_id=? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, balance DESC").bind(user.id).all(),
     env.DB.prepare("SELECT e.*,COALESCE(e.direction_title_snapshot,d.title) AS direction_title,b.title AS bucket_title FROM expenses e LEFT JOIN directions d ON d.id=COALESCE(e.direction_id_snapshot,e.direction_id) AND d.user_id=e.user_id LEFT JOIN income_buckets b ON b.id=e.bucket_id AND b.user_id=e.user_id WHERE e.user_id=? ORDER BY e.spent_on DESC,e.created_at DESC LIMIT 100").bind(user.id).all(),
     env.DB.prepare("SELECT * FROM payment_obligations WHERE user_id=? AND active=1 ORDER BY due_date LIMIT 100").bind(user.id).all(),
-    env.DB.prepare("SELECT p.*,d.title AS debt_title FROM debt_payments p JOIN debts d ON d.id=p.debt_id WHERE p.user_id=? ORDER BY p.paid_on DESC,p.created_at DESC LIMIT 30").bind(user.id).all()
+    env.DB.prepare("SELECT p.*,d.title AS debt_title,r.id AS reversal_id,r.reversed_on,r.reason AS reversal_reason FROM debt_payments p JOIN debts d ON d.id=p.debt_id LEFT JOIN debt_payment_reversals r ON r.debt_payment_id=p.id AND r.user_id=p.user_id WHERE p.user_id=? ORDER BY p.paid_on DESC,p.created_at DESC LIMIT 50").bind(user.id).all()
     ,env.DB.prepare("SELECT title,category,amount,spent_on,note FROM expenses WHERE user_id=? AND spent_on>=? AND spent_on<=? ORDER BY spent_on").bind(user.id,addDays(today,-190),today).all()
   ]);
   const recurringSuggestions=detectRecurringExpenses(patternRows.results,{today,existingTitles:obligations.results.map(x=>({title:x.title,category:x.category}))});
@@ -133,6 +133,35 @@ export async function onRequestPost({request,env}) {
     }
     const updatedDebt=await env.DB.prepare("SELECT balance FROM debts WHERE id=? AND user_id=?").bind(debtId,user.id).first();
     return json({ok:true,id,balance:Number(updatedDebt?.balance||0)},201);
+  }
+  if(action==="debt_payment_reverse"){
+    const paymentId=String(body.debt_payment_id||""),date=String(body.reversed_on||""),reason=String(body.reason||"").trim(),requestId=String(body.request_id||"");
+    if(!paymentId||!validDate(date)||reason.length<3||reason.length>500||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Укажи платёж, дату, причину (3–500 символов) и идентификатор запроса"},400);
+    const dateSettings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+    if(date>dateInZone(dateSettings?.timezone||"Europe/Moscow"))return json({error:"Нельзя указать будущую дату корректировки"},400);
+    const prior=await env.DB.prepare("SELECT id,debt_payment_id,reversed_on,reason FROM debt_payment_reversals WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+    if(prior){
+      if(prior.debt_payment_id!==paymentId||prior.reversed_on!==date||prior.reason!==reason)return json({error:"Идентификатор запроса уже использован для другой корректировки"},409);
+      return json({ok:true,id:prior.id,replayed:true});
+    }
+    const payment=await env.DB.prepare("SELECT p.id,p.debt_id,p.amount FROM debt_payments p WHERE p.id=? AND p.user_id=?").bind(paymentId,user.id).first();
+    if(!payment)return json({error:"Исходный платёж не найден"},404);
+    const existing=await env.DB.prepare("SELECT id FROM debt_payment_reversals WHERE debt_payment_id=? AND user_id=?").bind(paymentId,user.id).first();
+    if(existing)return json({error:"Этот платёж уже отменён. Повторная корректировка невозможна."},409);
+    try{
+      await env.DB.prepare("INSERT INTO debt_payment_reversals (id,user_id,debt_payment_id,amount,reversed_on,reason,request_id) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,paymentId,payment.amount,date,reason,requestId).run();
+    }catch(error){
+      const message=String(error?.message||error);
+      if(message.includes("UNIQUE constraint failed: debt_payment_reversals.debt_payment_id"))return json({error:"Этот платёж уже отменён. Обнови историю платежей."},409);
+      if(message.includes("UNIQUE constraint failed: debt_payment_reversals.user_id, debt_payment_reversals.request_id")){
+        const existingRequest=await env.DB.prepare("SELECT id,debt_payment_id,reversed_on,reason FROM debt_payment_reversals WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+        if(existingRequest&&existingRequest.debt_payment_id===paymentId&&existingRequest.reversed_on===date&&existingRequest.reason===reason)return json({ok:true,id:existingRequest.id,replayed:true});
+        return json({error:"Идентификатор запроса уже использован"},409);
+      }
+      throw error;
+    }
+    const current=await env.DB.prepare("SELECT balance FROM debts WHERE id=? AND user_id=?").bind(payment.debt_id,user.id).first();
+    return json({ok:true,id,balance:Number(current?.balance||0)},201);
   }
   if(action==="obligation_paid"){
     const obligationId=String(body.obligation_id||""),date=String(body.paid_on||""),requestId=String(body.request_id||"");

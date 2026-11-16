@@ -38,9 +38,9 @@ ORDER BY p.user_id,p.paid_on,p.id;
 
 -- AUDIT: debt balances versus immutable payment history (diagnostic, not an auto-repair rule)
 SELECT d.user_id,d.id AS debt_id,d.title,d.initial_amount,d.balance,
- COALESCE(SUM(p.amount),0) AS recorded_payments,
- ROUND(d.initial_amount-COALESCE(SUM(p.amount),0),2) AS implied_balance,
- ROUND(d.balance-(d.initial_amount-COALESCE(SUM(p.amount),0)),2) AS difference
+ COALESCE(SUM(p.amount),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r WHERE r.user_id=d.user_id AND r.debt_payment_id IN (SELECT p2.id FROM debt_payments p2 WHERE p2.debt_id=d.id AND p2.user_id=d.user_id)),0) AS recorded_payments,
+ ROUND(d.initial_amount-COALESCE(SUM(p.amount),0)+COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r WHERE r.user_id=d.user_id AND r.debt_payment_id IN (SELECT p2.id FROM debt_payments p2 WHERE p2.debt_id=d.id AND p2.user_id=d.user_id)),0),2) AS implied_balance,
+ ROUND(d.balance-(d.initial_amount-COALESCE(SUM(p.amount),0)+COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r WHERE r.user_id=d.user_id AND r.debt_payment_id IN (SELECT p2.id FROM debt_payments p2 WHERE p2.debt_id=d.id AND p2.user_id=d.user_id)),0)),2) AS difference
 FROM debts d
 LEFT JOIN debt_payments p ON p.debt_id=d.id AND p.user_id=d.user_id
 GROUP BY d.user_id,d.id,d.title,d.initial_amount,d.balance
@@ -61,7 +61,7 @@ ORDER BY o.user_id,o.title;
 SELECT b.user_id,b.id AS bucket_id,b.title,
  COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=b.user_id AND a.bucket_id=b.id),0) AS allocated,
  COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0) AS expenses_spent,
- COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS debt_paid,
+ COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS debt_paid_gross,\n COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments p ON p.id=r.debt_payment_id WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS debt_reversed,\n COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments p ON p.id=r.debt_payment_id WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS debt_paid,
  COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS obligations_paid,
  ROUND(
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=b.user_id AND a.bucket_id=b.id),0)
