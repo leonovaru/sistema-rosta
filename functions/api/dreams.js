@@ -10,6 +10,8 @@ export async function onRequestGet({request,env}){
  const [dreams,goals]=await Promise.all([
   env.DB.prepare("SELECT d.*,g.id AS goal_id,g.target_amount AS goal_target,g.status AS goal_status FROM dreams d LEFT JOIN financial_goals g ON g.dream_id=d.id AND g.user_id=d.user_id WHERE d.user_id=? ORDER BY CASE d.status WHEN 'dream' THEN 0 WHEN 'considering' THEN 1 WHEN 'paused' THEN 2 ELSE 3 END,CASE d.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,d.created_at DESC").bind(user.id).all(),
   env.DB.prepare(`SELECT g.*, b.title AS funding_bucket_title, b.active AS funding_bucket_active,
+ COALESCE((SELECT SUM(t.amount-COALESCE((SELECT SUM(r.amount) FROM bucket_funding_transfer_reversals r WHERE r.transfer_id=t.id AND r.user_id=t.user_id),0)) FROM bucket_funding_transfers t WHERE t.user_id=g.user_id AND t.target_type='goal' AND t.target_id=g.id),0) AS transferred_amount,
+ g.saved_amount+COALESCE((SELECT SUM(t.amount-COALESCE((SELECT SUM(r.amount) FROM bucket_funding_transfer_reversals r WHERE r.transfer_id=t.id AND r.user_id=t.user_id),0)) FROM bucket_funding_transfers t WHERE t.user_id=g.user_id AND t.target_type='goal' AND t.target_id=g.id),0) AS effective_saved_amount,
 CASE WHEN b.id IS NULL THEN NULL ELSE
  COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=g.user_id AND a.bucket_id=b.id),0)
  - COALESCE((SELECT SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)) FROM expenses e WHERE e.user_id=g.user_id AND e.bucket_id=b.id),0)
@@ -17,6 +19,7 @@ CASE WHEN b.id IS NULL THEN NULL ELSE
  + COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments p ON p.id=r.debt_payment_id WHERE p.user_id=g.user_id AND p.bucket_id=b.id),0)
  - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=g.user_id AND p.bucket_id=b.id),0)
  + COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments p ON p.id=r.obligation_payment_id WHERE p.user_id=g.user_id AND p.bucket_id=b.id),0)
+ - COALESCE((SELECT SUM(t.amount-COALESCE((SELECT SUM(r.amount) FROM bucket_funding_transfer_reversals r WHERE r.transfer_id=t.id AND r.user_id=t.user_id),0)) FROM bucket_funding_transfers t WHERE t.user_id=g.user_id AND t.source_bucket_id=b.id),0)
 END AS funding_bucket_available
 FROM financial_goals g LEFT JOIN income_buckets b ON b.id=g.funding_bucket_id AND b.user_id=g.user_id
 WHERE g.user_id=? ORDER BY CASE g.status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END, CASE g.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, g.target_date`).bind(user.id).all()
