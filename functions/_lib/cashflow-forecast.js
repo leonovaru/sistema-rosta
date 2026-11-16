@@ -35,6 +35,7 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
    const [y,m]=cursor.split("-").map(Number),last=new Date(Date.UTC(y,m,0,12)).getUTCDate();
    const due=cursor.slice(0,8)+String(Math.min(day,last)).padStart(2,"0");
    if(due>=today&&due<=end&&balance>0){const amount=Math.min(balance,minimum);events.push({date:due,type:"expense",title:"Минимальный платёж: "+debt.title,amount,source:"debt_minimum"});balance-=amount;}
+   else if(due<today&&cursor===today.slice(0,7)+"-01"&&balance>0){const amount=Math.min(balance,minimum);events.push({date:today,type:"expense",title:"Просроченный минимальный платёж: "+debt.title,amount,source:"overdue_debt_minimum",original_due_date:due,overdue_days:Math.floor((Date.parse(today+"T12:00:00Z")-Date.parse(due+"T12:00:00Z"))/86400000)});balance-=amount;}
    cursor=addPeriod(cursor,"monthly",1);
   }
  }
