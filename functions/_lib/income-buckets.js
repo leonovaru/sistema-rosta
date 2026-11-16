@@ -32,3 +32,12 @@ export function calculateBucketBalances(buckets, allocations, expenses) {
     return { ...bucket, allocated: Math.round(allocated * 100) / 100, spent: Math.round(spent * 100) / 100, balance: Math.round((allocated - spent) * 100) / 100 };
   });
 }
+
+
+export function normalizeBucketTitle(value) {
+  const title = String(value ?? "").trim();
+  if (title.length < 2 || title.length > 60) {
+    throw new Error("Bucket title must contain 2 to 60 characters");
+  }
+  return title;
+}

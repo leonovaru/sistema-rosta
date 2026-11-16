@@ -31,6 +31,21 @@ export async function onRequestPost({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error: "Необходим вход" }, 401);
   const body = await readJson(request) || {};
+  if(body.action==="rename"){
+    const id=String(body.id||"");
+    const title=String(body.title||"").trim();
+    if(!id)return json({error:"Не указана корзина"},400);
+    if(title.length<2||title.length>60)return json({error:"Название должно содержать от 2 до 60 символов"},400);
+    const bucket=await env.DB.prepare("SELECT id FROM income_buckets WHERE id=? AND user_id=?").bind(id,user.id).first();
+    if(!bucket)return json({error:"Корзина не найдена"},404);
+    try{
+      await env.DB.prepare("UPDATE income_buckets SET title=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(title,id,user.id).run();
+    }catch(error){
+      if(/UNIQUE constraint failed/i.test(String(error?.message||error)))return json({error:"Корзина с таким названием уже существует"},409);
+      throw error;
+    }
+    return json({ok:true,id,title});
+  }
   if(body.action==="archive"){
     const id=String(body.id||"");
     const bucket=await env.DB.prepare("SELECT id,percentage,active FROM income_buckets WHERE id=? AND user_id=?").bind(id,user.id).first();

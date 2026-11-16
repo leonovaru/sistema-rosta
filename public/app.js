@@ -554,7 +554,7 @@ async function loadIncomeBuckets(){
  const totalSpent=rows.reduce((s,x)=>s+Number(x.spent||0),0);
  const totalBalance=rows.reduce((s,x)=>s+Number(x.balance||0),0);
  $("income-bucket-summary").innerHTML=[["Распределено",money(totalAllocated)],["Потрачено из корзин",money(totalSpent)],["Остаток корзин",money(totalBalance)],["Сумма процентов",incomeBucketsData.percentage_total+"%"]].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
- const renderBucket=b=>{const pct=b.allocated>0?Math.max(0,Math.min(100,b.spent/b.allocated*100)):0;return '<article class="finance-row"><div class="bucket-main"><b>'+escapeHtml(b.title)+(b.bucket_type==="capital"?' · капитал':'')+(Number(b.active)===0?' · архив':'')+'</b><small>Распределено '+money(b.allocated)+' · потрачено '+money(b.spent)+' · доступно '+money(b.balance)+'</small><div class="progress"><span style="width:'+pct+'%"></span></div></div>'+(Number(b.active)===0?'':'<label class="bucket-percent">Доля, %<input type="number" min="0" max="100" step="0.5" data-bucket-percent="'+escapeHtml(b.id)+'" value="'+Number(b.percentage)+'"></label><button class="button ghost" data-bucket-archive="'+escapeHtml(b.id)+'">Архивировать</button>')+'</article>';};
+ const renderBucket=b=>{const pct=b.allocated>0?Math.max(0,Math.min(100,b.spent/b.allocated*100)):0;return '<article class="finance-row"><div class="bucket-main"><b>'+escapeHtml(b.title)+(b.bucket_type==="capital"?' · капитал':'')+(Number(b.active)===0?' · архив':'')+'</b><small>Распределено '+money(b.allocated)+' · потрачено '+money(b.spent)+' · доступно '+money(b.balance)+'</small><div class="progress"><span style="width:'+pct+'%"></span></div></div>'+(Number(b.active)===0?'':'<label class="bucket-percent">Доля, %<input type="number" min="0" max="100" step="0.5" data-bucket-percent="'+escapeHtml(b.id)+'" value="'+Number(b.percentage)+'"></label><button class="button ghost" data-bucket-rename="'+escapeHtml(b.id)+'">Переименовать</button><button class="button ghost" data-bucket-archive="'+escapeHtml(b.id)+'">Архивировать</button>')+'</article>';};
  $("income-bucket-list").innerHTML=activeRows.map(renderBucket).join("")+(archivedRows.length?'<h4>Архивные корзины</h4>'+archivedRows.map(renderBucket).join(""):'');
  $("income-bucket-note").textContent=incomeBucketsData.allocation_ready?"Проценты составляют 100%. Новые поступления будут распределяться автоматически.":"Сейчас доли составляют "+incomeBucketsData.percentage_total+"%. Измени значения до 100%, чтобы включить распределение.";
  const recommendation=incomeBucketsData.recommendation;
@@ -565,6 +565,17 @@ async function loadIncomeBuckets(){
 }
 $("refresh-income-buckets").addEventListener("click",async()=>{try{await loadIncomeBuckets();}catch(err){alert(err.message);}});
 $("income-bucket-list").addEventListener("click",async e=>{
+ const renameButton=e.target.closest("[data-bucket-rename]");
+ if(renameButton){
+  const bucket=(incomeBucketsData?.buckets||[]).find(row=>row.id===renameButton.dataset.bucketRename);
+  if(!bucket)return;
+  const title=prompt("Новое название корзины:",bucket.title);
+  if(title===null)return;
+  if(title.trim().length<2||title.trim().length>60){alert("Название должно содержать от 2 до 60 символов.");return;}
+  try{await api("/api/finance/buckets",{method:"POST",body:JSON.stringify({action:"rename",id:bucket.id,title:title.trim()})});await loadIncomeBuckets();await loadFinance();}
+  catch(err){alert(err.message);}
+  return;
+ }
  const button=e.target.closest("[data-bucket-archive]");if(!button)return;
  const id=button.dataset.bucketArchive;
  const options=(incomeBucketsData?.buckets||[]).filter(row=>Number(row.active)!==0&&row.id!==id);

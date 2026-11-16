@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { allocateIncome, calculateBucketBalances, DEFAULT_INCOME_BUCKETS } from "../functions/_lib/income-buckets.js";
+import { allocateIncome, calculateBucketBalances, DEFAULT_INCOME_BUCKETS, normalizeBucketTitle } from "../functions/_lib/income-buckets.js";
 
 test("default income buckets distribute exactly 100 percent",()=>{
   assert.equal(DEFAULT_INCOME_BUCKETS.reduce((sum,row)=>sum+row.percentage,0),100);
@@ -32,4 +32,12 @@ test("income allocation recomputation preserves original bucket percentages when
  const rows=allocateIncome(125,[{id:"home",percentage:30},{id:"food",percentage:20},{id:"capital",percentage:50}]);
  assert.deepEqual(rows.map(row=>row.amount),[37.5,25,62.5]);
  assert.equal(rows.reduce((sum,row)=>sum+row.amount,0),125);
+});
+
+test("bucket title normalization trims whitespace and preserves the requested title",()=>{
+ assert.equal(normalizeBucketTitle("  Резерв  "),"Резерв");
+});
+test("bucket title normalization rejects empty and overly long titles",()=>{
+ assert.throws(()=>normalizeBucketTitle(" "),/2 to 60/);
+ assert.throws(()=>normalizeBucketTitle("x".repeat(61)),/2 to 60/);
 });
