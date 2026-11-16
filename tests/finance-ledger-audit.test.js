@@ -140,7 +140,9 @@ test("obligation payment reversal reopens only its occurrence and preserves late
   db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
   db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date,frequency,recurrence_day,category) VALUES(?,?,?,?,?,?,?,?)").run("o","u","Интернет",15,"2026-10-01","monthly",1,"Долги и обязательства");
   db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("op1","u","o",15,"2026-10-01","b","2026-10-01","request-obligation-1");
+  db.prepare("UPDATE payment_obligations SET due_date='2026-11-01' WHERE id='o'").run();
   db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("op2","u","o",15,"2026-11-01","b","2026-11-01","request-obligation-2");
+  db.prepare("UPDATE payment_obligations SET due_date='2026-12-01' WHERE id='o'").run();
   db.prepare("INSERT INTO obligation_payment_reversals(id,user_id,obligation_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("or1","u","op1",15,"2026-11-15","Ошибочная оплата","reverse-obligation-1");
   assert.equal(db.prepare("SELECT status FROM obligation_payment_occurrences WHERE obligation_id='o' AND scheduled_due_date='2026-10-01'").get().status,"unpaid");
   assert.equal(db.prepare("SELECT status FROM obligation_payment_occurrences WHERE obligation_id='o' AND scheduled_due_date='2026-11-01'").get().status,"paid");
