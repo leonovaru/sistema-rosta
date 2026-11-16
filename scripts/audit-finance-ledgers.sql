@@ -59,7 +59,7 @@ GROUP BY o.user_id,o.id,o.title,o.amount
 HAVING COUNT(p.id)>0
 ORDER BY o.user_id,o.title;
 
--- AUDIT: bucket available balance using the same four-ledger formula as the app
+-- AUDIT: bucket available balance using the same net-ledger formula as the app
 SELECT b.user_id,b.id AS bucket_id,b.title,
  COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=b.user_id AND a.bucket_id=b.id),0) AS allocated,
  COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0) AS expenses_spent_gross,
@@ -71,12 +71,16 @@ SELECT b.user_id,b.id AS bucket_id,b.title,
  COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS obligations_paid_gross,
  COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments p ON p.id=r.obligation_payment_id WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS obligations_reversed,
  COALESCE((SELECT amount FROM obligation_payment_bucket_net n WHERE n.user_id=b.user_id AND n.bucket_id=b.id),0) AS obligations_paid,
+ COALESCE((SELECT SUM(t.amount) FROM bucket_funding_transfers t WHERE t.user_id=b.user_id AND t.source_bucket_id=b.id),0) AS funding_transfers_gross,
+ COALESCE((SELECT SUM(r.amount) FROM bucket_funding_transfer_reversals r JOIN bucket_funding_transfers t ON t.id=r.transfer_id WHERE t.user_id=b.user_id AND t.source_bucket_id=b.id),0) AS funding_transfers_reversed,
+ COALESCE((SELECT amount FROM bucket_funding_transfer_net n WHERE n.user_id=b.user_id AND n.source_bucket_id=b.id),0) AS funding_transfers_net,
  ROUND(
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=b.user_id AND a.bucket_id=b.id),0)
   -(COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0)-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r JOIN expenses e ON e.id=r.expense_id WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0))
   -COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0)
   +COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments p ON p.id=r.debt_payment_id WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0)
-  -COALESCE((SELECT amount FROM obligation_payment_bucket_net n WHERE n.user_id=b.user_id AND n.bucket_id=b.id),0),2
+  -COALESCE((SELECT amount FROM obligation_payment_bucket_net n WHERE n.user_id=b.user_id AND n.bucket_id=b.id),0)
+  -COALESCE((SELECT amount FROM bucket_funding_transfer_net n WHERE n.user_id=b.user_id AND n.source_bucket_id=b.id),0),2
  ) AS available
 FROM income_buckets b
 ORDER BY b.user_id,b.sort_order,b.title;

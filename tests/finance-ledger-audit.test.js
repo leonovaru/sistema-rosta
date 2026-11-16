@@ -86,6 +86,7 @@ test("ledger audit reconciles debt, obligation and irregular expense without dou
   assert.equal(bucket.debt_reversed,0);
   assert.equal(bucket.debt_paid,20);
   assert.equal(bucket.obligations_paid,15);
+  assert.equal(bucket.funding_transfers_net,0);
   assert.equal(bucket.available,55);
   assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,80);
  }finally{db.close();}
@@ -227,13 +228,16 @@ test("combined expense, debt, obligation, irregular payment and goal/reserve tra
   db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("op","u","o",10,"2026-11-05","b","2026-11-05","obligation-payment-1");
   const available=()=>Number(db.prepare("SELECT 100-COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.user_id='u' AND e.bucket_id='b'),0)+COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r JOIN expenses e ON e.id=r.expense_id WHERE r.user_id='u' AND e.bucket_id='b'),0)-COALESCE((SELECT amount FROM debt_payment_bucket_net WHERE user_id='u' AND bucket_id='b'),0)-COALESCE((SELECT amount FROM obligation_payment_bucket_net WHERE user_id='u' AND bucket_id='b'),0)-COALESCE((SELECT amount FROM bucket_funding_transfer_net WHERE user_id='u' AND source_bucket_id='b'),0) AS amount").get().amount);
   assert.equal(available(),10);
+  assert.equal(db.prepare(queries[5]).get().available,10);
   db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("dr","u","dp",10,"2026-11-06","Корректировка","debt-reversal-01");
   db.prepare("INSERT INTO obligation_payment_reversals(id,user_id,obligation_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("or","u","op",10,"2026-11-06","Корректировка","obligation-reversal-01");
   db.prepare("INSERT INTO irregular_expense_payment_reversals(id,user_id,irregular_expense_payment_id,expense_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?,?)").run("irv","u","ip","ei",10,"2026-11-06","Корректировка","irregular-reversal-01");
   assert.equal(available(),40);
+  assert.equal(db.prepare(queries[5]).get().available,40);
   db.prepare("INSERT INTO bucket_funding_transfer_reversals(id,user_id,transfer_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("gr","u","tg",20,"2026-11-07","Корректировка","goal-reversal-0001");
   db.prepare("INSERT INTO bucket_funding_transfer_reversals(id,user_id,transfer_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("rr","u","tr",30,"2026-11-07","Корректировка","reserve-reversal-01");
   assert.equal(available(),90);
+  assert.equal(db.prepare(queries[5]).get().available,90);
   assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,100);
   assert.equal(db.prepare("SELECT current_amount FROM cash_reserves WHERE id='r'").get().current_amount,0);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses WHERE id IN ('e','ei')").get().count,2);
