@@ -145,7 +145,7 @@ export async function onRequestPost({request,env}){
     if(activeTimer)return json({error:"Сначала поставь на паузу таймеры задач проекта"},409);
    }
    sets.push("updated_at=CURRENT_TIMESTAMP");values.push(projectId,user.id);
-   statements.push(env.DB.prepare("UPDATE projects SET "+sets.join(",")+" WHERE id=? AND user_id=? AND (? NOT IN ('done','archived') OR NOT EXISTS (SELECT 1 FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id WHERE e.user_id=projects.user_id AND e.ended_at IS NULL AND t.project_id=projects.id)) AND (? IS NULL OR NOT EXISTS (SELECT 1 FROM clients c WHERE c.id=? AND c.user_id=projects.user_id AND c.status='closed'))").bind(...values,nextStatus,nextClient,nextClient));
+   statements.push(env.DB.prepare("UPDATE projects SET "+sets.join(",")+" WHERE id=? AND user_id=? AND (? NOT IN ('done','archived') OR NOT EXISTS (SELECT 1 FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id WHERE e.user_id=projects.user_id AND e.ended_at IS NULL AND t.project_id=projects.id)) AND (? IN ('done','archived') OR ? IS NULL OR NOT EXISTS (SELECT 1 FROM clients c WHERE c.id=? AND c.user_id=projects.user_id AND c.status='closed'))").bind(...values,nextStatus,nextStatus,nextClient,nextClient));
    updatedProjects++;
   }
   for(const item of workspaceItems.filter(x=>x.type==="project"&&x.include!==false)){
