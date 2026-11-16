@@ -34,9 +34,17 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
  for(const row of irregularExpenses){
   let due=row.next_date,guard=0,overdueCount=0,firstOverdueDate=null;
   const anchorDay=Number(row.recurrence_day)||Number(String(row.next_date||"").slice(8,10));
+  const unpaidOccurrences=new Set(String(row.unpaid_occurrences||"").split(",").filter(Boolean));
+  for(const reopenedDate of unpaidOccurrences){
+   if(!dateValid(reopenedDate)||reopenedDate>end)continue;
+   if(reopenedDate<today){overdueCount++;if(!firstOverdueDate||reopenedDate<firstOverdueDate)firstOverdueDate=reopenedDate;}
+   else events.push({id:row.id,date:reopenedDate,type:"expense",title:row.title,amount:positive(row.amount),source:"reopened_irregular_expense",category:row.category||"Нерегулярные расходы",frequency:row.frequency,original_due_date:reopenedDate});
+  }
   while(due&&due<=end&&guard++<10000){
-   if(due<today){overdueCount++;if(!firstOverdueDate)firstOverdueDate=due;}
-   else events.push({id:row.id,date:due,type:"expense",title:row.title,amount:positive(row.amount),source:"irregular_expense",category:row.category||"Нерегулярные расходы",frequency:row.frequency});
+   if(!unpaidOccurrences.has(due)){
+    if(due<today){overdueCount++;if(!firstOverdueDate||due<firstOverdueDate)firstOverdueDate=due;}
+    else events.push({id:row.id,date:due,type:"expense",title:row.title,amount:positive(row.amount),source:"irregular_expense",category:row.category||"Нерегулярные расходы",frequency:row.frequency});
+   }
    if(row.frequency==="once")break;
    const [y,m]=due.split("-").map(Number),step=row.frequency==="yearly"?12:3,next=new Date(Date.UTC(y,m-1+step,1,12)),last=new Date(Date.UTC(next.getUTCFullYear(),next.getUTCMonth()+1,0,12)).getUTCDate();
    due=next.getUTCFullYear()+"-"+String(next.getUTCMonth()+1).padStart(2,"0")+"-"+String(Math.min(anchorDay,last)).padStart(2,"0");

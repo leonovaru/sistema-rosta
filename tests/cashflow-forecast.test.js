@@ -270,3 +270,14 @@ test("reopened future obligation occurrences are forecast on their original date
  const x=buildCashflowForecast({today:"2026-11-01",horizonDays:45,startingBalance:5000,obligations:[{due_date:"2026-12-10",frequency:"monthly",recurrence_day:10,title:"Аренда",amount:1500,unpaid_occurrences:"2026-11-15"}]});
  assert.deepEqual(x.events.map(e=>[e.date,e.source]),[["2026-11-15","reopened_obligation"],["2026-12-10","obligation"]]);
 });
+
+test("reopened historical recurring irregular payments remain visible after the schedule cursor advances",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:100,startingBalance:5000,irregularExpenses:[{id:"quarter",title:"Обслуживание",amount:900,frequency:"quarterly",next_date:"2027-01-31",recurrence_day:31,unpaid_occurrences:"2026-10-31"}]});
+ assert.deepEqual(x.events.map(e=>[e.date,e.source,e.amount]),[["2026-11-15","overdue_irregular_expense",900],["2027-01-31","irregular_expense",900]]);
+ assert.equal(x.events[0].original_due_date,"2026-10-31");
+ assert.equal(x.events[0].overdue_occurrences,1);
+});
+test("reopened future irregular occurrences are forecast on their original dates",()=>{
+ const x=buildCashflowForecast({today:"2026-11-01",horizonDays:100,startingBalance:5000,irregularExpenses:[{id:"quarter",title:"Обслуживание",amount:900,frequency:"quarterly",next_date:"2027-01-31",recurrence_day:31,unpaid_occurrences:"2026-12-31"}]});
+ assert.deepEqual(x.events.map(e=>[e.date,e.source]),[["2026-12-31","reopened_irregular_expense"],["2027-01-31","irregular_expense"]]);
+});

@@ -38,3 +38,9 @@ test("forecast API loads reopened unpaid occurrences even when the recurring cur
  assert.ok(forecast.includes("o.status='unpaid' AND o.scheduled_due_date<p.due_date"));
  assert.ok(forecast.includes("u.status='unpaid' AND u.scheduled_due_date<p.due_date AND u.scheduled_due_date<=?"));
 });
+
+test("forecast API loads reopened irregular payment occurrences after the recurrence cursor advances",()=>{
+ assert.ok(forecast.includes("AS unpaid_occurrences FROM irregular_expenses e"));
+ assert.ok(forecast.includes("o.status='unpaid' AND o.scheduled_due_date<e.next_date"));
+ assert.ok(forecast.includes("u.status='unpaid' AND u.scheduled_due_date<e.next_date AND u.scheduled_due_date<=?"));
+});
