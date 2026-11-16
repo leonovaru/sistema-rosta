@@ -55,7 +55,7 @@ test("obligation payment request identifiers make retries idempotent",()=>{
  const db=new DatabaseSync(":memory:");
  try{
   db.exec(readFileSync(join(root,"schema.sql"),"utf8"));
-  for(const name of readdirSync(join(root,"migrations")).filter(x=>/^\\d+_.+\\.sql$/.test(x)).sort((a,b)=>a.localeCompare(b)))db.exec(readFileSync(join(root,"migrations",name),"utf8"));
+  for(const name of readdirSync(join(root,"migrations")).filter(x=>/^\d+_.+\.sql$/.test(x)).sort((a,b)=>a.localeCompare(b)))db.exec(readFileSync(join(root,"migrations",name),"utf8"));
   db.prepare("INSERT INTO users(id,email,password_hash,password_salt) VALUES(?,?,?,?)").run("u3","obligation-retry@example.test","hash","salt");
   db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date) VALUES(?,?,?,?,?)").run("o3","u3","Платёж",100,"2026-11-16");
   db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?)").run("op1","u3","o3",100,"2026-11-16","2026-11-16","obligation-request-0001");
