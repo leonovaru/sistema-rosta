@@ -617,7 +617,7 @@ $("save-income-buckets").addEventListener("click",async()=>{
 });
 
 async function reverseBucketFundingTransfer(id){const reason=prompt("Укажи причину исправления перевода:");if(reason===null)return;if(reason.trim().length<3){alert("Причина должна содержать не менее 3 символов.");return;}if(!confirm("Отменить перевод? Исходная запись останется в истории, сумма вернётся в корзину."))return;try{await api("/api/finance/transfers",{method:"POST",body:JSON.stringify({action:"reverse",transfer_id:id,reversed_on:financeData?.today||new Date().toISOString().slice(0,10),reason:reason.trim(),request_id:crypto.randomUUID().replace(/-/g,"")})});await loadIncomeBuckets();await loadDreams();await loadCashReserves();await loadFinance();await loadCashflowForecast();}catch(err){alert(err.message);}}
-async function createBucketFundingTransfer(targetType,targetId,targetTitle){
+async function createBucketFundingTransfer(targetType,targetId,targetTitle,targetRemaining){
  await loadIncomeBuckets();
  const buckets=(incomeBucketsData?.buckets||[]).filter(x=>Number(x.active)!==0&&Number(x.balance)>0);
  if(!buckets.length){alert("Нет активных корзин с доступным остатком для перевода.");return;}
@@ -625,10 +625,11 @@ async function createBucketFundingTransfer(targetType,targetId,targetTitle){
  if(choice===null)return;
  const index=Number(choice)-1,bucket=buckets[index];
  if(!Number.isInteger(index)||!bucket){alert("Выбери номер корзины из списка.");return;}
- const amountText=prompt("Сумма перевода из «"+bucket.title+"». Доступно: "+money(bucket.balance));
+ const limit=Math.min(Number(bucket.balance),Number(targetRemaining??bucket.balance));if(limit<=0){alert("Цель уже накоплена до целевой суммы.");return;}
+ const amountText=prompt("Сумма перевода из «"+bucket.title+"». Доступно: "+money(limit));
  if(amountText===null)return;
  const amount=Number(amountText);
- if(!Number.isFinite(amount)||amount<=0||amount>Number(bucket.balance)+0.0001){alert("Сумма должна быть положительной и не превышать доступный остаток.");return;}
+ if(!Number.isFinite(amount)||amount<=0||amount>limit+0.0001){alert("Сумма должна быть положительной и не превышать доступный остаток.");return;}
  try{
   await api("/api/finance/transfers",{method:"POST",body:JSON.stringify({action:"create",source_bucket_id:bucket.id,target_type:targetType,target_id:targetId,amount,transferred_on:financeData?.today||new Date().toISOString().slice(0,10),note:"Перевод в "+targetTitle,request_id:crypto.randomUUID().replace(/-/g,"")})});
   await loadIncomeBuckets();await loadDreams();await loadCashReserves();await loadFinance();await loadCashflowForecast();
@@ -655,7 +656,7 @@ $("reserve-form").addEventListener("submit",async e=>{e.preventDefault();try{awa
 $("cash-reserves").addEventListener("click",async e=>{
  const reverse=e.target.closest("[data-transfer-reverse]");if(reverse){await reverseBucketFundingTransfer(reverse.dataset.transferReverse);return;}
  const transfer=e.target.closest("[data-reserve-transfer]");
- if(transfer){const reserve=cashReservesData.reserves.find(x=>x.id===transfer.dataset.reserveTransfer);if(reserve)await createBucketFundingTransfer("reserve",reserve.id,reserve.title);return;}
+ if(transfer){const reserve=cashReservesData.reserves.find(x=>x.id===transfer.dataset.reserveTransfer);if(reserve)await createBucketFundingTransfer("reserve",reserve.id,reserve.title,Number(reserve.target_amount)-Number(reserve.current_amount));return;}
  const add=e.target.closest("[data-reserve-add]");
  const withdraw=e.target.closest("[data-reserve-withdraw]");
  const operation=add||withdraw;
@@ -1565,7 +1566,7 @@ $("dreams-list").addEventListener("click",async e=>{
  if(convert){const d=dreamsData.dreams.find(x=>x.id===convert.dataset.dreamConvert);if(!d)return;const suggested=Number(d.estimated_cost)||0;const amountInput=prompt("Целевая сумма в рублях:",suggested?String(suggested):"");if(amountInput===null)return;const target=Number(amountInput);if(!Number.isFinite(target)||target<=0){alert("Укажи положительную целевую сумму.");return;}const monthlyInput=prompt("Сколько планируешь откладывать в месяц?","0");if(monthlyInput===null)return;const monthly=Number(monthlyInput);if(!Number.isFinite(monthly)||monthly<0){alert("Проверь ежемесячный взнос.");return;}const date=prompt("Желаемая дата достижения (ГГГГ-ММ-ДД), можно оставить пустой:",d.desired_date||"");if(date===null)return;try{await api("/api/dreams",{method:"POST",body:JSON.stringify({action:"goal",dream_id:d.id,title:d.title,description:d.description,target_amount:target,monthly_contribution:monthly,target_date:date||null,priority:d.priority})});await loadDreams();}catch(err){alert(err.message);}}
 });
 $("dreams-list").addEventListener("change",async e=>{const s=e.target.closest("[data-dream-status]");if(!s)return;try{await api("/api/dreams",{method:"PATCH",body:JSON.stringify({type:"dream",id:s.dataset.dreamStatus,status:s.value})});await loadDreams();}catch(err){alert(err.message);}});
-$("financial-goals-list").addEventListener("click",async e=>{const reverse=e.target.closest("[data-transfer-reverse]");if(reverse){await reverseBucketFundingTransfer(reverse.dataset.transferReverse);return;}const transfer=e.target.closest("[data-goal-transfer]");if(!transfer)return;const goal=dreamsData.goals.find(x=>x.id===transfer.dataset.goalTransfer);if(goal)await createBucketFundingTransfer("goal",goal.id,goal.title);});
+$("financial-goals-list").addEventListener("click",async e=>{const reverse=e.target.closest("[data-transfer-reverse]");if(reverse){await reverseBucketFundingTransfer(reverse.dataset.transferReverse);return;}const transfer=e.target.closest("[data-goal-transfer]");if(!transfer)return;const goal=dreamsData.goals.find(x=>x.id===transfer.dataset.goalTransfer);if(goal)await createBucketFundingTransfer("goal",goal.id,goal.title,Number(goal.target_amount)-Number(goal.effective_saved_amount??goal.saved_amount));});
 $("financial-goals-list").addEventListener("change",async e=>{
  const select=e.target.closest("[data-goal-funding-bucket]");if(!select)return;
  const id=select.dataset.goalFundingBucket,value=select.value||null;select.disabled=true;
