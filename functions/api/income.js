@@ -3,6 +3,12 @@ import { allocateIncome } from "../_lib/income-buckets.js";
 import { buildFinancialAttributionSnapshot } from "../_lib/financial-attribution.js";
 import { isClientSelectable, isProjectSelectable } from "../_lib/workspace-entity-availability.js";
 
+export function isValidIncomeDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(value + "T12:00:00Z");
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0,10) === value;
+}
+
 function dateInZone(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
   const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
@@ -26,7 +32,7 @@ export async function onRequestPost({ request, env }) {
   const body = await readJson(request);
   if (body?.action === "update") {
     const id=String(body.id||"").trim(),amount=Number(body.amount),date=String(body.received_on||""),note=String(body.note||"").slice(0,500);
-    if(!id||!Number.isFinite(amount)||amount<=0||amount>100000000||!/^\d{4}-\d{2}-\d{2}$/.test(date)){return json({error:"Проверь сумму и дату поступления"},400);}
+    if(!id||!Number.isFinite(amount)||amount<=0||amount>100000000||!isValidIncomeDate(date)){return json({error:"Проверь сумму и дату поступления"},400);}
     const existing=await env.DB.prepare("SELECT id,amount FROM income_entries WHERE id=? AND user_id=?").bind(id,user.id).first();
     if(!existing)return json({error:"Поступление не найдено"},404);
     const allocations=await env.DB.prepare("SELECT id,bucket_id,percentage,amount FROM income_bucket_allocations WHERE income_id=? AND user_id=? ORDER BY created_at,id").bind(id,user.id).all();
@@ -53,7 +59,7 @@ export async function onRequestPost({ request, env }) {
   const date = String(body?.received_on || new Date().toISOString().slice(0,10));
   const directionId = body?.direction_id ? String(body.direction_id) : null;
   if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) return json({ error: "Укажите корректную сумму" }, 400);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ error: "Некорректная дата" }, 400);
+  if (!isValidIncomeDate(date)) return json({ error: "Некорректная дата" }, 400);
   const clientId=body?.client_id?String(body.client_id):null,projectId=body?.project_id?String(body.project_id):null;
   const client=clientId?await env.DB.prepare("SELECT id,name,direction_id,status FROM clients WHERE id=? AND user_id=?").bind(clientId,user.id).first():null;
   if(clientId&&!client)return json({error:"Клиент не найден"},404);

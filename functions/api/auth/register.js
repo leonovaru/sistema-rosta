@@ -19,7 +19,7 @@ export async function onRequestPost({ request, env }) {
   const body = await request.json().catch(() => null);
   const email = String(body?.email || "").trim().toLowerCase();
   const password = String(body?.password || "");
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length > 254) return json({ error: "Проверьте email" }, 400);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return json({ error: "Проверьте email" }, 400);
   if (password.length < 10 || password.length > 200) return json({ error: "Пароль должен содержать от 10 до 200 символов" }, 400);
 
   // By default, only the first account can be created. Enable open registration

@@ -1,6 +1,6 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
 import { buildBudgetInsights } from "../../_lib/budget-insights.js";
-const MONTH=/^\\d{4}-(0[1-9]|1[0-2])$/;
+const MONTH=/^\d{4}-(0[1-9]|1[0-2])$/;
 export async function onRequestGet({request,env}) {
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const url=new URL(request.url),month=url.searchParams.get("month")||new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Moscow",year:"numeric",month:"2-digit"}).format(new Date());
