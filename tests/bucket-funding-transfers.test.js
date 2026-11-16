@@ -91,3 +91,12 @@ test("archived reserves and goals retain transfer history and reject new funding
   assert.equal(db.prepare("SELECT COUNT(*) count FROM bucket_funding_transfers WHERE target_id='g'").get().count,0);
  }finally{db.close();}
 });
+
+test("transfer idempotency keys reject retries whose operation payload changed",()=>{
+ const source=readFileSync(join(root,"functions/api/finance/transfers.js"),"utf8");
+ assert.ok(source.includes("SELECT id,source_bucket_id,target_type,target_id,amount,transferred_on,note FROM bucket_funding_transfers"));
+ assert.ok(source.includes('prior.transferred_on!==date||String(prior.note||"")!==note'));
+ assert.ok(source.includes("SELECT id,transfer_id,reversed_on,reason FROM bucket_funding_transfer_reversals"));
+ assert.ok(source.includes("prior.transfer_id!==tid||prior.reversed_on!==date||prior.reason!==reason"));
+ assert.ok(source.includes("duplicate.transfer_id===tid&&duplicate.reversed_on===date&&duplicate.reason===reason"));
+});
