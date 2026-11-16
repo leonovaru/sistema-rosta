@@ -100,6 +100,11 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
    assert.throws(()=>db.prepare("DELETE FROM income_buckets WHERE id='bucket_test'").run(),/Нельзя удалить распределение/);
    assert.equal(db.prepare("SELECT amount FROM income_bucket_allocations WHERE id='bucket_alloc'").get().amount,100);
    assert.equal(db.prepare("SELECT amount FROM income_entries WHERE id='bucket_income'").get().amount,100);
+   // Removing an expense restores only its bucket availability and reverses linked planned cashflow.
+   assert.equal(db.prepare("SELECT 100 - SUM(amount) AS available FROM (SELECT amount FROM expenses WHERE user_id='u1' AND bucket_id='bucket_test' UNION ALL SELECT amount FROM debt_payments WHERE user_id='u1' AND bucket_id='bucket_test' UNION ALL SELECT amount FROM obligation_payments WHERE user_id='u1' AND bucket_id='bucket_test')").get().available,10);
+   db.prepare("DELETE FROM expenses WHERE id='bucket_expense' AND user_id='u1'").run();
+   assert.equal(db.prepare("SELECT 100 - SUM(amount) AS available FROM (SELECT amount FROM expenses WHERE user_id='u1' AND bucket_id='bucket_test' UNION ALL SELECT amount FROM debt_payments WHERE user_id='u1' AND bucket_id='bucket_test' UNION ALL SELECT amount FROM obligation_payments WHERE user_id='u1' AND bucket_id='bucket_test')").get().available,70);
+   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM expenses WHERE id='bucket_expense'").get().count,0);
 
 
   // Historical financial attribution must survive subsequent client/project renames.
