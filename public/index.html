@@ -157,6 +157,10 @@
           <section class="income-buckets-section">
             <div class="section-head"><div><p class="eyebrow">РАСПРЕДЕЛЕНИЕ ПОСТУПЛЕНИЙ</p><h3>Корзины дохода</h3></div><button type="button" class="button ghost" id="refresh-income-buckets">Обновить</button></div>
             <p class="fine">Каждое новое поступление автоматически распределяется по процентам. Расход из выбранной корзины уменьшает её остаток. Проценты применяются только к новым поступлениям; прошлые распределения не пересчитываются.</p>
+            <form id="create-income-bucket-form" class="revenue-plan-actions">
+              <label>Новая корзина<input id="new-income-bucket-title" maxlength="60" minlength="2" required placeholder="Например, Обучение или Отпуск"></label>
+              <button type="submit" class="button ghost">Добавить корзину</button>
+            </form>
             <div id="income-bucket-summary" class="analytics-metrics"></div>
             <div id="income-bucket-list" class="finance-list"></div>
             <div id="income-bucket-recommendations" class="finance-list"></div>

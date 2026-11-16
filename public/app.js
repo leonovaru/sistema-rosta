@@ -563,6 +563,17 @@ async function loadIncomeBuckets(){
  $("save-income-buckets").disabled=!activeRows.length;
  $("expense-bucket").innerHTML='<option value="">Выбери корзину или вне корзин</option><option value="none">Вне корзин</option>'+activeRows.map(b=>'<option value="'+escapeHtml(b.id)+'">'+escapeHtml(b.title)+' · доступно '+money(b.balance)+'</option>').join("");
 }
+$("create-income-bucket-form").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const input=$("new-income-bucket-title"),title=input.value.trim();
+ if(title.length<2||title.length>60){alert("Название должно содержать от 2 до 60 символов.");return;}
+ try{
+  await api("/api/finance/buckets",{method:"POST",body:JSON.stringify({action:"create",title})});
+  input.value="";
+  await loadIncomeBuckets();
+  alert("Корзина добавлена с долей 0%. Установи проценты так, чтобы сумма всех активных корзин составляла 100%.");
+ }catch(err){alert(err.message);}
+});
 $("refresh-income-buckets").addEventListener("click",async()=>{try{await loadIncomeBuckets();}catch(err){alert(err.message);}});
 $("income-bucket-list").addEventListener("click",async e=>{
  const renameButton=e.target.closest("[data-bucket-rename]");

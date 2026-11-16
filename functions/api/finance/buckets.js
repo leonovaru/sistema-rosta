@@ -1,5 +1,5 @@
 import { json, requireUser, readJson } from "../../_lib/auth.js";
-import { calculateBucketBalances } from "../../_lib/income-buckets.js";
+import { calculateBucketBalances, normalizeBucketTitle } from "../../_lib/income-buckets.js";
 import { buildBucketRecommendations } from "../../_lib/bucket-recommendations.js";
 function dateInZone(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -31,6 +31,20 @@ export async function onRequestPost({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error: "Необходим вход" }, 401);
   const body = await readJson(request) || {};
+  if(body.action==="create"){
+    let title;
+    try{title=normalizeBucketTitle(body.title);}catch(error){return json({error:"Название должно содержать от 2 до 60 символов"},400);}
+    const id=crypto.randomUUID().replace(/-/g,"");
+    const sort=await env.DB.prepare("SELECT COALESCE(MAX(sort_order),0)+1 AS next_order FROM income_buckets WHERE user_id=?").bind(user.id).first();
+    try{
+      await env.DB.prepare("INSERT INTO income_buckets (id,user_id,title,percentage,bucket_type,sort_order,active) VALUES (?,?,?,0,'spending',?,1)")
+        .bind(id,user.id,title,Number(sort?.next_order||1)).run();
+    }catch(error){
+      if(/UNIQUE constraint failed/i.test(String(error?.message||error)))return json({error:"Корзина с таким названием уже существует"},409);
+      throw error;
+    }
+    return json({ok:true,id,title,percentage:0});
+  }
   if(body.action==="rename"){
     const id=String(body.id||"");
     const title=String(body.title||"").trim();
