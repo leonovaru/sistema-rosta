@@ -18,7 +18,7 @@ function dateInZone(timeZone) {
 async function commitBucketSpend(write) {
   try { await write(); return true; }
   catch (error) {
-    if (String(error?.message || error).includes("Недостаточно средств в корзине")) return false;
+    if (/Недостаточно средств в корзине|Платёж превышает текущий остаток долга или долг уже закрыт/.test(String(error?.message || error))) return false;
     throw error;
   }
 }
@@ -114,13 +114,10 @@ export async function onRequestPost({request,env}) {
     if(!bucket)return json({error:"Не найдена корзина для долгов и обязательств"},409);
     const available=await bucketAvailable(env,user.id,bucket.id);
     if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
-    const next=Math.max(0,Number(debt.balance)-amount);
-    const saved=await commitBucketSpend(()=>env.DB.batch([
-      env.DB.prepare("INSERT INTO debt_payments (id,user_id,debt_id,amount,paid_on,note,bucket_id) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,debtId,amount,date,String(body.note||"").slice(0,500),bucket.id),
-      env.DB.prepare("UPDATE debts SET balance=?,status=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(next,next===0?"closed":"open",debtId,user.id)
-    ]));
+    const saved=await commitBucketSpend(()=>env.DB.prepare("INSERT INTO debt_payments (id,user_id,debt_id,amount,paid_on,note,bucket_id) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,debtId,amount,date,String(body.note||"").slice(0,500),bucket.id).run());
     if(!saved)return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
-    return json({ok:true,id,balance:next},201);
+    const updatedDebt=await env.DB.prepare("SELECT balance FROM debts WHERE id=? AND user_id=?").bind(debtId,user.id).first();
+    return json({ok:true,id,balance:Number(updatedDebt?.balance||0)},201);
   }
   if(action==="obligation_paid"){
     const obligationId=String(body.obligation_id||""),date=String(body.paid_on||"");
