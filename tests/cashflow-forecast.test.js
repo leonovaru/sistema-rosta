@@ -205,3 +205,10 @@ test("cashflow forecast subtracts only the net payments already made this month"
  assert.equal(x.summary.planned_expenses,150);
  assert.equal(x.summary.ending_balance,850);
 });
+ 
+test("cashflow forecast accrues monthly debt interest before capping the final payment",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:80,startingBalance:2000,debts:[{title:"Кредит",balance:1000,interest_rate:24,minimum_payment:500,due_day:20,status:"open"}]});
+ assert.deepEqual(x.events.map(e=>[e.date,e.amount]),[["2026-11-20",500],["2026-12-20",500],["2027-01-20",31.01]]);
+ assert.equal(x.summary.planned_expenses,1031.01);
+ assert.equal(x.summary.ending_balance,968.99);
+});

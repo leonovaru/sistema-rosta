@@ -36,16 +36,19 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
  }
  for(const debt of debts){
   let balance=positive(debt.balance),day=Number(debt.due_day),minimum=positive(debt.minimum_payment);
+  const monthlyRate=Math.max(0,Number(debt.interest_rate)||0)/1200;
   if(debt.status!=="open"||!day||!minimum)continue;
   let cursor=today.slice(0,7)+"-01",guard=0;
   while(cursor<=end&&guard++<13){
    const [y,m]=cursor.split("-").map(Number),last=new Date(Date.UTC(y,m,0,12)).getUTCDate();
    const due=cursor.slice(0,8)+String(Math.min(day,last)).padStart(2,"0");
    const isCurrentMonth=cursor===today.slice(0,7)+"-01";
+   const interest=Math.round(balance*monthlyRate*100)/100;
+   balance=Math.round((balance+interest)*100)/100;
    const scheduledAmount=Math.min(balance,minimum);
-   const amount=Math.max(0,scheduledAmount-(isCurrentMonth?positive(debt.paid_this_month):0));
-   if(due>=today&&due<=end&&amount>0){events.push({date:due,type:"expense",title:"Минимальный платёж: "+debt.title,amount,source:"debt_minimum"});balance-=amount;}
-   else if(due<today&&isCurrentMonth&&amount>0){events.push({date:today,type:"expense",title:"Просроченный минимальный платёж: "+debt.title,amount,source:"overdue_debt_minimum",original_due_date:due,overdue_days:Math.floor((Date.parse(today+"T12:00:00Z")-Date.parse(due+"T12:00:00Z"))/86400000)});balance-=amount;}
+   const amount=Math.max(0,Math.round((scheduledAmount-(isCurrentMonth?positive(debt.paid_this_month):0))*100)/100);
+   if(due>=today&&due<=end&&amount>0){events.push({date:due,type:"expense",title:"Минимальный платёж: "+debt.title,amount,source:"debt_minimum"});balance=Math.max(0,Math.round((balance-amount)*100)/100);}
+   else if(due<today&&isCurrentMonth&&amount>0){events.push({date:today,type:"expense",title:"Просроченный минимальный платёж: "+debt.title,amount,source:"overdue_debt_minimum",original_due_date:due,overdue_days:Math.floor((Date.parse(today+"T12:00:00Z")-Date.parse(due+"T12:00:00Z"))/86400000)});balance=Math.max(0,Math.round((balance-amount)*100)/100);}
    cursor=addPeriod(cursor,"monthly",1);
   }
  }
