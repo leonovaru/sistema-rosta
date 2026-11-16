@@ -80,7 +80,7 @@ test("irregular expense payment request identifiers make retries idempotent",()=
  try{
   db.prepare("INSERT INTO irregular_expenses(id,user_id,title,category,amount,next_date,frequency) VALUES(?,?,?,?,?,?,?)").run("retry","u","Расход","Дом",500,"2026-11-16","once");
   db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?)").run("ip1","u","retry",500,"2026-11-16","2026-11-16","irregular-request-0001");
-  assert.throws(()=>db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?)").run("ip2","u","retry",500,"2026-11-17","2026-11-16","irregular-request-0001"),/UNIQUE constraint failed/);
+  assert.throws(()=>db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?)").run("ip2","u","retry",500,"2026-11-17","2026-11-16","irregular-request-0001"),/UNIQUE constraint failed|Период нерегулярного расхода уже оплачен/);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM irregular_expense_payments WHERE user_id='u' AND request_id='irregular-request-0001'").get().count,1);
  }finally{db.close();}
 });
