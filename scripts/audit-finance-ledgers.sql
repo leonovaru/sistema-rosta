@@ -36,17 +36,6 @@ WHERE p.expense_id IS NOT NULL
  AND (e.id IS NULL OR e.amount<>p.amount OR e.spent_on<>p.paid_on OR e.note<>'Оплата нерегулярного расхода')
 ORDER BY p.user_id,p.paid_on,p.id;
 
--- AUDIT: irregular payment reversals and their linked expense facts
-SELECT r.user_id,r.id AS reversal_id,r.irregular_expense_payment_id,p.expense_id,
- r.amount AS reversed_amount,r.reversed_on,r.reason,
- p.amount AS payment_amount,e.amount AS expense_amount,e.bucket_id,o.status AS occurrence_status
-FROM irregular_expense_payment_reversals r
-JOIN irregular_expense_payments p ON p.id=r.irregular_expense_payment_id AND p.user_id=r.user_id
-JOIN expenses e ON e.id=r.expense_id AND e.user_id=r.user_id
-LEFT JOIN irregular_expense_payment_occurrences o
- ON o.irregular_expense_id=p.irregular_expense_id AND o.scheduled_due_date=p.scheduled_due_date
-ORDER BY r.user_id,r.reversed_on,r.id;
-
 -- AUDIT: debt balances versus immutable payment history (diagnostic, not an auto-repair rule)
 SELECT d.user_id,d.id AS debt_id,d.title,d.initial_amount,d.balance,
  COALESCE(SUM(p.amount),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r WHERE r.user_id=d.user_id AND r.debt_payment_id IN (SELECT p2.id FROM debt_payments p2 WHERE p2.debt_id=d.id AND p2.user_id=d.user_id)),0) AS recorded_payments,
@@ -91,3 +80,15 @@ SELECT b.user_id,b.id AS bucket_id,b.title,
  ) AS available
 FROM income_buckets b
 ORDER BY b.user_id,b.sort_order,b.title;
+
+-- AUDIT: irregular payment reversals and their linked expense facts
+SELECT r.user_id,r.id AS reversal_id,r.irregular_expense_payment_id,p.expense_id,
+ r.amount AS reversed_amount,r.reversed_on,r.reason,
+ p.amount AS payment_amount,e.amount AS expense_amount,e.bucket_id,o.status AS occurrence_status
+FROM irregular_expense_payment_reversals r
+JOIN irregular_expense_payments p ON p.id=r.irregular_expense_payment_id AND p.user_id=r.user_id
+JOIN expenses e ON e.id=r.expense_id AND e.user_id=r.user_id
+LEFT JOIN irregular_expense_payment_occurrences o
+ ON o.irregular_expense_id=p.irregular_expense_id AND o.scheduled_due_date=p.scheduled_due_date
+ORDER BY r.user_id,r.reversed_on,r.id;
+

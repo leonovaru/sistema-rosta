@@ -22,7 +22,7 @@ function database(){
 
 test("finance ledger audit contains SELECT-only reports and executes against migrated schema",()=>{
  const queries=statements();
- assert.equal(queries.length,6);
+ assert.equal(queries.length,7);
  for(const query of queries)assert.match(query,/^(SELECT|WITH)\b/i);
  const db=database();
  try{
