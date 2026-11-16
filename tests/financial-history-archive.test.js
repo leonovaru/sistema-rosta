@@ -42,7 +42,7 @@ test("bucket archive preserves allocations and spending and rejects new allocati
   db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("i","u",100,"2026-11-16");
   db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
   db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?)").run("e","u","Покупка",40,"2026-11-16","b");
-  assert.throws(()=>db.prepare("DELETE FROM income_buckets WHERE id='b'").run(),/Корзину с финансовой историей нельзя удалить/);
+  assert.throws(()=>db.prepare("DELETE FROM income_buckets WHERE id='b'").run(),/Нельзя удалить распределение и финансовую историю корзины/);
   db.prepare("UPDATE income_buckets SET active=0,percentage=0 WHERE id='b'").run();
   assert.equal(db.prepare("SELECT COUNT(*) count FROM income_bucket_allocations WHERE bucket_id='b'").get().count,1);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses WHERE bucket_id='b'").get().count,1);
