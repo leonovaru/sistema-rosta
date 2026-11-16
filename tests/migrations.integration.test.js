@@ -77,7 +77,7 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
 
   // Historical financial attribution must survive subsequent client/project renames.
   db.prepare("INSERT INTO clients(id,user_id,name,status) VALUES(?,?,?,?)").run("client1","u1","Старое имя клиента","active");
-  db.prepare("INSERT INTO projects(id,user_id,client_id,title,status) VALUES(?,?,?,?,?)").run("project1","u1","client1","Старое название проекта","active");
+  db.prepare("UPDATE projects SET client_id=?,title=?,status=? WHERE id=? AND user_id=?").run("client1","Старое название проекта","active","project1","u1");
   db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on,note,client_id,project_id,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
    .run("income_history","u1",500,"2026-11-16","", "client1","project1","client1","Старое имя клиента","project1","Старое название проекта");
   db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on,client_id,project_id,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
