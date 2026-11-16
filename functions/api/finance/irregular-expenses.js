@@ -39,8 +39,8 @@ export async function onRequestPost({request,env}){
    active=1;
   }
   await env.DB.batch([
-   env.DB.prepare("INSERT INTO irregular_expense_payments (id,user_id,irregular_expense_id,amount,paid_on) VALUES (?,?,?,?,?)").bind(paymentId,user.id,expenseId,amount,paidOn),
    env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id) VALUES (?,?,NULL,?,?,?,?,?,?)").bind(expenseEntryId,user.id,item.category,item.title,amount,paidOn,"Оплата нерегулярного расхода",bucket?.id||null),
+   env.DB.prepare("INSERT INTO irregular_expense_payments (id,user_id,irregular_expense_id,amount,paid_on,expense_id) VALUES (?,?,?,?,?,?)").bind(paymentId,user.id,expenseId,amount,paidOn,expenseEntryId),
    env.DB.prepare("UPDATE irregular_expenses SET next_date=COALESCE(?,next_date),active=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(nextDate,active,expenseId,user.id)
   ]);
   return json({ok:true,payment_id:paymentId,expense_id:expenseEntryId,next_date:nextDate,active});
