@@ -36,6 +36,17 @@ WHERE p.expense_id IS NOT NULL
  AND (e.id IS NULL OR e.amount<>p.amount OR e.spent_on<>p.paid_on OR e.note<>'Оплата нерегулярного расхода')
 ORDER BY p.user_id,p.paid_on,p.id;
 
+-- AUDIT: irregular payment reversals and their linked expense facts
+SELECT r.user_id,r.id AS reversal_id,r.irregular_expense_payment_id,p.expense_id,
+ r.amount AS reversed_amount,r.reversed_on,r.reason,
+ p.amount AS payment_amount,e.amount AS expense_amount,e.bucket_id,o.status AS occurrence_status
+FROM irregular_expense_payment_reversals r
+JOIN irregular_expense_payments p ON p.id=r.irregular_expense_payment_id AND p.user_id=r.user_id
+JOIN expenses e ON e.id=r.expense_id AND e.user_id=r.user_id
+LEFT JOIN irregular_expense_payment_occurrences o
+ ON o.irregular_expense_id=p.irregular_expense_id AND o.scheduled_due_date=p.scheduled_due_date
+ORDER BY r.user_id,r.reversed_on,r.id;
+
 -- AUDIT: debt balances versus immutable payment history (diagnostic, not an auto-repair rule)
 SELECT d.user_id,d.id AS debt_id,d.title,d.initial_amount,d.balance,
  COALESCE(SUM(p.amount),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r WHERE r.user_id=d.user_id AND r.debt_payment_id IN (SELECT p2.id FROM debt_payments p2 WHERE p2.debt_id=d.id AND p2.user_id=d.user_id)),0) AS recorded_payments,
@@ -44,7 +55,7 @@ SELECT d.user_id,d.id AS debt_id,d.title,d.initial_amount,d.balance,
 FROM debts d
 LEFT JOIN debt_payments p ON p.debt_id=d.id AND p.user_id=d.user_id
 GROUP BY d.user_id,d.id,d.title,d.initial_amount,d.balance
-HAVING ABS(d.balance-(d.initial_amount-COALESCE(SUM(p.amount),0)))>0.01
+HAVING ABS(d.balance-(d.initial_amount-COALESCE(SUM(p.amount),0)+COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.debt_id=d.id AND rp.user_id=d.user_id),0)))>0.01
 ORDER BY d.user_id,d.title;
 
 -- AUDIT: obligation payment history totals (schedule amount is not a ledger balance)
@@ -62,7 +73,9 @@ ORDER BY o.user_id,o.title;
 -- AUDIT: bucket available balance using the same four-ledger formula as the app
 SELECT b.user_id,b.id AS bucket_id,b.title,
  COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=b.user_id AND a.bucket_id=b.id),0) AS allocated,
- COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0) AS expenses_spent,
+ COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0) AS expenses_spent_gross,
+ COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r JOIN expenses e ON e.id=r.expense_id WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0) AS irregular_expenses_reversed,
+ COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0)-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r JOIN expenses e ON e.id=r.expense_id WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0) AS expenses_spent,
  COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS debt_paid_gross,
  COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments p ON p.id=r.debt_payment_id WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS debt_reversed,
  COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments p ON p.id=r.debt_payment_id WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0) AS debt_paid,
@@ -71,7 +84,7 @@ SELECT b.user_id,b.id AS bucket_id,b.title,
  COALESCE((SELECT amount FROM obligation_payment_bucket_net n WHERE n.user_id=b.user_id AND n.bucket_id=b.id),0) AS obligations_paid,
  ROUND(
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=b.user_id AND a.bucket_id=b.id),0)
-  -COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0)
+  -(COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0)-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r JOIN expenses e ON e.id=r.expense_id WHERE e.user_id=b.user_id AND e.bucket_id=b.id),0))
   -COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0)
   +COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments p ON p.id=r.debt_payment_id WHERE p.user_id=b.user_id AND p.bucket_id=b.id),0)
   -COALESCE((SELECT amount FROM obligation_payment_bucket_net n WHERE n.user_id=b.user_id AND n.bucket_id=b.id),0),2

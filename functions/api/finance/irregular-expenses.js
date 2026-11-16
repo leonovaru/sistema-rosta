@@ -19,14 +19,15 @@ export async function onRequestPost({request,env}){
   if(paidOn>dateInZone(dateSettings?.timezone||"Europe/Moscow"))return json({error:"Нельзя отметить будущую дату как уже совершённый платёж"},400);
   const requestId=String(b.request_id||"");
   if(!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Не удалось подтвердить запрос оплаты"},400);
-  const item=await env.DB.prepare("SELECT * FROM irregular_expenses WHERE id=? AND user_id=? AND active=1").bind(expenseId,user.id).first();
-  if(!item)return json({error:"Активный нерегулярный расход не найден"},404);
-  const dueDate=requestedDueDate||item.next_date;
+  const item=await env.DB.prepare("SELECT * FROM irregular_expenses WHERE id=? AND user_id=?").bind(expenseId,user.id).first();
+  if(!item)return json({error:"Нерегулярный расход не найден"},404);
   const prior=await env.DB.prepare("SELECT id,irregular_expense_id,amount,scheduled_due_date FROM irregular_expense_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+  const dueDate=requestedDueDate||prior?.scheduled_due_date||item.next_date;
   if(prior){
    if(prior.irregular_expense_id!==expenseId||Math.abs(Number(prior.amount)-Number(item.amount))>0.0001||prior.scheduled_due_date!==dueDate)return json({error:"Идентификатор запроса уже использован"},409);
    return json({ok:true,payment_id:prior.id,replayed:true});
   }
+  if(Number(item.active)!==1)return json({error:"Активный нерегулярный расход не найден"},404);
   const occurrence=await env.DB.prepare("SELECT status FROM irregular_expense_payment_occurrences WHERE irregular_expense_id=? AND scheduled_due_date=?").bind(expenseId,dueDate).first();
   if(occurrence?.status==="paid")return json({error:"Этот период уже оплачен"},409);
   const historical=dueDate<item.next_date;
