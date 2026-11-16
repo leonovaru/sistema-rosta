@@ -109,3 +109,19 @@ test("reserve forecast does not allocate contributions after a mid-month target 
  assert.equal(x.days.find(day=>day.date==="2026-11-15").reserve_allocations,100);
  assert.equal(x.days.find(day=>day.date==="2026-11-16").reserve_allocations,0);
 });
+
+test("overdue one-time obligations remain visible as due today",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:10,startingBalance:5000,obligations:[{due_date:"2026-11-10",frequency:"once",title:"Просроченный счёт",amount:1200}]});
+ assert.equal(x.events.length,1);
+ assert.equal(x.events[0].date,"2026-11-15");
+ assert.equal(x.events[0].source,"overdue_obligation");
+ assert.equal(x.events[0].original_due_date,"2026-11-10");
+ assert.equal(x.events[0].overdue_days,5);
+ assert.equal(x.summary.ending_balance,3800);
+});
+test("overdue recurring obligations are shown today and retain their next scheduled date",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:50,startingBalance:5000,obligations:[{due_date:"2026-11-10",frequency:"monthly",recurrence_day:10,title:"Аренда",amount:1000}]});
+ assert.deepEqual(x.events.map(e=>[e.date,e.source]),[["2026-11-15","overdue_obligation"],["2026-12-10","obligation"]]);
+ assert.equal(x.summary.planned_expenses,2000);
+ assert.equal(x.summary.ending_balance,3000);
+});
