@@ -35,6 +35,8 @@ export async function onRequestPost({ request, env }) {
     const bucket=await env.DB.prepare("SELECT id,percentage,active FROM income_buckets WHERE id=? AND user_id=?").bind(id,user.id).first();
     if(!bucket)return json({error:"Корзина не найдена"},404);
     if(!bucket.active)return json({ok:true,archived:true});
+    const activeCount=await env.DB.prepare("SELECT COUNT(*) AS count FROM income_buckets WHERE user_id=? AND active=1").bind(user.id).first();
+    if(Number(activeCount?.count||0)<=1)return json({error:"Нельзя архивировать последнюю активную корзину"},409);
     const percentage=Number(bucket.percentage||0);
     const statements=[];
     if(percentage>0){
