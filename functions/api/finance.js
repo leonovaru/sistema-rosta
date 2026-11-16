@@ -67,6 +67,23 @@ export async function onRequestPost({request,env}) {
   const user=await requireUser(request,env);
   if(!user)return json({error:"Необходим вход"},401);
   const body=await readJson(request),action=String(body?.action||""),id=newId();
+  if(action==="expense_update"){
+    const expenseId=String(body.id||""),amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.spent_on||""),category=String(body.category||"Прочее").trim();
+    if(!expenseId||!amount||!title||title.length>180||!validDate(date)||category.length>80)return json({error:"Проверь название, сумму, категорию и дату расхода"},400);
+    const expense=await env.DB.prepare("SELECT id,note FROM expenses WHERE id=? AND user_id=?").bind(expenseId,user.id).first();
+    if(!expense)return json({error:"Расход не найден"},404);
+    const linked=await env.DB.prepare("SELECT id FROM irregular_expense_payments WHERE expense_id=? AND user_id=? LIMIT 1").bind(expenseId,user.id).first();
+    if(linked)return json({error:"Эта запись связана с оплатой нерегулярного расхода. Исправляй её через журнал оплат, чтобы сохранить историю."},409);
+    try{
+      await env.DB.prepare("UPDATE expenses SET title=?,amount=?,category=?,spent_on=?,note=? WHERE id=? AND user_id=?").bind(title,amount,category||"Прочее",date,body.note==null?String(expense.note||""):String(body.note).slice(0,500),expenseId,user.id).run();
+    }catch(error){
+      const message=String(error?.message||error);
+      if(message.includes("Недостаточно средств в корзине"))return json({error:"В корзине недостаточно денег для новой суммы. Расход не изменён."},409);
+      if(message.includes("Расход по оплате нерегулярного платежа нельзя изменить"))return json({error:"Эту запись можно исправить только через журнал оплат."},409);
+      throw error;
+    }
+    return json({ok:true,id:expenseId});
+  }
   if(action==="expense"){
     const amount=validAmount(body.amount),title=String(body.title||"").trim(),date=String(body.spent_on||"");
     if(!amount||!title||title.length>180||!validDate(date))return json({error:"Проверь название, сумму и дату расхода"},400);
