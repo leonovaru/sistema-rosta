@@ -140,9 +140,9 @@ export async function onRequestPost({request,env}) {
     if(!debtId||!amount||!validDate(date)||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Проверь долг, сумму, дату и идентификатор запроса"},400);
     const dateSettings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
     if(date>dateInZone(dateSettings?.timezone||"Europe/Moscow"))return json({error:"Нельзя отметить будущую дату как уже совершённый платёж"},400);
-    const prior=await env.DB.prepare("SELECT id,debt_id,amount FROM debt_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+    const prior=await env.DB.prepare("SELECT id,debt_id,amount,paid_on,note FROM debt_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
     if(prior){
-      if(prior.debt_id!==debtId||Math.abs(Number(prior.amount)-amount)>0.0001)return json({error:"Идентификатор запроса уже использован для другого платежа"},409);
+      if(prior.debt_id!==debtId||Math.abs(Number(prior.amount)-amount)>0.0001||prior.paid_on!==date||String(prior.note||"")!==String(body.note||"").slice(0,500))return json({error:"Идентификатор запроса уже использован для другого платежа"},409);
       const current=await env.DB.prepare("SELECT balance FROM debts WHERE id=? AND user_id=?").bind(debtId,user.id).first();
       return json({ok:true,id:prior.id,balance:Number(current?.balance||0),replayed:true},200);
     }
@@ -157,8 +157,8 @@ export async function onRequestPost({request,env}) {
     if(saved==="bucket")return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
     if(saved==="debt")return json({error:"Остаток долга изменился. Обнови данные и повтори операцию."},409);
     if(saved==="duplicate_debt"){
-      const existing=await env.DB.prepare("SELECT id,debt_id,amount FROM debt_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
-      if(!existing||existing.debt_id!==debtId||Math.abs(Number(existing.amount)-amount)>0.0001)return json({error:"Идентификатор запроса уже использован"},409);
+      const existing=await env.DB.prepare("SELECT id,debt_id,amount,paid_on,note FROM debt_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+      if(!existing||existing.debt_id!==debtId||Math.abs(Number(existing.amount)-amount)>0.0001||existing.paid_on!==date||String(existing.note||"")!==String(body.note||"").slice(0,500))return json({error:"Идентификатор запроса уже использован"},409);
       const current=await env.DB.prepare("SELECT balance FROM debts WHERE id=? AND user_id=?").bind(debtId,user.id).first();
       return json({ok:true,id:existing.id,balance:Number(current?.balance||0),replayed:true},200);
     }
@@ -227,8 +227,8 @@ export async function onRequestPost({request,env}) {
     if(!obligationId||!validDate(date)||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId)||(requestedPeriod&&!validDate(requestedPeriod)))return json({error:"Проверь обязательство, дату, период и идентификатор запроса"},400);
     const dateSettings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
     if(date>dateInZone(dateSettings?.timezone||"Europe/Moscow"))return json({error:"Нельзя отметить будущую дату как уже совершённый платёж"},400);
-    const prior=await env.DB.prepare("SELECT id,obligation_id,scheduled_due_date FROM obligation_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
-    if(prior){if(prior.obligation_id!==obligationId||(requestedPeriod&&prior.scheduled_due_date!==requestedPeriod))return json({error:"Идентификатор запроса уже использован"},409);return json({ok:true,replayed:true});}
+    const prior=await env.DB.prepare("SELECT id,obligation_id,scheduled_due_date,paid_on FROM obligation_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+    if(prior){if(prior.obligation_id!==obligationId||prior.paid_on!==date||(requestedPeriod&&prior.scheduled_due_date!==requestedPeriod))return json({error:"Идентификатор запроса уже использован"},409);return json({ok:true,replayed:true});}
     const obligation=await env.DB.prepare("SELECT * FROM payment_obligations WHERE id=? AND user_id=? AND active=1").bind(obligationId,user.id).first();
     if(!obligation)return json({error:"Активный платёж не найден"},404);
     const scheduledDate=requestedPeriod||obligation.due_date;
@@ -247,8 +247,8 @@ export async function onRequestPost({request,env}) {
     if(saved==="bucket")return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
     if(saved==="occurrence")return json({error:"Этот период обязательства уже оплачен. Обнови список платежей."},409);
     if(saved==="duplicate_obligation"){
-      const existing=await env.DB.prepare("SELECT obligation_id,scheduled_due_date FROM obligation_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
-      if(!existing||existing.obligation_id!==obligationId||existing.scheduled_due_date!==scheduledDate)return json({error:"Идентификатор запроса уже использован"},409);
+      const existing=await env.DB.prepare("SELECT obligation_id,scheduled_due_date,paid_on FROM obligation_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+      if(!existing||existing.obligation_id!==obligationId||existing.scheduled_due_date!==scheduledDate||existing.paid_on!==date)return json({error:"Идентификатор запроса уже использован"},409);
       return json({ok:true,replayed:true});
     }
     return json({ok:true,next_due_date:nextDue,scheduled_due_date:scheduledDate});

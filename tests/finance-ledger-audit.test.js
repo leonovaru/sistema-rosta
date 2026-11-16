@@ -206,3 +206,41 @@ test("current-month debt payment offset ignores reversals of payments from earli
   assert.equal(row.paid_this_month,50);
  }finally{db.close();}
 });
+
+test("combined expense, debt, obligation, irregular payment and goal/reserve transfers reconcile exactly through reversals",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("b","u","Общая",100);
+  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("i","u",100,"2026-11-01");
+  db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
+  db.prepare("INSERT INTO financial_goals(id,user_id,title,target_amount,saved_amount) VALUES(?,?,?,?,?)").run("g","u","Цель",100,0);
+  db.prepare("INSERT INTO cash_reserves(id,user_id,title,target_amount,current_amount) VALUES(?,?,?,?,?)").run("r","u","Резерв",100,0);
+  db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("tg","u","b","goal","g",20,"2026-11-01","transfer-goal-0001");
+  db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("tr","u","b","reserve","r",30,"2026-11-01","transfer-reserve-01");
+  db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?)").run("e","u","Обычный расход",10,"2026-11-02","b");
+  db.prepare("INSERT INTO irregular_expenses(id,user_id,title,category,amount,next_date,frequency) VALUES(?,?,?,?,?,?,?)").run("ir","u","Нерегулярный","Общая",10,"2026-11-03","yearly");
+  db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?)").run("ei","u","Оплата нерегулярного",10,"2026-11-03","b");
+  db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on,expense_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("ip","u","ir",10,"2026-11-03","ei","2026-11-03","irregular-payment-01");
+  db.prepare("INSERT INTO debts(id,user_id,title,initial_amount,balance) VALUES(?,?,?,?,?)").run("d","u","Долг",100,100);
+  db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,bucket_id,request_id) VALUES(?,?,?,?,?,?,?)").run("dp","u","d",10,"2026-11-04","b","debt-payment-00001");
+  db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date,frequency) VALUES(?,?,?,?,?,?)").run("o","u","Обязательство",10,"2026-11-05","monthly");
+  db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("op","u","o",10,"2026-11-05","b","2026-11-05","obligation-payment-1");
+  const available=()=>Number(db.prepare("SELECT 100-COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.user_id='u' AND e.bucket_id='b'),0)+COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r JOIN expenses e ON e.id=r.expense_id WHERE r.user_id='u' AND e.bucket_id='b'),0)-COALESCE((SELECT amount FROM debt_payment_bucket_net WHERE user_id='u' AND bucket_id='b'),0)-COALESCE((SELECT amount FROM obligation_payment_bucket_net WHERE user_id='u' AND bucket_id='b'),0)-COALESCE((SELECT amount FROM bucket_funding_transfer_net WHERE user_id='u' AND source_bucket_id='b'),0) AS amount").get().amount);
+  assert.equal(available(),10);
+  db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("dr","u","dp",10,"2026-11-06","Корректировка","debt-reversal-01");
+  db.prepare("INSERT INTO obligation_payment_reversals(id,user_id,obligation_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("or","u","op",10,"2026-11-06","Корректировка","obligation-reversal-01");
+  db.prepare("INSERT INTO irregular_expense_payment_reversals(id,user_id,irregular_expense_payment_id,expense_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?,?)").run("irv","u","ip","ei",10,"2026-11-06","Корректировка","irregular-reversal-01");
+  assert.equal(available(),40);
+  db.prepare("INSERT INTO bucket_funding_transfer_reversals(id,user_id,transfer_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("gr","u","tg",20,"2026-11-07","Корректировка","goal-reversal-0001");
+  db.prepare("INSERT INTO bucket_funding_transfer_reversals(id,user_id,transfer_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("rr","u","tr",30,"2026-11-07","Корректировка","reserve-reversal-01");
+  assert.equal(available(),90);
+  assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,100);
+  assert.equal(db.prepare("SELECT current_amount FROM cash_reserves WHERE id='r'").get().current_amount,0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses WHERE id IN ('e','ei')").get().count,2);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payments WHERE id='dp'").get().count,1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM obligation_payments WHERE id='op'").get().count,1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM irregular_expense_payments WHERE id='ip'").get().count,1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM bucket_funding_transfers").get().count,2);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM bucket_funding_transfer_reversals").get().count,2);
+ }finally{db.close();}
+});

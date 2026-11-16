@@ -21,10 +21,10 @@ export async function onRequestPost({request,env}){
   if(!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Не удалось подтвердить запрос оплаты"},400);
   const item=await env.DB.prepare("SELECT * FROM irregular_expenses WHERE id=? AND user_id=?").bind(expenseId,user.id).first();
   if(!item)return json({error:"Нерегулярный расход не найден"},404);
-  const prior=await env.DB.prepare("SELECT id,irregular_expense_id,amount,scheduled_due_date FROM irregular_expense_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+  const prior=await env.DB.prepare("SELECT id,irregular_expense_id,amount,paid_on,scheduled_due_date FROM irregular_expense_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
   const dueDate=requestedDueDate||prior?.scheduled_due_date||item.next_date;
   if(prior){
-   if(prior.irregular_expense_id!==expenseId||Math.abs(Number(prior.amount)-Number(item.amount))>0.0001||prior.scheduled_due_date!==dueDate)return json({error:"Идентификатор запроса уже использован"},409);
+   if(prior.irregular_expense_id!==expenseId||Math.abs(Number(prior.amount)-Number(item.amount))>0.0001||prior.paid_on!==paidOn||prior.scheduled_due_date!==dueDate)return json({error:"Идентификатор запроса уже использован"},409);
    return json({ok:true,payment_id:prior.id,replayed:true});
   }
   if(Number(item.active)!==1)return json({error:"Активный нерегулярный расход не найден"},404);
@@ -35,13 +35,14 @@ export async function onRequestPost({request,env}){
   const amount=Number(item.amount),paymentId=newId(),expenseEntryId=newId();
   const bucket=await env.DB.prepare("SELECT id,title FROM income_buckets WHERE user_id=? AND active=1 AND title=?").bind(user.id,String(item.category||"")).first();
   if(bucket){
-   const [allocated,spent,debt,obligations]=await Promise.all([
+   const [allocated,spent,debt,obligations,transfers]=await Promise.all([
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_bucket_allocations WHERE user_id=? AND bucket_id=?").bind(user.id,bucket.id).first(),
     env.DB.prepare("SELECT COALESCE(SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)),0) total FROM expenses e WHERE e.user_id=? AND e.bucket_id=?").bind(user.id,bucket.id).first(),
     env.DB.prepare("SELECT COALESCE((SELECT SUM(p.amount) FROM debt_payments p WHERE p.user_id=? AND p.bucket_id=?),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments p ON p.id=r.debt_payment_id WHERE p.user_id=? AND p.bucket_id=?),0) total").bind(user.id,bucket.id,user.id,bucket.id).first(),
-    env.DB.prepare("SELECT COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=? AND p.bucket_id=?),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments p ON p.id=r.obligation_payment_id WHERE p.user_id=? AND p.bucket_id=?),0) total").bind(user.id,bucket.id,user.id,bucket.id).first()
+    env.DB.prepare("SELECT COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=? AND p.bucket_id=?),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments p ON p.id=r.obligation_payment_id WHERE p.user_id=? AND p.bucket_id=?),0) total").bind(user.id,bucket.id,user.id,bucket.id).first(),
+    env.DB.prepare("SELECT COALESCE((SELECT SUM(t.amount) FROM bucket_funding_transfers t WHERE t.user_id=? AND t.source_bucket_id=?),0)-COALESCE((SELECT SUM(r.amount) FROM bucket_funding_transfer_reversals r JOIN bucket_funding_transfers t ON t.id=r.transfer_id WHERE t.user_id=? AND t.source_bucket_id=?),0) total").bind(user.id,bucket.id,user.id,bucket.id).first()
    ]);
-   const available=Number(allocated.total||0)-Number(spent.total||0)-Number(debt.total||0)-Number(obligations.total||0);
+   const available=Number(allocated.total||0)-Number(spent.total||0)-Number(debt.total||0)-Number(obligations.total||0)-Number(transfers.total||0);
    if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
   }
   const advances=!historical&&dueDate===item.next_date;
@@ -56,8 +57,8 @@ export async function onRequestPost({request,env}){
   catch(error){
    const message=String(error?.message||error);
    if(message.includes("UNIQUE constraint failed: irregular_expense_payments.user_id, irregular_expense_payments.request_id")){
-    const existing=await env.DB.prepare("SELECT id,irregular_expense_id,amount,scheduled_due_date FROM irregular_expense_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
-    if(existing&&existing.irregular_expense_id===expenseId&&Math.abs(Number(existing.amount)-amount)<0.0001&&existing.scheduled_due_date===dueDate)return json({ok:true,payment_id:existing.id,replayed:true});
+    const existing=await env.DB.prepare("SELECT id,irregular_expense_id,amount,paid_on,scheduled_due_date FROM irregular_expense_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+    if(existing&&existing.irregular_expense_id===expenseId&&Math.abs(Number(existing.amount)-amount)<0.0001&&existing.paid_on===paidOn&&existing.scheduled_due_date===dueDate)return json({ok:true,payment_id:existing.id,replayed:true});
    }
    if(message.includes("Период нерегулярного расхода уже оплачен"))return json({error:"Этот период уже оплачен"},409);
    throw error;
