@@ -35,6 +35,15 @@ export function safeDate(value){
 export function isVoiceProjectSelectable(project){
  return isProjectActiveForWork(project)&&(!project.client_id||isClientSelectable({status:project.client_status}));
 }
+export function hasClosingProjectTaskConflict(tasks=[],closingProjectIds=new Set(),existingTasks=[]){
+ const existingById=new Map(existingTasks.map(task=>[task.id,task]));
+ return tasks.some((task,index)=>{
+  const existing=task.operation==="update"?existingById.get(task.target_task_id):null;
+  const parent=Number.isInteger(task.parent_index)?tasks[task.parent_index]:null;
+  const projectId=existing?.project_id||task.project_id||parent?.project_id||null;
+  return Boolean(projectId&&closingProjectIds.has(projectId));
+ });
+}
 export async function onRequestPost({request,env}){
  const user=await requireUser(request,env);
  if(!user)return json({error:"Необходим вход"},401);
@@ -48,7 +57,7 @@ export async function onRequestPost({request,env}){
    env.DB.prepare("SELECT id,status FROM clients WHERE user_id=?").bind(user.id).all(),
    env.DB.prepare("SELECT p.id,p.client_id,p.direction_id,p.status,c.status AS client_status FROM projects p LEFT JOIN clients c ON c.id=p.client_id AND c.user_id=p.user_id WHERE p.user_id=?").bind(user.id).all(),
    env.DB.prepare("SELECT id FROM life_areas WHERE user_id=?").bind(user.id).all(),
-   env.DB.prepare("SELECT id FROM tasks WHERE user_id=? AND status!='done'").bind(user.id).all()
+   env.DB.prepare("SELECT id,project_id FROM tasks WHERE user_id=? AND status!='done'").bind(user.id).all()
   ]);
   const allowed={direction_id:new Set(dirs.results.filter(isDirectionSelectable).map(x=>x.id)),client_id:new Set(clients.results.filter(isClientSelectable).map(x=>x.id)),project_id:new Set(projects.results.filter(isVoiceProjectSelectable).map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
   if(requestedTasks.some(t=>t.project_id&&!allowed.project_id.has(t.project_id)))return json({error:"Одна из задач относится к завершённому проекту, архиву или проекту закрытого клиента"},409);
@@ -87,6 +96,8 @@ export async function onRequestPost({request,env}){
    const linked=new Set(existing.results.map(x=>x.agreement_index));
    if(indices.some(index=>linked.has(index)))return json({error:"Одно из поручений уже связано с задачей. Обнови протокол перед повторным созданием."},409);
   }
+  const closingProjectIds=new Set(workspaceItems.filter(item=>item.type==="project_update"&&item.include!==false&&["done","archived"].includes(item.changes?.status)).map(item=>item.project_id));
+  if(hasClosingProjectTaskConflict(prepared,closingProjectIds,openTasks.results))return json({error:"Нельзя одновременно завершить или архивировать проект и создавать либо изменять его задачи"},409);
   if(prepared.some(t=>t.due_date===undefined))return json({error:"Проверь сроки задач: дата должна существовать в календаре."},400);
   if(workspaceItems.some(item=>item.type==="project"&&item.include!==false&&item.deadline===undefined))return json({error:"Проверь срок нового проекта: дата должна существовать в календаре."},400);
   if(prepared.some(t=>!t.title))return json({error:"У каждой задачи должно быть название. Проверь пустые строки в черновике."},400);
