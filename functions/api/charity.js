@@ -1,4 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
+export function isCharityPersonAvailableForProject(person,projectId){return Boolean(person)&&(!person.project_id||person.project_id===projectId);}
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(v){if(!DATE.test(String(v||"")))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
 function amount(v){const n=Number(v);return Number.isFinite(n)&&n>0&&n<=1000000000?n:null;}
@@ -28,7 +29,11 @@ export async function onRequestPost({request,env}){
   if(!await owned(env,"charity_projects",projectId,user.id))return json({error:"Благотворительный проект не найден"},404);
   if(!value||!title||title.length>180||!validDate(date)||!["donation","expense"].includes(b.transaction_type))return json({error:"Проверь тип, название, сумму и дату операции"},400);
   const personId=b.person_id?String(b.person_id):null;
-  if(personId&&!await owned(env,"charity_people",personId,user.id))return json({error:"Контакт не найден"},404);
+  if(personId){
+   const person=await env.DB.prepare("SELECT id,project_id FROM charity_people WHERE id=? AND user_id=?").bind(personId,user.id).first();
+   if(!person)return json({error:"Контакт не найден"},404);
+   if(!isCharityPersonAvailableForProject(person,projectId))return json({error:"Выбранный контакт относится к другому благотворительному проекту"},409);
+  }
   await env.DB.prepare("INSERT INTO charity_transactions (id,user_id,project_id,person_id,type,category,title,amount,occurred_on,note) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,projectId,personId,b.transaction_type,String(b.category||"").slice(0,80),title,value,date,String(b.note||"").slice(0,1000)).run();
   return json({ok:true,id},201);
  }
