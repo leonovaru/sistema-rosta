@@ -128,9 +128,11 @@ export async function onRequestPost({request,env}) {
     const saved=await commitBucketSpend(()=>env.DB.prepare("INSERT INTO debt_payments (id,user_id,debt_id,amount,paid_on,note,bucket_id,request_id) VALUES (?,?,?,?,?,?,?,?)").bind(id,user.id,debtId,amount,date,String(body.note||"").slice(0,500),bucket.id,requestId).run());
     if(saved==="bucket")return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
     if(saved==="debt")return json({error:"Остаток долга изменился. Обнови данные и повтори операцию."},409);
-    if(saved==="duplicate"){
+    if(saved==="duplicate_debt"){
       const existing=await env.DB.prepare("SELECT id,debt_id,amount FROM debt_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
       if(!existing||existing.debt_id!==debtId||Math.abs(Number(existing.amount)-amount)>0.0001)return json({error:"Идентификатор запроса уже использован"},409);
+      const current=await env.DB.prepare("SELECT balance FROM debts WHERE id=? AND user_id=?").bind(debtId,user.id).first();
+      return json({ok:true,id:existing.id,balance:Number(current?.balance||0),replayed:true},200);
     }
     const updatedDebt=await env.DB.prepare("SELECT balance FROM debts WHERE id=? AND user_id=?").bind(debtId,user.id).first();
     return json({ok:true,id,balance:Number(updatedDebt?.balance||0)},201);
