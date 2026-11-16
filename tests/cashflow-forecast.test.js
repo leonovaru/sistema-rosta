@@ -94,3 +94,18 @@ test("calendar events show project attribution and the closing spendable balance
  assert.equal(event.day_closing_balance,12000);
  assert.equal(event.day_available_balance,11000);
 });
+
+test("reserve forecast prorates the current month and still reaches the target without underfunding",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:150,startingBalance:20000,reserves:[{title:"Фонд",target_amount:10000,current_amount:0,monthly_contribution:3000,target_date:"2027-03-31",active:1}]});
+ assert.equal(x.summary.new_reserve_allocations,10000);
+ assert.equal(x.summary.available_ending_balance,10000);
+ assert.equal(x.days.find(day=>day.date==="2026-11-15").reserve_allocations,100);
+ assert.equal(x.days.find(day=>day.date==="2026-11-30").reserve_allocations,100);
+ assert.equal(x.days.find(day=>day.date==="2027-03-31").reserve_allocations,0);
+});
+test("reserve forecast does not allocate contributions after a mid-month target date",()=>{
+ const x=buildCashflowForecast({today:"2026-11-01",horizonDays:30,startingBalance:5000,reserves:[{title:"Цель",target_amount:5000,current_amount:0,monthly_contribution:3000,target_date:"2026-11-15",active:1}]});
+ assert.equal(x.summary.new_reserve_allocations,1500);
+ assert.equal(x.days.find(day=>day.date==="2026-11-15").reserve_allocations,100);
+ assert.equal(x.days.find(day=>day.date==="2026-11-16").reserve_allocations,0);
+});
