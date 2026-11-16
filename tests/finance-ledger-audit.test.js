@@ -107,6 +107,10 @@ test("debt payment reversal restores debt and bucket exactly once without mutati
   assert.throws(()=>db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason) VALUES(?,?,?,?,?,?)").run("rev2","u","dp",40,"2026-11-13","Повторная отмена"));
   const bucket=db.prepare("SELECT 100-COALESCE((SELECT amount FROM debt_payment_bucket_net WHERE user_id='u' AND bucket_id='b'),0) available").get();
   assert.equal(bucket.available,100);
+  const auditedBucket=db.prepare(statements()[5]).get();
+  assert.equal(auditedBucket.debt_paid,0);
+  assert.equal(auditedBucket.debt_reversed,40);
+  assert.equal(auditedBucket.available,100);
   assert.throws(()=>db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason) VALUES(?,?,?,?,?,?)").run("bad","u","dp",39,"2026-11-13","Неверная сумма"));
  }finally{db.close();}
 });
