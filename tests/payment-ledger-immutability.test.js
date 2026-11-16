@@ -28,5 +28,11 @@ test("debt and obligation payment ledger rows cannot be rewritten or deleted",()
   assert.throws(()=>db.prepare("UPDATE obligation_payments SET amount=10 WHERE id='op'").run(),/Платёж по обязательству нельзя изменить/);
   assert.throws(()=>db.prepare("DELETE FROM obligation_payments WHERE id='op'").run(),/Платёж по обязательству нельзя удалить/);
   assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,10);
+  // Parent deletion must not cascade through and erase immutable payment history.
+  assert.throws(()=>db.prepare("DELETE FROM payment_obligations WHERE id='o'").run(),/Платёж по обязательству нельзя удалить/);
+  assert.throws(()=>db.prepare("DELETE FROM debts WHERE id='d'").run(),/Платёж по долгу нельзя удалить/);
+  // Deactivation is safe: it hides the schedule but preserves its payment ledger.
+  db.prepare("UPDATE payment_obligations SET active=0 WHERE id='o'").run();
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM obligation_payments WHERE obligation_id='o'").get().count,1);
  }finally{db.close();}
 });
