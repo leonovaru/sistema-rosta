@@ -62,3 +62,18 @@ test("bucket archive preserves allocations and spending and rejects new allocati
   assert.throws(()=>db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a2","u","i","b",0,0),/Нельзя распределять деньги в архивную корзину/);
  }finally{db.close();}
 });
+
+test("archived buckets reject new expenses, debt payments and obligation payments",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage,active) VALUES(?,?,?,?,?)").run("archived","u","Архив",0,0);
+  db.prepare("INSERT INTO debts(id,user_id,title,initial_amount,balance) VALUES(?,?,?,?,?)").run("d","u","Долг",1000,1000);
+  db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date) VALUES(?,?,?,?,?)").run("o","u","Счёт",100,"2026-11-20");
+  assert.throws(()=>db.prepare("INSERT INTO expenses(id,user_id,category,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?,?)").run("e","u","Прочее","Покупка",10,"2026-11-16","archived"),/Нельзя записать новый расход в архивную корзину/);
+  assert.throws(()=>db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,bucket_id) VALUES(?,?,?,?,?,?)").run("dp","u","d",10,"2026-11-16","archived"),/Нельзя записать платёж в архивную корзину/);
+  assert.throws(()=>db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id) VALUES(?,?,?,?,?,?)").run("op","u","o",10,"2026-11-16","archived"),/Нельзя записать обязательный платёж в архивную корзину/);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses WHERE bucket_id='archived'").get().count,0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payments WHERE bucket_id='archived'").get().count,0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM obligation_payments WHERE bucket_id='archived'").get().count,0);
+ }finally{db.close();}
+});
