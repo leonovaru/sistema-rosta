@@ -625,7 +625,8 @@ async function loadIrregularExpenses(){
  irregularExpenseData=await api("/api/finance/irregular-expenses");
  const labels={once:"один раз",yearly:"ежегодно",quarterly:"раз в квартал"};
  const payments=irregularExpenseData.payments||[];
- $("irregular-expense-list").innerHTML=(irregularExpenseData.items.length?irregularExpenseData.items.map(x=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+escapeHtml(x.category)+' · '+x.next_date+' · '+labels[x.frequency]+' · '+money(x.amount)+(Number(x.active)===0?' · завершён':'')+'</small>'+(x.notes?'<small>'+escapeHtml(x.notes)+'</small>':'')+'</div><div class="finance-actions">'+(Number(x.active)!==0?'<button class="button ghost" data-irregular-paid="'+escapeHtml(x.id)+'">Отметить оплаченным</button>':'')+'<button class="button ghost" data-irregular-delete="'+escapeHtml(x.id)+'">Удалить</button></div></article>').join(""):'<p class="muted">Нерегулярные расходы пока не добавлены.</p>')+(payments.length?'<h4>Последние оплаты</h4>'+payments.slice(0,10).map(p=>'<article class="finance-row"><span>'+p.paid_on+'</span><strong>'+money(p.amount)+'</strong></article>').join(""):'');
+ $("irregular-expense-list").innerHTML=(irregularExpenseData.items.length?irregularExpenseData.items.map(x=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+escapeHtml(x.category)+' · '+x.next_date+' · '+labels[x.frequency]+' · '+money(x.amount)+(Number(x.active)===0?' · завершён':'')+'</small>'+(x.notes?'<small>'+escapeHtml(x.notes)+'</small>':'')+'</div><div class="finance-actions">'+(Number(x.active)!==0?'<button class="button ghost" data-irregular-paid="'+escapeHtml(x.id)+'">Отметить оплаченным</button>':'')+'<button class="button ghost" data-irregular-delete="'+escapeHtml(x.id)+'">Удалить</button></div></article>').join(""):'<p class="muted">Нерегулярные расходы пока не добавлены.</p>'));
+  $("irregular-expense-list").innerHTML+='<h4>Последние оплаты</h4>'+payments.slice(0,10).map(p=>'<article class="finance-row"><div><b>'+escapeHtml(p.title||"Нерегулярный расход")+'</b><small>'+p.paid_on+(p.scheduled_due_date?' · период '+p.scheduled_due_date:'')+(p.reversal_id?' · отменено '+p.reversed_on:'')+'</small></div><div class="finance-actions"><strong>'+money(p.amount)+'</strong>'+(p.reversal_id&&p.scheduled_due_date?'<button class="button ghost" data-irregular-repay="'+escapeHtml(p.irregular_expense_id)+'" data-irregular-period="'+escapeHtml(p.scheduled_due_date)+'">Оплатить период повторно</button>':!p.reversal_id&&p.expense_id&&p.scheduled_due_date?'<button class="button ghost" data-irregular-reverse="'+escapeHtml(p.id)+'">Исправить</button>':'')+'</div></article>').join("");
 }
 $("irregular-expense-form").addEventListener("submit",async e=>{
  e.preventDefault();
@@ -633,7 +634,16 @@ $("irregular-expense-form").addEventListener("submit",async e=>{
  catch(err){alert(err.message);}
 });
 $("irregular-expense-list").addEventListener("click",async e=>{
- const paid=e.target.closest("[data-irregular-paid]");
+   const reverse=e.target.closest("[data-irregular-reverse]");
+  if(reverse){
+   const reason=prompt("Укажи причину исправления оплаты (например, платёж отмечен ошибочно):");if(reason===null)return;if(reason.trim().length<3){alert("Причина должна содержать не менее 3 символов.");return;}
+   if(!confirm("Отменить эту оплату? Исходная запись останется в истории, сумма вернётся в доступный остаток корзины."))return;
+   try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({action:"reverse",payment_id:reverse.dataset.irregularReverse,reversed_on:financeData?.today||cashflowData?.period?.from,reason:reason.trim(),request_id:crypto.randomUUID().replace(/-/g,"")})});await loadIrregularExpenses();await loadFinance();await loadCashflowForecast();}
+   catch(err){alert(err.message);}return;
+  }
+  const repay=e.target.closest("[data-irregular-repay]");
+  if(repay){if(!confirm("Повторно отметить этот период оплаченным?"))return;try{await api("/api/finance/irregular-expenses",{method:"POST",body:JSON.stringify({action:"paid",id:repay.dataset.irregularRepay,scheduled_due_date:repay.dataset.irregularPeriod,paid_on:financeData?.today||cashflowData?.period?.from,request_id:crypto.randomUUID().replace(/-/g,"")})});await loadIrregularExpenses();await loadFinance();await loadCashflowForecast();}catch(err){alert(err.message);}return;}
+const paid=e.target.closest("[data-irregular-paid]");
  if(paid){
   if(!confirm("Отметить расход оплаченным? Он попадёт в фактические расходы, а для повторяющегося платежа рассчитается следующая дата."))return;
   paid.dataset.requestId=paid.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
