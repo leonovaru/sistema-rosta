@@ -21,8 +21,8 @@ test("manual reserve operations require and validate an idempotency key",()=>{
  assert.ok(api.includes("SELECT id,reserve_id,transaction_type,amount,note FROM cash_reserve_transactions WHERE user_id=? AND request_id=?"));
  assert.ok(api.includes("prior.reserve_id!==id||prior.transaction_type!==transactionType||Math.abs(Number(prior.amount)-amount)>0.0001||String(prior.note||\"\")!==note"));
  assert.ok(api.includes("request_id) SELECT ?,?,?,?,?,?,?,? WHERE changes()=1"));
- assert.ok(app.includes('request_id:operation.dataset.requestId'));
- assert.ok(app.includes('operation.dataset.requestAmount!==String(amount)'));
+ assert.ok(app.includes('requestKey="finance:reserve:"+r.id+":"+action'));
+ assert.ok(app.includes("financeRequestIdFor(requestKey,payload)"));
 });
 test("reserve ledger enforces unique request IDs while keeping legacy rows nullable",()=>{
  const db=database();try{
@@ -38,4 +38,10 @@ test("reserve ledger enforces unique request IDs while keeping legacy rows nulla
 test("income edits and deletion translate transfer-protection trigger errors into conflict responses",()=>{
  assert.ok(income.includes("Нельзя изменить распределение|Средства уже переведены из корзины|Сумма дохода меньше уже распределенных средств"));
  assert.ok(income.includes("Нельзя удалить распределение|Нельзя изменить распределение|Средства уже переведены из корзины"));
+});
+
+test("manual reserve operations use a persistent request key tied to reserve, action and amount",()=>{
+ assert.ok(app.includes('requestKey="finance:reserve:"+r.id+":"+action'));
+ assert.ok(app.includes("financeRequestIdFor(requestKey,payload)"));
+ assert.ok(app.includes("clearFinanceRequestId(requestKey,requestId)"));
 });

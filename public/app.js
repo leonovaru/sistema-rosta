@@ -2,6 +2,19 @@ const $ = id => document.getElementById(id);
 let authMode = "login";
 let directions = [];
 let userSettings = { monthly_target: 300000, timezone: "Europe/Moscow" };
+function financeRequestIdFor(key,payload){
+ const serialized=JSON.stringify(payload);
+ try{
+  const stored=JSON.parse(sessionStorage.getItem(key)||"null");
+  if(stored&&stored.payload===serialized&&typeof stored.id==="string")return stored.id;
+  const id=crypto.randomUUID().replace(/-/g,"");
+  sessionStorage.setItem(key,JSON.stringify({payload:serialized,id}));
+  return id;
+ }catch{return crypto.randomUUID().replace(/-/g,"");}
+}
+function clearFinanceRequestId(key,id){
+ try{const stored=JSON.parse(sessionStorage.getItem(key)||"null");if(stored?.id===id)sessionStorage.removeItem(key);}catch{}
+}
 let allTasks = [];
 let taskTimerState = { active_timer:null, totals:[] };
 let taskFilter = "today";
@@ -455,17 +468,15 @@ $("income-recent").addEventListener("click", async e => {
   } catch(err) { alert(err.message); }
 });
 
-let incomeRequestId=null,incomeRequestPayload=null;
 $("income-form").addEventListener("submit", async e => {
   e.preventDefault();
   const form=e.currentTarget,button=form.querySelector('button[type="submit"]');
   const payload={amount:$("income-amount").value,direction_id:$("income-direction").value||null,client_id:$("income-client").value||null,project_id:$("income-project").value||null,received_on:$("income-date").value,note:$("income-note").value};
-  const payloadKey=JSON.stringify(payload);
-  if(!incomeRequestId||incomeRequestPayload!==payloadKey){incomeRequestId=crypto.randomUUID().replace(/-/g,"");incomeRequestPayload=payloadKey;}
+  const requestKey="finance:income:create",requestId=financeRequestIdFor(requestKey,payload);
   button.disabled=true;
   try {
-    await api("/api/income", { method: "POST", body: JSON.stringify({...payload,request_id:incomeRequestId}) });
-    incomeRequestId=null;incomeRequestPayload=null;
+    await api("/api/income", { method: "POST", body: JSON.stringify({...payload,request_id:requestId}) });
+    clearFinanceRequestId(requestKey,requestId);
     $("income-amount").value = ""; $("income-note").value = ""; await loadDashboardData(); await loadFinance();
   } catch (err) { alert(err.message); }
   finally{button.disabled=false;}
@@ -624,7 +635,7 @@ $("save-income-buckets").addEventListener("click",async()=>{
  catch(err){alert(err.message);}
 });
 
-async function reverseBucketFundingTransfer(id){const reason=prompt("Укажи причину исправления перевода:");if(reason===null)return;if(reason.trim().length<3){alert("Причина должна содержать не менее 3 символов.");return;}if(!confirm("Отменить перевод? Исходная запись останется в истории, сумма вернётся в корзину."))return;try{await api("/api/finance/transfers",{method:"POST",body:JSON.stringify({action:"reverse",transfer_id:id,reversed_on:financeData?.today||new Date().toISOString().slice(0,10),reason:reason.trim(),request_id:crypto.randomUUID().replace(/-/g,"")})});await loadIncomeBuckets();await loadDreams();await loadCashReserves();await loadFinance();await loadCashflowForecast();}catch(err){alert(err.message);}}
+async function reverseBucketFundingTransfer(id){const reason=prompt("Укажи причину исправления перевода:");if(reason===null)return;if(reason.trim().length<3){alert("Причина должна содержать не менее 3 символов.");return;}if(!confirm("Отменить перевод? Исходная запись останется в истории, сумма вернётся в корзину."))return;const payload={action:"reverse",transfer_id:id,reversed_on:financeData?.today||new Date().toISOString().slice(0,10),reason:reason.trim()},requestKey="finance:funding-transfer:reverse:"+id,requestId=financeRequestIdFor(requestKey,payload);try{await api("/api/finance/transfers",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});clearFinanceRequestId(requestKey,requestId);await loadIncomeBuckets();await loadDreams();await loadCashReserves();await loadFinance();await loadCashflowForecast();}catch(err){alert(err.message);}}
 async function createBucketFundingTransfer(targetType,targetId,targetTitle,targetRemaining){
  await loadIncomeBuckets();
  const buckets=(incomeBucketsData?.buckets||[]).filter(x=>Number(x.active)!==0&&Number(x.balance)>0);
@@ -638,8 +649,10 @@ async function createBucketFundingTransfer(targetType,targetId,targetTitle,targe
  if(amountText===null)return;
  const amount=Number(String(amountText).trim().replace(/\s/g,"").replace(",","."));
  if(!Number.isFinite(amount)||amount<=0||amount>limit+0.0001){alert("Сумма должна быть положительной и не превышать доступный остаток.");return;}
+ const payload={action:"create",source_bucket_id:bucket.id,target_type:targetType,target_id:targetId,amount,transferred_on:financeData?.today||new Date().toISOString().slice(0,10),note:"Перевод в "+targetTitle},requestKey="finance:funding-transfer:create:"+targetType+":"+targetId+":"+bucket.id,requestId=financeRequestIdFor(requestKey,payload);
  try{
-  await api("/api/finance/transfers",{method:"POST",body:JSON.stringify({action:"create",source_bucket_id:bucket.id,target_type:targetType,target_id:targetId,amount,transferred_on:financeData?.today||new Date().toISOString().slice(0,10),note:"Перевод в "+targetTitle,request_id:crypto.randomUUID().replace(/-/g,"")})});
+  await api("/api/finance/transfers",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});
+  clearFinanceRequestId(requestKey,requestId);
   await loadIncomeBuckets();await loadDreams();await loadCashReserves();await loadFinance();await loadCashflowForecast();
  }catch(err){alert(err.message);}
 }
@@ -677,15 +690,13 @@ $("cash-reserves").addEventListener("click",async e=>{
   if(raw===null)return;
   const amount=Number(raw);
   if(!Number.isFinite(amount)||amount<=0||amount>limit){alert("Укажи положительную сумму в пределах доступного остатка.");return;}
-  const operationNote=isWithdrawal?"Снятие из резерва":"Пополнение резерва";
+  const operationNote=isWithdrawal?"Снятие из резерва":"Пополнение резерва",action=isWithdrawal?"withdrawal":"contribution";
   if(operation.disabled)return;
-  if(!operation.dataset.requestId||operation.dataset.requestAmount!==String(amount)){
-   operation.dataset.requestId=crypto.randomUUID().replace(/-/g,"");
-   operation.dataset.requestAmount=String(amount);
-  }
+  const payload={action,id:r.id,amount,note:operationNote},requestKey="finance:reserve:"+r.id+":"+action,requestId=financeRequestIdFor(requestKey,payload);
   operation.disabled=true;
   try{
-   await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({action:isWithdrawal?"withdrawal":"contribution",id:r.id,amount,note:operationNote,request_id:operation.dataset.requestId})});
+   await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});
+   clearFinanceRequestId(requestKey,requestId);
    await loadCashReserves();
    try{await loadCashflowForecast();}catch(error){console.error("Не удалось обновить прогноз после операции с резервом",error);}
   }catch(err){operation.disabled=false;alert(err.message);}
@@ -949,17 +960,15 @@ async function loadFinance() {
   await loadRevenuePlan();
   await loadCategoryBudget();
 }
-let expenseRequestId=null,expenseRequestPayload=null;
 $("expense-form").addEventListener("submit",async e=>{
   e.preventDefault();
   const form=e.currentTarget,button=form.querySelector('button[type="submit"]');
   const payload={action:"expense",title:$("expense-title").value,amount:$("expense-amount").value,category:$("expense-category").value,direction_id:$("expense-direction").value||null,client_id:$("expense-client").value||null,project_id:$("expense-project").value||null,bucket_id:$("expense-bucket").value==="none"?null:$("expense-bucket").value,spent_on:$("expense-date").value};
-  const payloadKey=JSON.stringify(payload);
-  if(!expenseRequestId||expenseRequestPayload!==payloadKey){expenseRequestId=crypto.randomUUID().replace(/-/g,"");expenseRequestPayload=payloadKey;}
+  const requestKey="finance:expense:create",requestId=financeRequestIdFor(requestKey,payload);
   button.disabled=true;
   try{
-   await api("/api/finance",{method:"POST",body:JSON.stringify({...payload,request_id:expenseRequestId})});
-   expenseRequestId=null;expenseRequestPayload=null;
+   await api("/api/finance",{method:"POST",body:JSON.stringify({...payload,request_id:requestId})});
+   clearFinanceRequestId(requestKey,requestId);
    $("expense-form").reset();await loadFinance();await loadCashflowForecast();
   }catch(err){alert(err.message);}
   finally{button.disabled=false;}

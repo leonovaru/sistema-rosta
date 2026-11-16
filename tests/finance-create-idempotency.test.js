@@ -19,7 +19,7 @@ test("income and ordinary expense create endpoints require stable request IDs an
  assert.ok(incomeApi.includes("row.received_on===date")&&incomeApi.includes("row.client_id===(clientId||null)")&&incomeApi.includes("row.project_id===(projectId||null)"));
  assert.ok(financeApi.includes("expenses WHERE user_id=? AND request_id=?"));
  assert.ok(financeApi.includes("row.spent_on===date")&&financeApi.includes("row.bucket_id===(bucketId||null)")&&financeApi.includes("row.client_id===(clientId||null)"));
- assert.ok(app.includes("request_id:incomeRequestId")&&app.includes("request_id:expenseRequestId"));
+ assert.ok(app.includes("request_id:requestId")&&app.includes("requestKey=\"finance:income:create\"")&&app.includes("requestKey=\"finance:expense:create\""));
 });
 test("income and expense ledgers enforce unique request IDs without constraining legacy rows",()=>{
  const db=database();try{
@@ -34,4 +34,13 @@ test("income and expense ledgers enforce unique request IDs without constraining
   db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on) VALUES(?,?,?,?,?)").run("legacy","u","Старая запись",5,"2026-11-03");
   assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses WHERE request_id IS NULL").get().count,1);
  }finally{db.close();}
+});
+
+test("income, expense and funding transfer request IDs survive a page reload until the server confirms success",()=>{
+ assert.ok(app.includes("function financeRequestIdFor(key,payload)"));
+ assert.ok(app.includes("sessionStorage.setItem(key,JSON.stringify({payload:serialized,id}))"));
+ assert.ok(app.includes('requestKey="finance:income:create"'));
+ assert.ok(app.includes('requestKey="finance:expense:create"'));
+ assert.ok(app.includes('requestKey="finance:funding-transfer:create:"'));
+ assert.ok(app.includes("clearFinanceRequestId(requestKey,requestId)"));
 });
