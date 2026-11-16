@@ -21,11 +21,11 @@ export async function onRequestPost({request,env}){
   if(next>Number(reserve.target_amount))return json({error:"Пополнение превысит целевую сумму резерва"},400);
   const transactionId=newId();
   await env.DB.batch([
-   env.DB.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) VALUES(?,?,?,?,?,?,?)").bind(transactionId,user.id,id,action,amount,next,note),
-   env.DB.prepare("UPDATE cash_reserves SET current_amount=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND current_amount=? AND active=1").bind(next,id,user.id,current)
+   env.DB.prepare("UPDATE cash_reserves SET current_amount=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND current_amount=? AND active=1").bind(next,id,user.id,current),
+   env.DB.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) SELECT ?,?,?,?,?,?,? WHERE changes()=1").bind(transactionId,user.id,id,action,amount,next,note)
   ]);
-  const updated=await env.DB.prepare("SELECT current_amount FROM cash_reserves WHERE id=? AND user_id=?").bind(id,user.id).first();
-  if(Number(updated?.current_amount)!==next)return json({error:"Остаток резерва изменился. Обнови данные и повтори операцию."},409);
+  const saved=await env.DB.prepare("SELECT id FROM cash_reserve_transactions WHERE id=? AND user_id=?").bind(transactionId,user.id).first();
+  if(!saved)return json({error:"Остаток резерва изменился. Обнови данные и повтори операцию."},409);
   return json({ok:true,transaction_id:transactionId,current_amount:next});
  }
  if(action==="delete"){
