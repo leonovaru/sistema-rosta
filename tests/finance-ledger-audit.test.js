@@ -59,3 +59,30 @@ test("audit identifies generated expense rows that have no corresponding payment
   assert.equal(rows[0].expense_id,"orphan");
  }finally{db.close();}
 });
+
+test("ledger audit reconciles debt, obligation and irregular expense without double counting",()=>{
+ const queries=statements();
+ const db=database();
+ try{
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("b","u","Основная",100);
+  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("i","u",100,"2026-11-01");
+  db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
+  db.prepare("INSERT INTO expenses(id,user_id,category,title,amount,spent_on,note,bucket_id) VALUES(?,?,?,?,?,?,?,?)").run("e","u","Дом","Страховка",10,"2026-11-10","Оплата нерегулярного расхода","b");
+  db.prepare("INSERT INTO irregular_expenses(id,user_id,title,category,amount,next_date,frequency) VALUES(?,?,?,?,?,?,?)").run("ir","u","Страховка","Дом",10,"2026-12-10","monthly");
+  db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on,expense_id) VALUES(?,?,?,?,?,?)").run("ip","u","ir",10,"2026-11-10","e");
+  db.prepare("INSERT INTO debts(id,user_id,title,initial_amount,balance) VALUES(?,?,?,?,?)").run("d","u","Кредит",100,100);
+  db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,bucket_id) VALUES(?,?,?,?,?,?)").run("dp","u","d",20,"2026-11-11","b");
+  db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date) VALUES(?,?,?,?,?)").run("o","u","Интернет",15,"2026-12-01");
+  db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date) VALUES(?,?,?,?,?,?,?)").run("op","u","o",15,"2026-11-12","b","2026-11-01");
+  assert.deepEqual(db.prepare(queries[3]).all(),[]);
+  const obligation=db.prepare(queries[4]).get();
+  assert.equal(obligation.recorded_paid,15);
+  const bucket=db.prepare(queries[5]).get();
+  assert.equal(bucket.allocated,100);
+  assert.equal(bucket.expenses_spent,10);
+  assert.equal(bucket.debt_paid,20);
+  assert.equal(bucket.obligations_paid,15);
+  assert.equal(bucket.available,55);
+  assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,80);
+ }finally{db.close();}
+});
