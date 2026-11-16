@@ -25,11 +25,12 @@ export function allocateIncome(amount, buckets) {
   });
 }
 
-export function calculateBucketBalances(buckets, allocations, expenses) {
+export function calculateBucketBalances(buckets, allocations, expenses, transfers = []) {
   return buckets.map(bucket => {
     const allocated = allocations.filter(row => row.bucket_id === bucket.id).reduce((sum, row) => sum + Number(row.amount || 0), 0);
     const spent = expenses.filter(row => row.bucket_id === bucket.id).reduce((sum, row) => sum + Number(row.amount || 0), 0);
-    return { ...bucket, allocated: Math.round(allocated * 100) / 100, spent: Math.round(spent * 100) / 100, balance: Math.round((allocated - spent) * 100) / 100 };
+    const transferred = transfers.filter(row => row.source_bucket_id === bucket.id).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    return { ...bucket, allocated: Math.round(allocated * 100) / 100, spent: Math.round(spent * 100) / 100, transferred: Math.round(transferred * 100) / 100, balance: Math.round((allocated - spent - transferred) * 100) / 100 };
   });
 }
 

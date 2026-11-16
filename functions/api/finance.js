@@ -31,13 +31,14 @@ async function resolveBucket(env,userId,preferredTitle){
     || await env.DB.prepare("SELECT id,title FROM income_buckets WHERE user_id=? AND active=1 AND title='Долги и обязательства'").bind(userId).first();
 }
 async function bucketAvailable(env,userId,bucketId){
-  const [allocated,expenses,debt,obligations]=await Promise.all([
+  const [allocated,expenses,debt,obligations,transfers]=await Promise.all([
     env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM income_bucket_allocations WHERE user_id=? AND bucket_id=?").bind(userId,bucketId).first(),
     env.DB.prepare("SELECT COALESCE(SUM(e.amount-COALESCE((SELECT SUM(r.amount) FROM irregular_expense_payment_reversals r WHERE r.expense_id=e.id AND r.user_id=e.user_id),0)),0) total FROM expenses e WHERE e.user_id=? AND e.bucket_id=?").bind(userId,bucketId).first(),
     env.DB.prepare("SELECT COALESCE(SUM(p.amount),0)-COALESCE((SELECT SUM(r.amount) FROM debt_payment_reversals r JOIN debt_payments rp ON rp.id=r.debt_payment_id WHERE rp.user_id=p.user_id AND rp.bucket_id=p.bucket_id),0) total FROM debt_payments p WHERE p.user_id=? AND p.bucket_id=?").bind(userId,bucketId).first(),
-    env.DB.prepare("SELECT COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=? AND p.bucket_id=?),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments p ON p.id=r.obligation_payment_id WHERE p.user_id=? AND p.bucket_id=?),0) total").bind(userId,bucketId,userId,bucketId).first()
+    env.DB.prepare("SELECT COALESCE((SELECT SUM(p.amount) FROM obligation_payments p WHERE p.user_id=? AND p.bucket_id=?),0)-COALESCE((SELECT SUM(r.amount) FROM obligation_payment_reversals r JOIN obligation_payments p ON p.id=r.obligation_payment_id WHERE p.user_id=? AND p.bucket_id=?),0) total").bind(userId,bucketId,userId,bucketId).first(),
+    env.DB.prepare("SELECT COALESCE((SELECT SUM(t.amount) FROM bucket_funding_transfers t WHERE t.user_id=? AND t.source_bucket_id=?),0)-COALESCE((SELECT SUM(r.amount) FROM bucket_funding_transfer_reversals r JOIN bucket_funding_transfers t ON t.id=r.transfer_id WHERE t.user_id=? AND t.source_bucket_id=?),0) total").bind(userId,bucketId,userId,bucketId).first()
   ]);
-  return Number(allocated.total||0)-Number(expenses.total||0)-Number(debt.total||0)-Number(obligations.total||0);
+  return Number(allocated.total||0)-Number(expenses.total||0)-Number(debt.total||0)-Number(obligations.total||0)-Number(transfers.total||0);
 }
 export async function onRequestGet({request,env}) {
   const user=await requireUser(request,env);
