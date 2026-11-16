@@ -56,3 +56,24 @@ export async function onRequestPost({ request, env }) {
   ]);
   return json({ ok: true, id, allocations }, 201);
 }
+
+export async function onRequestDelete({ request, env }) {
+  const user = await requireUser(request, env);
+  if (!user) return json({ error: "Необходим вход" }, 401);
+  const body = await readJson(request);
+  const id = String(body?.id || "").trim();
+  if (!id) return json({ error: "Не выбрано поступление" }, 400);
+  const existing = await env.DB.prepare("SELECT id FROM income_entries WHERE id=? AND user_id=?").bind(id,user.id).first();
+  if (!existing) return json({ error: "Поступление не найдено" }, 404);
+  try {
+    const result = await env.DB.prepare("DELETE FROM income_entries WHERE id=? AND user_id=?").bind(id,user.id).run();
+    if (!result.meta?.changes) return json({ error: "Поступление не найдено" }, 404);
+    return json({ ok: true, id });
+  } catch (error) {
+    const message = String(error?.message || "");
+    if (/Нельзя удалить распределение|Нельзя изменить распределение|FOREIGN KEY constraint failed/i.test(message)) {
+      return json({ error: "Нельзя удалить поступление: распределённые деньги уже обеспечивают сохранённые расходы или платежи. Сначала исправь связанные операции." }, 409);
+    }
+    throw error;
+  }
+}
