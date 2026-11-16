@@ -1,17 +1,24 @@
 import { resolveSleepWallTime } from "./sleep.js";
 
 export function isValidCalendarDate(value) {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
 export function isValidCalendarDateTime(value) {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return false;
+  if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(value)) return false;
   const [date, time] = value.split("T");
   const [hour, minute] = time.split(":").map(Number);
   return isValidCalendarDate(date) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+}
+
+export function isValidCalendarRange(from, to, maxDays = 366) {
+  if (!isValidCalendarDateTime(from) || !isValidCalendarDateTime(to) || to <= from) return false;
+  const start = Date.parse(from + ":00Z");
+  const end = Date.parse(to + ":00Z");
+  return Number.isFinite(start) && Number.isFinite(end) && end - start <= maxDays * 86400000;
 }
 
 function shiftDate(date, days) {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { expandRecurringEvents, createSleepCalendarEvents, isValidCalendarDate, isValidCalendarDateTime } from "../functions/_lib/calendar.js";
+import { expandRecurringEvents, createSleepCalendarEvents, isValidCalendarDate, isValidCalendarDateTime, isValidCalendarRange } from "../functions/_lib/calendar.js";
 
 test("daily overnight series includes the occurrence that began yesterday", () => {
   const events = expandRecurringEvents([{
@@ -36,10 +36,7 @@ test("includes a recurring occurrence on the final date when the range ends late
     id:"daily",start_at:"2026-01-01T10:00",end_at:"2026-01-01T11:00",
     repeat_rule:"daily",repeat_until:"2026-12-31",status:"planned"
   }],"2026-11-15T00:00","2026-11-16T18:00");
-  assert.deepEqual(events.map(event=>event.start_at),[
-    "2026-11-15T10:00",
-    "2026-11-16T10:00"
-  ]);
+  assert.deepEqual(events.map(event=>event.start_at),["2026-11-15T10:00","2026-11-16T10:00"]);
 });
 
 test("validates real calendar dates and wall-clock times, not only their string shape", () => {
@@ -50,6 +47,13 @@ test("validates real calendar dates and wall-clock times, not only their string 
   assert.equal(isValidCalendarDateTime("2026-11-15T24:00"),false);
   assert.equal(isValidCalendarDateTime("2026-11-15T12:60"),false);
   assert.equal(isValidCalendarDateTime("2026-02-30T12:00"),false);
+});
+
+test("calendar range is capped at 366 days and requires valid increasing wall times", () => {
+  assert.equal(isValidCalendarRange("2026-01-01T00:00","2027-01-01T00:00"),true);
+  assert.equal(isValidCalendarRange("2026-01-01T00:00","2027-01-02T00:00"),false);
+  assert.equal(isValidCalendarRange("2026-01-01T00:00","2026-01-01T00:00"),false);
+  assert.equal(isValidCalendarRange("2026-02-30T00:00","2026-03-01T00:00"),false);
 });
 
 test("sleep sessions become read-only calendar events in the workspace timezone", () => {

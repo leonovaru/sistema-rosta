@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
-import { expandRecurringEvents, createSleepCalendarEvents, isValidCalendarDate, isValidCalendarDateTime } from "../../_lib/calendar.js";
+import { expandRecurringEvents, createSleepCalendarEvents, isValidCalendarDate, isValidCalendarDateTime, isValidCalendarRange } from "../../_lib/calendar.js";
 
 const TYPES = ["meeting","travel","hobby","sleep","work","personal","other"];
 const MODES = ["none","online","offline"];
@@ -12,8 +12,6 @@ async function invalidateTodayPlan(env,userId) {
   const today=values.year+"-"+values.month+"-"+values.day;
   await env.DB.prepare("DELETE FROM daily_plans WHERE user_id=? AND plan_date=?").bind(userId,today).run();
 }
-const DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function cleanEvent(body) {
   const title = String(body?.title || "").trim();
@@ -46,7 +44,7 @@ export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
   const from = String(url.searchParams.get("from") || "");
   const to = String(url.searchParams.get("to") || "");
-  if (!isValidCalendarDateTime(from) || !isValidCalendarDateTime(to) || to <= from) return json({ error:"Укажи корректный период календаря" },400);
+  if (!isValidCalendarRange(from,to)) return json({ error:"Укажи корректный период календаря не более 366 дней" },400);
   const { results } = await env.DB.prepare(`
     SELECT * FROM calendar_events
     WHERE user_id=? AND status!='cancelled'
