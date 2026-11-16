@@ -52,8 +52,8 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
   db.prepare("UPDATE projects SET title='Новое название проекта' WHERE id='project1'").run();
   const historicalIncome=db.prepare("SELECT client_name_snapshot,project_title_snapshot FROM income_entries WHERE id='income_history'").get();
   const historicalExpense=db.prepare("SELECT client_name_snapshot,project_title_snapshot FROM expenses WHERE id='expense_history'").get();
-  assert.deepEqual(historicalIncome,{client_name_snapshot:"Старое имя клиента",project_title_snapshot:"Старое название проекта"});
-  assert.deepEqual(historicalExpense,{client_name_snapshot:"Старое имя клиента",project_title_snapshot:"Старое название проекта"});
+  assert.deepEqual({...historicalIncome},{client_name_snapshot:"Старое имя клиента",project_title_snapshot:"Старое название проекта"});
+  assert.deepEqual({...historicalExpense},{client_name_snapshot:"Старое имя клиента",project_title_snapshot:"Старое название проекта"});
 
   // An active task timer blocks archiving its client/project at the SQL update boundary.
   db.prepare("INSERT INTO tasks(id,user_id,title,client_id,project_id,status) VALUES(?,?,?,?,?,?)").run("task_archive","u1","Работа","client1","project1","doing");
