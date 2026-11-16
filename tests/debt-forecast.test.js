@@ -22,3 +22,14 @@ test("final payment is capped at principal plus that month's interest",()=>{
  assert.equal(r.total_paid,505);
  assert.equal(r.months_to_payoff,1);
 });
+ 
+test("closed debts are excluded from repayment forecast while open debts remain",()=>{
+ const r=buildDebtForecast([
+  {id:"closed",title:"Погашенный",balance:1000,interest_rate:12,minimum_payment:100,status:"closed"},
+  {id:"open",title:"Открытый",balance:500,interest_rate:0,minimum_payment:100,status:"open"}
+ ]);
+ assert.equal(r.debts.length,1);
+ assert.equal(r.debts[0].id,"open");
+ assert.equal(r.summary.current_balance,500);
+ assert.equal(r.summary.monthly_minimum,100);
+});

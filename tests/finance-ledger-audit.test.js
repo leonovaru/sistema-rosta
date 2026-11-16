@@ -164,3 +164,31 @@ test("obligation payment reversal reopens only its occurrence and preserves late
   assert.throws(()=>db.prepare("DELETE FROM obligation_payment_reversals").run());
  }finally{db.close();}
 });
+ 
+test("fully repaid debt closes, reversal of the final payment reopens it, and repayment closes it again",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("b","u","Долги и обязательства",100);
+  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("i","u",100,"2026-11-01");
+  db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
+  db.prepare("INSERT INTO debts(id,user_id,title,initial_amount,balance) VALUES(?,?,?,?,?)").run("d","u","Кредит",100,100);
+  db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,bucket_id,request_id) VALUES(?,?,?,?,?,?,?)").run("p1","u","d",100,"2026-11-10","b","debt-payment-close-001");
+  let debt=db.prepare("SELECT balance,status FROM debts WHERE id='d'").get();
+  assert.equal(debt.balance,0);
+  assert.equal(debt.status,"closed");
+  db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("r1","u","p1",100,"2026-11-12","Ошибочно внесённый платёж","debt-reversal-001");
+  debt=db.prepare("SELECT balance,status FROM debts WHERE id='d'").get();
+  assert.equal(debt.balance,100);
+  assert.equal(debt.status,"open");
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payments WHERE id='p1'").get().count,1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payment_reversals WHERE debt_payment_id='p1'").get().count,1);
+  assert.equal(db.prepare("SELECT amount FROM debt_payment_bucket_net WHERE user_id='u' AND bucket_id='b'").get().amount,0);
+  db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,bucket_id,request_id) VALUES(?,?,?,?,?,?,?)").run("p2","u","d",100,"2026-11-13","b","debt-payment-close-002");
+  debt=db.prepare("SELECT balance,status FROM debts WHERE id='d'").get();
+  assert.equal(debt.balance,0);
+  assert.equal(debt.status,"closed");
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payments WHERE debt_id='d'").get().count,2);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payment_reversals WHERE debt_payment_id='p1'").get().count,1);
+  assert.equal(db.prepare("SELECT amount FROM debt_payment_bucket_net WHERE user_id='u' AND bucket_id='b'").get().amount,100);
+ }finally{db.close();}
+});
