@@ -1,4 +1,5 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
+import { isTaskAvailableForPlanning } from "../../_lib/task-planning-availability.js";
 
 function parseJson(value) {
   if (typeof value !== "string") return value;
@@ -13,8 +14,9 @@ export async function onRequestPost({ request, env }) {
   const body = await readJson(request);
   const taskId = String(body?.task_id || "");
   if (!taskId) return json({ error: "Не выбрана задача" }, 400);
-  const task = await env.DB.prepare("SELECT id,title,description FROM tasks WHERE id=? AND user_id=?").bind(taskId,user.id).first();
+  const task = await env.DB.prepare("SELECT t.id,t.title,t.description,p.status AS project_status,c.status AS client_status,pc.status AS project_client_status FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN clients pc ON pc.id=p.client_id AND pc.user_id=p.user_id WHERE t.id=? AND t.user_id=?").bind(taskId,user.id).first();
   if (!task) return json({ error: "Задача не найдена" }, 404);
+  if (!isTaskAvailableForPlanning(task)) return json({ error: "Нельзя изменять план задачи завершённого или архивного проекта либо закрытого клиента" }, 409);
   try {
     const response = await env.AI.run("@cf/google/gemma-4-26b-a4b-it", {
       messages: [
