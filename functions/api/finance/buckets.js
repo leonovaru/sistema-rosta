@@ -30,6 +30,24 @@ export async function onRequestPost({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error: "Необходим вход" }, 401);
   const body = await readJson(request) || {};
+  if(body.action==="archive"){
+    const id=String(body.id||"");
+    const bucket=await env.DB.prepare("SELECT id,percentage,active FROM income_buckets WHERE id=? AND user_id=?").bind(id,user.id).first();
+    if(!bucket)return json({error:"Корзина не найдена"},404);
+    if(!bucket.active)return json({ok:true,archived:true});
+    const percentage=Number(bucket.percentage||0);
+    const statements=[];
+    if(percentage>0){
+      const replacementId=String(body.replacement_bucket_id||"");
+      if(!replacementId||replacementId===id)return json({error:"Выбери активную корзину, которой передать процент архивируемой корзины"},400);
+      const target=await env.DB.prepare("SELECT id,percentage FROM income_buckets WHERE id=? AND user_id=? AND active=1").bind(replacementId,user.id).first();
+      if(!target)return json({error:"Корзина для переноса процента не найдена"},404);
+      statements.push(env.DB.prepare("UPDATE income_buckets SET percentage=percentage+?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(percentage,replacementId,user.id));
+    }
+    statements.push(env.DB.prepare("UPDATE income_buckets SET active=0,percentage=0,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(id,user.id));
+    await env.DB.batch(statements);
+    return json({ok:true,archived:true,transferred_percentage:percentage});
+  }
   if (body.action !== "update_percentages" || !Array.isArray(body.buckets) || !body.buckets.length) {
     return json({ error: "Передай новое распределение корзин" }, 400);
   }
