@@ -54,7 +54,7 @@ test("audit identifies generated expense rows that have no corresponding payment
  const db=database();
  try{
   db.prepare("INSERT INTO expenses(id,user_id,category,title,amount,spent_on,note) VALUES(?,?,?,?,?,?,?)").run("orphan","u","Дом","Старая оплата",800,"2026-01-01","Оплата нерегулярного расхода");
-  const rows=db.prepare(queries()[1]).all();
+  const rows=db.prepare(queries[1]).all();
   assert.equal(rows.length,1);
   assert.equal(rows[0].expense_id,"orphan");
  }finally{db.close();}
