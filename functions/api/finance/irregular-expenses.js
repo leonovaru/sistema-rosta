@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
-import { nextIrregularDate } from "../../_lib/finance.js";
+import { advanceIrregularExpenseAfterPayment } from "../../_lib/finance.js";
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(v){if(!DATE.test(v))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
 const clean=(v,n)=>String(v||"").trim().slice(0,n);
@@ -30,14 +30,9 @@ export async function onRequestPost({request,env}){
    const available=Number(allocated.total||0)-Number(spent.total||0)-Number(debt.total||0)-Number(obligations.total||0);
    if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
   }
-  let nextDate=null,active=0;
-  if(item.frequency!=="once"){
-   nextDate=nextIrregularDate(item.next_date,item.frequency,item.recurrence_day);
-   let guard=0;
-   while(nextDate&&nextDate<=paidOn&&guard++<40)nextDate=nextIrregularDate(nextDate,item.frequency,item.recurrence_day);
-   if(!nextDate)return json({error:"Не удалось рассчитать следующую дату"},400);
-   active=1;
-  }
+  const nextSchedule=advanceIrregularExpenseAfterPayment(item.next_date,item.frequency,item.recurrence_day);
+  if(!nextSchedule)return json({error:"Не удалось рассчитать следующую дату"},400);
+  const {next_date:nextDate,active}=nextSchedule;
   await env.DB.batch([
    env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id) VALUES (?,?,NULL,?,?,?,?,?,?)").bind(expenseEntryId,user.id,item.category,item.title,amount,paidOn,"Оплата нерегулярного расхода",bucket?.id||null),
    env.DB.prepare("INSERT INTO irregular_expense_payments (id,user_id,irregular_expense_id,amount,paid_on,expense_id) VALUES (?,?,?,?,?,?)").bind(paymentId,user.id,expenseId,amount,paidOn,expenseEntryId),

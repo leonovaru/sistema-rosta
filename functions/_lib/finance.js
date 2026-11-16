@@ -56,3 +56,8 @@ export function nextIrregularDate(date,frequency,recurrenceDay=null) {
   const last=new Date(Date.UTC(next.getUTCFullYear(),next.getUTCMonth()+1,0,12)).getUTCDate();
   return next.getUTCFullYear()+"-"+String(next.getUTCMonth()+1).padStart(2,"0")+"-"+String(Math.min(anchor,last)).padStart(2,"0");
 }
+export function advanceIrregularExpenseAfterPayment(nextDate,frequency,recurrenceDay=null) {
+  if(frequency==="once")return {next_date:null,active:0};
+  const next=nextIrregularDate(nextDate,frequency,recurrenceDay);
+  return next?{next_date:next,active:1}:null;
+}
