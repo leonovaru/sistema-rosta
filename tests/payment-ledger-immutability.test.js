@@ -50,3 +50,16 @@ test("debt payment request identifiers make retries idempotent",()=>{
   assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payments WHERE user_id='u2' AND request_id='request-key-00000001'").get().count,1);
  }finally{db.close();}
 });
+
+test("obligation payment request identifiers make retries idempotent",()=>{
+ const db=new DatabaseSync(":memory:");
+ try{
+  db.exec(readFileSync(join(root,"schema.sql"),"utf8"));
+  for(const name of readdirSync(join(root,"migrations")).filter(x=>/^\\d+_.+\\.sql$/.test(x)).sort((a,b)=>a.localeCompare(b)))db.exec(readFileSync(join(root,"migrations",name),"utf8"));
+  db.prepare("INSERT INTO users(id,email,password_hash,password_salt) VALUES(?,?,?,?)").run("u3","obligation-retry@example.test","hash","salt");
+  db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date) VALUES(?,?,?,?,?)").run("o3","u3","Платёж",100,"2026-11-16");
+  db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?)").run("op1","u3","o3",100,"2026-11-16","2026-11-16","obligation-request-0001");
+  assert.throws(()=>db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?)").run("op2","u3","o3",100,"2026-11-16","2026-11-16","obligation-request-0001"),/UNIQUE constraint failed/);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM obligation_payments WHERE user_id='u3' AND request_id='obligation-request-0001'").get().count,1);
+ }finally{db.close();}
+});
