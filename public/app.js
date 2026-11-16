@@ -524,23 +524,26 @@ $("expense-title").addEventListener("change",()=>suggestBucketForExpense($("expe
 async function loadIncomeBuckets(){
  incomeBucketsData=await api("/api/finance/buckets");
  const rows=incomeBucketsData.buckets||[];
+ const activeRows=rows.filter(b=>Number(b.active)!==0);
+ const archivedRows=rows.filter(b=>Number(b.active)===0);
  const totalAllocated=rows.reduce((s,x)=>s+Number(x.allocated||0),0);
  const totalSpent=rows.reduce((s,x)=>s+Number(x.spent||0),0);
  const totalBalance=rows.reduce((s,x)=>s+Number(x.balance||0),0);
  $("income-bucket-summary").innerHTML=[["Распределено",money(totalAllocated)],["Потрачено из корзин",money(totalSpent)],["Остаток корзин",money(totalBalance)],["Сумма процентов",incomeBucketsData.percentage_total+"%"]].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
- $("income-bucket-list").innerHTML=rows.map(b=>{const pct=b.allocated>0?Math.max(0,Math.min(100,b.spent/b.allocated*100)):0;return '<article class="finance-row"><div class="bucket-main"><b>'+escapeHtml(b.title)+(b.bucket_type==="capital"?' · капитал':'')+'</b><small>Распределено '+money(b.allocated)+' · потрачено '+money(b.spent)+' · доступно '+money(b.balance)+'</small><div class="progress"><span style="width:'+pct+'%"></span></div></div><label class="bucket-percent">Доля, %<input type="number" min="0" max="100" step="0.5" data-bucket-percent="'+escapeHtml(b.id)+'" value="'+Number(b.percentage)+'"></label><button class="button ghost" data-bucket-archive="'+escapeHtml(b.id)+'">Архивировать</button></article>';}).join("");
+ const renderBucket=b=>{const pct=b.allocated>0?Math.max(0,Math.min(100,b.spent/b.allocated*100)):0;return '<article class="finance-row"><div class="bucket-main"><b>'+escapeHtml(b.title)+(b.bucket_type==="capital"?' · капитал':'')+(Number(b.active)===0?' · архив':'')+'</b><small>Распределено '+money(b.allocated)+' · потрачено '+money(b.spent)+' · доступно '+money(b.balance)+'</small><div class="progress"><span style="width:'+pct+'%"></span></div></div>'+(Number(b.active)===0?'':'<label class="bucket-percent">Доля, %<input type="number" min="0" max="100" step="0.5" data-bucket-percent="'+escapeHtml(b.id)+'" value="'+Number(b.percentage)+'"></label><button class="button ghost" data-bucket-archive="'+escapeHtml(b.id)+'">Архивировать</button>')+'</article>';};
+ $("income-bucket-list").innerHTML=activeRows.map(renderBucket).join("")+(archivedRows.length?'<h4>Архивные корзины</h4>'+archivedRows.map(renderBucket).join(""):'');
  $("income-bucket-note").textContent=incomeBucketsData.allocation_ready?"Проценты составляют 100%. Новые поступления будут распределяться автоматически.":"Сейчас доли составляют "+incomeBucketsData.percentage_total+"%. Измени значения до 100%, чтобы включить распределение.";
  const recommendation=incomeBucketsData.recommendation;
  $("income-bucket-recommendations").innerHTML=recommendation?.ready?'<h4>Рекомендация по фактическим расходам</h4><p class="fine">Средний доход за '+recommendation.history_months+' завершённых месяцев: '+money(recommendation.average_monthly_income)+'. Предлагаемые доли учитывают фактические траты из корзин. Капитал сохраняется не ниже 10%. Это предложение, а не автоматическое изменение.</p>'+recommendation.buckets.map(b=>'<article class="finance-row"><div><b>'+escapeHtml(b.title)+'</b><small>Средние траты: '+money(b.average_monthly_spending)+'/мес. · сейчас '+b.current_percentage+'% · предлагается '+b.recommended_percentage+'%</small></div><strong>'+(b.recommended_percentage>b.current_percentage?"+":"")+Math.round((b.recommended_percentage-b.current_percentage)*10)/10+' п.п.</strong></article>').join(""):'<p class="fine">Рекомендации появятся после того, как будут внесены доходы минимум за два месяца. Для расчёта используются три последних завершённых месяца и только расходы, отнесённые к корзинам.</p>';
  $("apply-bucket-recommendations").disabled=!recommendation?.ready;
- $("save-income-buckets").disabled=!rows.length;
- $("expense-bucket").innerHTML='<option value="">Выбери корзину или вне корзин</option><option value="none">Вне корзин</option>'+rows.map(b=>'<option value="'+escapeHtml(b.id)+'">'+escapeHtml(b.title)+' · доступно '+money(b.balance)+'</option>').join("");
+ $("save-income-buckets").disabled=!activeRows.length;
+ $("expense-bucket").innerHTML='<option value="">Выбери корзину или вне корзин</option><option value="none">Вне корзин</option>'+activeRows.map(b=>'<option value="'+escapeHtml(b.id)+'">'+escapeHtml(b.title)+' · доступно '+money(b.balance)+'</option>').join("");
 }
 $("refresh-income-buckets").addEventListener("click",async()=>{try{await loadIncomeBuckets();}catch(err){alert(err.message);}});
 $("income-bucket-list").addEventListener("click",async e=>{
  const button=e.target.closest("[data-bucket-archive]");if(!button)return;
  const id=button.dataset.bucketArchive;
- const options=(incomeBucketsData?.buckets||[]).filter(row=>row.id!==id);
+ const options=(incomeBucketsData?.buckets||[]).filter(row=>Number(row.active)!==0&&row.id!==id);
  if(!options.length){alert("Нужна хотя бы одна другая активная корзина для передачи процента.");return;}
  const choice=prompt("Куда передать долю архивируемой корзины?\\n"+options.map((row,index)=>(index+1)+". "+row.title+" ("+row.percentage+"%)").join("\\n")+"\\n\\nВведи номер корзины:");
  if(choice===null)return;
