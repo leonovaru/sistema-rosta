@@ -68,7 +68,9 @@ test("yearly and quarterly irregular expenses appear on their actual recurrence 
 });
 test("recurring irregular expense advances from month end without invalid dates",()=>{
  const x=buildCashflowForecast({today:"2026-02-20",horizonDays:40,irregularExpenses:[{title:"Годовой платёж",amount:1000,next_date:"2025-02-28",frequency:"yearly"}]});
- assert.deepEqual(x.events.map(e=>e.date),["2026-02-28"]);
+ assert.deepEqual(x.events.map(e=>[e.date,e.source]),[["2026-02-20","overdue_irregular_expense"],["2026-02-28","irregular_expense"]]);
+ assert.equal(x.events[0].original_due_date,"2025-02-28");
+ assert.equal(x.events[0].overdue_occurrences,1);
 });
 
 test("quarterly recurrence preserves the original day after short months",()=>{
