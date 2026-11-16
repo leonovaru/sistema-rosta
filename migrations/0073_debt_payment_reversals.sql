@@ -39,12 +39,14 @@ BEGIN
     AND user_id=NEW.user_id;
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_debt_payment_reversal_immutable_update
+DROP TRIGGER IF EXISTS trg_debt_payment_reversal_immutable_update;
+CREATE TRIGGER trg_debt_payment_reversal_immutable_update_v2
 BEFORE UPDATE ON debt_payment_reversals
 BEGIN
   SELECT RAISE(ABORT,'Корректировку платежа нельзя изменить');
 END;
-CREATE TRIGGER IF NOT EXISTS trg_debt_payment_reversal_immutable_delete
+DROP TRIGGER IF EXISTS trg_debt_payment_reversal_immutable_delete;
+CREATE TRIGGER trg_debt_payment_reversal_immutable_delete_v2
 BEFORE DELETE ON debt_payment_reversals
 BEGIN
   SELECT RAISE(ABORT,'Корректировку платежа нельзя удалить');
@@ -72,7 +74,9 @@ DROP TRIGGER IF EXISTS trg_bucket_obligation_payment_balance_update;
 
 CREATE TRIGGER trg_bucket_expense_balance_insert
 BEFORE INSERT ON expenses
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS (
+WHEN NEW.bucket_id IS NOT NULL
+ AND NOT EXISTS (SELECT 1 FROM income_buckets inactive_bucket WHERE inactive_bucket.id=NEW.bucket_id AND inactive_bucket.user_id=NEW.user_id AND inactive_bucket.active=0)
+ AND NOT EXISTS (
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
@@ -85,7 +89,9 @@ BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзи�
 
 CREATE TRIGGER trg_bucket_expense_balance_update
 BEFORE UPDATE OF amount,bucket_id,user_id ON expenses
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS (
+WHEN NEW.bucket_id IS NOT NULL
+ AND NOT EXISTS (SELECT 1 FROM income_buckets inactive_bucket WHERE inactive_bucket.id=NEW.bucket_id AND inactive_bucket.user_id=NEW.user_id AND inactive_bucket.active=0)
+ AND NOT EXISTS (
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
@@ -98,7 +104,9 @@ BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзи�
 
 CREATE TRIGGER trg_bucket_debt_payment_balance_insert
 BEFORE INSERT ON debt_payments
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS (
+WHEN NEW.bucket_id IS NOT NULL
+ AND NOT EXISTS (SELECT 1 FROM income_buckets inactive_bucket WHERE inactive_bucket.id=NEW.bucket_id AND inactive_bucket.user_id=NEW.user_id AND inactive_bucket.active=0)
+ AND NOT EXISTS (
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
@@ -111,7 +119,9 @@ BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзи�
 
 CREATE TRIGGER trg_bucket_debt_payment_balance_update
 BEFORE UPDATE OF amount,bucket_id,user_id ON debt_payments
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS (
+WHEN NEW.bucket_id IS NOT NULL
+ AND NOT EXISTS (SELECT 1 FROM income_buckets inactive_bucket WHERE inactive_bucket.id=NEW.bucket_id AND inactive_bucket.user_id=NEW.user_id AND inactive_bucket.active=0)
+ AND NOT EXISTS (
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
@@ -124,7 +134,9 @@ BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзи�
 
 CREATE TRIGGER trg_bucket_obligation_payment_balance_insert
 BEFORE INSERT ON obligation_payments
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS (
+WHEN NEW.bucket_id IS NOT NULL
+ AND NOT EXISTS (SELECT 1 FROM income_buckets inactive_bucket WHERE inactive_bucket.id=NEW.bucket_id AND inactive_bucket.user_id=NEW.user_id AND inactive_bucket.active=0)
+ AND NOT EXISTS (
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
@@ -137,7 +149,9 @@ BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзи�
 
 CREATE TRIGGER trg_bucket_obligation_payment_balance_update
 BEFORE UPDATE OF amount,bucket_id,user_id ON obligation_payments
-WHEN NEW.bucket_id IS NOT NULL AND NOT EXISTS (
+WHEN NEW.bucket_id IS NOT NULL
+ AND NOT EXISTS (SELECT 1 FROM income_buckets inactive_bucket WHERE inactive_bucket.id=NEW.bucket_id AND inactive_bucket.user_id=NEW.user_id AND inactive_bucket.active=0)
+ AND NOT EXISTS (
  SELECT 1 FROM income_buckets b WHERE b.id=NEW.bucket_id AND b.user_id=NEW.user_id
  AND (
   COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id),0)
