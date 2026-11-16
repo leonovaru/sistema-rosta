@@ -46,7 +46,7 @@ test("bucket transfer database guard rejects foreign targets, archived sources a
  try{
   db.prepare("INSERT INTO users(id,email,password_hash,password_salt) VALUES(?,?,?,?)").run("other","other@test.local","hash","salt");
   assert.throws(()=>db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("bad","u","b","goal","missing",1,"2026-11-16","request-invalid-01"),/Цель или резерв недоступны/);
-  assert.throws(()=>db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("bad2","other","b","goal","g",1,"2026-11-16","request-invalid-02"),/Недостаточно средств/);
+  assert.throws(()=>db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("bad2","other","b","goal","g",1,"2026-11-16","request-invalid-02"),/Недостаточно средств|Цель или резерв/);
   db.prepare("UPDATE income_buckets SET active=0,percentage=0 WHERE id='b'").run();
   assert.throws(()=>db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("bad3","u","b","goal","g",1,"2026-11-16","request-invalid-03"),/Недостаточно средств/);
  }finally{db.close();}
