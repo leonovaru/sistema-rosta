@@ -27,6 +27,12 @@ test("bucket transfers fund goals/reserves without becoming expenses and can be 
   assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_reserve_transactions WHERE reserve_id='r' AND transaction_type='contribution'").get().count,1);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses").get().count,0);
   assert.throws(()=>db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?)").run("over","u","Попытка перерасхода",31,"2026-11-16","b"),/Средства уже переведены из корзины/);
+  db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?)").run("e","u","Допустимая покупка",30,"2026-11-16","b");
+  assert.throws(()=>db.prepare("UPDATE expenses SET amount=31 WHERE id='e'").run(),/Средства уже переведены из корзины/);
+  assert.throws(()=>db.prepare("UPDATE income_bucket_allocations SET amount=69 WHERE id='a'").run(),/Средства уже переведены из корзины/);
+  assert.throws(()=>db.prepare("DELETE FROM income_bucket_allocations WHERE id='a'").run(),/Средства уже переведены из корзины/);
+  db.prepare("DELETE FROM expenses WHERE id='e'").run();
+  assert.throws(()=>db.prepare("DELETE FROM financial_goals WHERE id='g'").run(),/У цели есть история переводов/);
   db.prepare("INSERT INTO bucket_funding_transfer_reversals(id,user_id,transfer_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("rg","u","tg",40,"2026-11-17","Исправление","reverse-goal-0001");
   assert.equal(db.prepare("SELECT amount FROM bucket_funding_transfer_net WHERE user_id='u' AND source_bucket_id='b'").get().amount,30);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM bucket_funding_transfer_reversals").get().count,1);
