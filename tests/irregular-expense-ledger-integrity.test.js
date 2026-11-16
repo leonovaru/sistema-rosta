@@ -51,3 +51,16 @@ test("an irregular payment stays linked to its single expense fact",()=>{
   assert.equal(db.prepare("SELECT COUNT(*) count FROM irregular_expense_payments WHERE expense_id='e'").get().count,1);
  }finally{db.close();}
 });
+
+test("the ledger rejects duplicate payments for the same schedule and date",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO irregular_expenses(id,user_id,title,category,amount,next_date,frequency) VALUES(?,?,?,?,?,?,?)").run("x","u","Страховка","Дом",12000,"2026-11-16","yearly");
+  db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on) VALUES(?,?,?,?,?)").run("p1","u","x",12000,"2026-11-16");
+  assert.throws(
+   ()=>db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on) VALUES(?,?,?,?,?)").run("p2","u","x",12000,"2026-11-16"),
+   /Оплата за эту дату уже зарегистрирована/
+  );
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM irregular_expense_payments WHERE irregular_expense_id='x' AND paid_on='2026-11-16'").get().count,1);
+ }finally{db.close();}
+});
