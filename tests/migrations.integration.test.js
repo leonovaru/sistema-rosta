@@ -24,7 +24,7 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
    assert.ok(tables.includes(name),`missing table ${name}`);
   }
   const triggers=db.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all().map(row=>row.name);
-  for(const name of ["trg_cashflow_realization_before_insert","trg_cashflow_realization_after_insert","trg_cashflow_realization_after_delete","trg_cashflow_income_amount_guard","trg_cashflow_expense_amount_guard"]){
+  for(const name of ["trg_cashflow_realization_before_insert","trg_cashflow_realization_after_insert","trg_cashflow_realization_after_delete","trg_cashflow_income_amount_guard","trg_cashflow_expense_amount_guard","trg_bucket_expense_balance_insert","trg_bucket_debt_payment_balance_insert","trg_bucket_obligation_payment_balance_insert"]){
    assert.ok(triggers.includes(name),`missing trigger ${name}`);
   }
   db.prepare("INSERT INTO users(id,email,password_hash,password_salt) VALUES(?,?,?,?)").run("u1","u1@example.test","hash","salt");
@@ -75,6 +75,19 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
   db.prepare("UPDATE planned_cashflows SET status='cancelled' WHERE id='cancelled_plan'").run();
   db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on) VALUES(?,?,?,?,?)").run("cancelled_expense","u1","Старый расход",50,"2026-11-16");
   assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,expense_id,amount) VALUES(?,?,?,?,?)").run("cancelled_real","u1","cancelled_plan","cancelled_expense",50),/Плановый платёж недоступен или превышен|Связь не соответствует фактической операции/);
+   // Bucket spending is guarded in SQLite across expenses and both payment types.
+   db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("bucket_test","u1","Тестовая корзина",100);
+   db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("bucket_income","u1",100,"2026-11-20");
+   db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("bucket_alloc","u1","bucket_income","bucket_test",100,100);
+   db.prepare("INSERT INTO debts(id,user_id,title,initial_amount,balance) VALUES(?,?,?,?,?)").run("debt_test","u1","Долг",100,100);
+   db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date) VALUES(?,?,?,?,?)").run("obligation_test","u1","Платёж",50,"2026-12-01");
+   db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?)").run("bucket_expense","u1","Расход",60,"2026-11-20","bucket_test");
+   db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,bucket_id) VALUES(?,?,?,?,?,?)").run("bucket_debt_payment","u1","debt_test",30,"2026-11-20","bucket_test");
+   assert.throws(()=>db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id) VALUES(?,?,?,?,?,?)").run("bucket_obligation_payment","u1","obligation_test",11,"2026-11-20","bucket_test"),/Недостаточно средств в корзине/);
+   assert.throws(()=>db.prepare("UPDATE expenses SET amount=71 WHERE id='bucket_expense'").run(),/Недостаточно средств в корзине/);
+   assert.equal(db.prepare("SELECT amount FROM expenses WHERE id='bucket_expense'").get().amount,60);
+   assert.equal(db.prepare("SELECT COALESCE(SUM(amount),0) AS total FROM debt_payments WHERE user_id='u1' AND bucket_id='bucket_test'").get().total,30);
+
 
   // Historical financial attribution must survive subsequent client/project renames.
   db.prepare("INSERT INTO clients(id,user_id,name,status) VALUES(?,?,?,?)").run("client1","u1","Старое имя клиента","active");
