@@ -41,7 +41,7 @@ export async function onRequestPost({request,env}){
    ]);
   }catch(error){
    const message=String(error?.message||error);
-   if(message.includes("irregular_expense_payments.irregular_expense_id, irregular_expense_payments.scheduled_due_date")||message.includes("Этот период уже оплачен"))return json({error:"Этот период уже оплачен"},409);
+   if(message.includes("scheduled_due_date")&&message.includes("UNIQUE constraint failed"))return json({error:"Этот период уже оплачен"},409);
    throw error;
   }
   return json({ok:true,payment_id:paymentId,expense_id:expenseEntryId,next_date:nextDate,active});
