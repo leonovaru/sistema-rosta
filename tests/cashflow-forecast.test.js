@@ -125,3 +125,18 @@ test("overdue recurring obligations are shown today and retain their next schedu
  assert.equal(x.summary.planned_expenses,2000);
  assert.equal(x.summary.ending_balance,3000);
 });
+
+test("overdue debt minimum payment is surfaced today before the next monthly due date",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:40,startingBalance:5000,debts:[{title:"Кредит",balance:5000,minimum_payment:1000,due_day:10,status:"open"}]});
+ assert.deepEqual(x.events.map(e=>[e.date,e.source,e.amount]),[["2026-11-15","overdue_debt_minimum",1000],["2026-12-10","debt_minimum",1000]]);
+ assert.equal(x.events[0].original_due_date,"2026-11-10");
+ assert.equal(x.events[0].overdue_days,5);
+ assert.equal(x.summary.planned_expenses,2000);
+ assert.equal(x.summary.ending_balance,3000);
+});
+test("overdue debt minimum is capped by the remaining debt balance",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:10,startingBalance:500,debts:[{title:"Маленький долг",balance:300,minimum_payment:1000,due_day:10,status:"open"}]});
+ assert.equal(x.events.length,1);
+ assert.equal(x.events[0].amount,300);
+ assert.equal(x.summary.ending_balance,200);
+});
