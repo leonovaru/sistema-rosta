@@ -1,9 +1,11 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { validateGoalFundingBucket } from "../_lib/goal-funding.js";
+import { isValidCalendarDate } from "../_lib/calendar.js";
 const categories=new Set(["home","travel","business","health","learning","experience","help","purchase","other"]);
 const priorities=new Set(["low","medium","high"]);
 const statuses=new Set(["dream","considering","paused","completed"]);
-const dateOk=v=>!v||(/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v+"T12:00:00Z")));
+export const isValidDreamDate=v=>!v||isValidCalendarDate(v);
+const dateOk=isValidDreamDate;
 const clean=(v,n)=>String(v||"").trim().slice(0,n);
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);

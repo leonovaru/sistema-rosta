@@ -1,6 +1,6 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
 import { applySavedDailyTaskAllocations } from "../../_lib/daily-task-assignments.js";
-import { expandRecurringEvents } from "../../_lib/calendar.js";
+import { expandRecurringEvents, isValidCalendarDate } from "../../_lib/calendar.js";
 import { calculateCalendarBusyByDay } from "../../_lib/calendar-capacity.js";
 import { buildWeeklyWorkload } from "../../_lib/weekly-workload.js";
 import { validateDailyTaskMove } from "../../_lib/daily-task-move-validation.js";
@@ -11,7 +11,7 @@ function localDate(timeZone){const parts=new Intl.DateTimeFormat("en-CA",{timeZo
 export async function onRequestGet({request,env}){
  const user=await requireUser(request,env);if(!user)return json({error:"Необходим вход"},401);
  const url=new URL(request.url),from=url.searchParams.get("from"),to=url.searchParams.get("to");
- if(!from||!to||!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||to<from||to>addDays(from,6))return json({error:"Укажите корректный период до 7 дней"},400);
+ if(!isValidCalendarDate(from)||!isValidCalendarDate(to)||to<from||to>addDays(from,6))return json({error:"Укажите корректный период до 7 дней"},400);
  const {results}=await env.DB.prepare("SELECT task_id,allocation_date,minutes FROM daily_task_allocations WHERE user_id=? AND allocation_date>=? AND allocation_date<=? ORDER BY allocation_date,task_id").bind(user.id,from,to).all();
  return json({allocations:results});
 }
