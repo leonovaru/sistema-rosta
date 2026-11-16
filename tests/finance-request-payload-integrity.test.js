@@ -44,3 +44,10 @@ test("forecast API loads reopened irregular payment occurrences after the recurr
  assert.ok(forecast.includes("o.status='unpaid' AND o.scheduled_due_date<e.next_date"));
  assert.ok(forecast.includes("u.status='unpaid' AND u.scheduled_due_date<e.next_date AND u.scheduled_due_date<=?"));
 });
+
+test("irregular payment retries compare only request fields, not mutable current schedule amount",()=>{
+ assert.ok(irregular.includes("SELECT id,irregular_expense_id,paid_on,scheduled_due_date FROM irregular_expense_payments WHERE user_id=? AND request_id=?"));
+ assert.ok(irregular.includes("prior.irregular_expense_id!==expenseId||prior.paid_on!==paidOn||prior.scheduled_due_date!==dueDate"));
+ assert.ok(!irregular.includes("Number(prior.amount)-Number(item.amount)"));
+ assert.ok(!irregular.includes("Number(existing.amount)-amount"));
+});

@@ -21,10 +21,10 @@ export async function onRequestPost({request,env}){
   if(!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Не удалось подтвердить запрос оплаты"},400);
   const item=await env.DB.prepare("SELECT * FROM irregular_expenses WHERE id=? AND user_id=?").bind(expenseId,user.id).first();
   if(!item)return json({error:"Нерегулярный расход не найден"},404);
-  const prior=await env.DB.prepare("SELECT id,irregular_expense_id,amount,paid_on,scheduled_due_date FROM irregular_expense_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+  const prior=await env.DB.prepare("SELECT id,irregular_expense_id,paid_on,scheduled_due_date FROM irregular_expense_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
   const dueDate=requestedDueDate||prior?.scheduled_due_date||item.next_date;
   if(prior){
-   if(prior.irregular_expense_id!==expenseId||Math.abs(Number(prior.amount)-Number(item.amount))>0.0001||prior.paid_on!==paidOn||prior.scheduled_due_date!==dueDate)return json({error:"Идентификатор запроса уже использован"},409);
+   if(prior.irregular_expense_id!==expenseId||prior.paid_on!==paidOn||prior.scheduled_due_date!==dueDate)return json({error:"Идентификатор запроса уже использован"},409);
    return json({ok:true,payment_id:prior.id,replayed:true});
   }
   if(Number(item.active)!==1)return json({error:"Активный нерегулярный расход не найден"},404);
@@ -58,7 +58,7 @@ export async function onRequestPost({request,env}){
    const message=String(error?.message||error);
    if(message.includes("UNIQUE constraint failed: irregular_expense_payments.user_id, irregular_expense_payments.request_id")){
     const existing=await env.DB.prepare("SELECT id,irregular_expense_id,amount,paid_on,scheduled_due_date FROM irregular_expense_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
-    if(existing&&existing.irregular_expense_id===expenseId&&Math.abs(Number(existing.amount)-amount)<0.0001&&existing.paid_on===paidOn&&existing.scheduled_due_date===dueDate)return json({ok:true,payment_id:existing.id,replayed:true});
+    if(existing&&existing.irregular_expense_id===expenseId&&existing.paid_on===paidOn&&existing.scheduled_due_date===dueDate)return json({ok:true,payment_id:existing.id,replayed:true});
    }
    if(message.includes("Период нерегулярного расхода уже оплачен"))return json({error:"Этот период уже оплачен"},409);
    if(message.includes("Недостаточно средств в корзине")||message.includes("Средства уже переведены из корзины"))return json({error:"В выбранной корзине недостаточно свободных денег для оплаты."},409);

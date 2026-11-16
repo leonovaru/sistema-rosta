@@ -209,7 +209,7 @@ test("current-month debt payment offset ignores reversals of payments from earli
 });
 
 test("combined expense, debt, obligation, irregular payment and goal/reserve transfers reconcile exactly through reversals",()=>{
- const db=database();
+ const queries=statements(),db=database();
  try{
   db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("b","u","Общая",100);
   db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("i","u",100,"2026-11-01");
