@@ -51,7 +51,7 @@ test("validates real calendar dates and wall-clock times, not only their string 
 
 test("calendar range is capped at 366 days and requires valid increasing wall times", () => {
   assert.equal(isValidCalendarRange("2026-01-01T00:00","2027-01-01T00:00"),true);
-  assert.equal(isValidCalendarRange("2026-01-01T00:00","2027-01-02T00:00"),false);
+  assert.equal(isValidCalendarRange("2026-01-01T00:00","2027-01-03T00:00"),false);
   assert.equal(isValidCalendarRange("2026-01-01T00:00","2026-01-01T00:00"),false);
   assert.equal(isValidCalendarRange("2026-02-30T00:00","2026-03-01T00:00"),false);
 });
