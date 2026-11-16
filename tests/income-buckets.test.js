@@ -41,3 +41,15 @@ test("bucket title normalization rejects empty and overly long titles",()=>{
  assert.throws(()=>normalizeBucketTitle(" "),/2 to 60/);
  assert.throws(()=>normalizeBucketTitle("x".repeat(61)),/2 to 60/);
 });
+
+test("bucket balances subtract funding transfers separately from expenses",()=>{
+  const rows=calculateBucketBalances(
+    [{id:"capital",title:"Капитал",percentage:100}],
+    [{bucket_id:"capital",amount:500}],
+    [{bucket_id:"capital",amount:100}],
+    [{source_bucket_id:"capital",amount:150}]
+  );
+  assert.equal(rows[0].spent,100);
+  assert.equal(rows[0].transferred,150);
+  assert.equal(rows[0].balance,250);
+});
