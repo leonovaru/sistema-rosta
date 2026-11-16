@@ -3,7 +3,7 @@ import { calculateProjectEconomics, calculateClientEconomics } from "../_lib/pro
 import { calculateProjectWorkload } from "../_lib/project-workload.js";
 import { calculateCalendarBusyMinutes, calculateCalendarBusyByDay } from "../_lib/calendar-capacity.js";
 import { calculateProjectDailyLoad } from "../_lib/project-daily-load.js";
-import { expandRecurringEvents } from "../_lib/calendar.js";
+import { expandRecurringEvents, isValidCalendarDate } from "../_lib/calendar.js";
 import { isClientSelectable, isDirectionSelectable, canRestoreProject } from "../_lib/workspace-entity-availability.js";
 import { restoredClientStatus, restoredProjectStatus } from "../_lib/workspace-entity-restore.js";
 
@@ -135,7 +135,7 @@ export async function onRequestPost({request,env}) {
     if(client?.direction_id&&directionId&&client.direction_id!==directionId)return json({error:"Проект должен относиться к направлению выбранного клиента"},400);
     const finalDirectionId=directionId||client?.direction_id||null;
     const deadline=b.deadline?String(b.deadline):null;
-    if(deadline&&!/^\d{4}-\d{2}-\d{2}$/.test(deadline))return json({error:"Проверь дату завершения"},400);
+    if(deadline&&!isValidCalendarDate(deadline))return json({error:"Проверь дату завершения"},400);
     await env.DB.prepare("INSERT INTO projects (id,user_id,client_id,direction_id,title,description,expected_result,deadline,budget,cost_budget,status) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
       .bind(id,user.id,clientId,finalDirectionId,title,String(b.description||"").slice(0,5000),String(b.expected_result||"").slice(0,2000),deadline,Math.max(0,Number(b.budget)||0),Math.max(0,Number(b.cost_budget)||0),["draft","active","waiting","done","archived"].includes(b.status)?b.status:"active").run();
     return json({ok:true,id},201);
@@ -172,10 +172,12 @@ export async function onRequestPatch({request,env}) {
     if(!title||title.length>180)return json({error:"Проверь название проекта"},400);
     const current=await env.DB.prepare("SELECT status FROM projects WHERE id=? AND user_id=?").bind(id,user.id).first();
     if(!current)return json({error:"Проект не найден"},404);
+    const deadline=b.deadline?String(b.deadline):null;
+    if(deadline&&!isValidCalendarDate(deadline))return json({error:"Проверь дату завершения"},400);
     const nextStatus=["draft","active","waiting","done","archived"].includes(b.status)?b.status:"active";
     if(current.status==="archived"&&nextStatus!=="archived")return json({error:"Для восстановления проекта используй отдельное действие «Восстановить»"},409);
     const r=await env.DB.prepare("UPDATE projects SET title=?,description=?,expected_result=?,deadline=?,budget=?,cost_budget=?,archived_previous_status=CASE WHEN ?='archived' AND status!='archived' THEN status ELSE archived_previous_status END,status=?,updated_at=datetime('now') WHERE id=? AND user_id=? AND (? NOT IN ('done','archived') OR NOT EXISTS (SELECT 1 FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id WHERE e.user_id=projects.user_id AND e.ended_at IS NULL AND t.project_id=projects.id)) AND (? IN ('done','archived') OR NOT EXISTS (SELECT 1 FROM clients c WHERE c.id=projects.client_id AND c.user_id=projects.user_id AND c.status='closed'))")
-      .bind(title,String(b.description||"").slice(0,5000),String(b.expected_result||"").slice(0,2000),b.deadline||null,Math.max(0,Number(b.budget)||0),Math.max(0,Number(b.cost_budget)||0),nextStatus,nextStatus,id,user.id,nextStatus,nextStatus).run();
+      .bind(title,String(b.description||"").slice(0,5000),String(b.expected_result||"").slice(0,2000),deadline,Math.max(0,Number(b.budget)||0),Math.max(0,Number(b.cost_budget)||0),nextStatus,nextStatus,id,user.id,nextStatus,nextStatus).run();
     if(!r.meta.changes){const exists=await env.DB.prepare("SELECT id FROM projects WHERE id=? AND user_id=?").bind(id,user.id).first();return exists?json({error:"Сначала поставьте на паузу активный таймер по этому проекту"},409):json({error:"Проект не найден"},404);}
   } else if(type==="life_area") {
     const title=String(b.title||"").trim();

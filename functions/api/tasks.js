@@ -1,5 +1,6 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 import { isClientSelectable, isProjectSelectable, isProjectActiveForWork, isDirectionSelectable } from "../_lib/workspace-entity-availability.js";
+import { isValidCalendarDate } from "../_lib/calendar.js";
 import { isTaskAvailableForPlanning } from "../_lib/task-planning-availability.js";
 
 async function invalidateTodayPlan(env, userId) {
@@ -55,7 +56,7 @@ export async function onRequestPost({ request, env }) {
   const lifeAreaId = body?.life_area_id ? String(body.life_area_id) : null;
   const parentTaskId = body?.parent_task_id ? String(body.parent_task_id) : null;
   const dueDate = body?.due_date ? String(body.due_date) : null;
-  if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return json({ error: "Проверьте срок задачи" }, 400);
+  if (dueDate && !isValidCalendarDate(dueDate)) return json({ error: "Проверьте срок задачи" }, 400);
   const estimated = body?.estimated_minutes == null ? null : Math.round(Number(body.estimated_minutes));
   if (estimated !== null && (!Number.isInteger(estimated) || estimated < 5 || estimated > 10000)) return json({ error: "Проверьте оценку времени" }, 400);
   for (const [table,id,label] of [["directions",directionId,"Направление"],["clients",clientId,"Клиент"],["projects",projectId,"Проект"],["life_areas",lifeAreaId,"Личная область"],["tasks",parentTaskId,"Родительская задача"]]) {

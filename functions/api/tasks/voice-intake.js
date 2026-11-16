@@ -182,7 +182,7 @@ export async function onRequestPost({request,env}){
  if(!transcript||transcript.length>6000)return json({error:"Надиктуй или вставь текст задачи (до 6000 символов)"},400);
  const [settings,dirs,clients,projects,areas,existingTasks,existingSteps]=await Promise.all([
   env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first(),
-  env.DB.prepare("SELECT id,title FROM directions WHERE user_id=? ORDER BY sort_order").bind(user.id).all(),
+  env.DB.prepare("SELECT id,title,active FROM directions WHERE user_id=? ORDER BY sort_order").bind(user.id).all(),
   env.DB.prepare("SELECT id,name,direction_id,status FROM clients WHERE user_id=? AND status IN ('lead','active','paused')").bind(user.id).all(),
   env.DB.prepare("SELECT p.id,p.title,p.client_id,p.direction_id,p.description,p.expected_result,p.deadline,p.status,c.status AS client_status FROM projects p LEFT JOIN clients c ON c.id=p.client_id AND c.user_id=p.user_id WHERE p.user_id=? AND p.status NOT IN ('done','archived')").bind(user.id).all(),
   env.DB.prepare("SELECT id,title,description FROM life_areas WHERE user_id=? ORDER BY title").bind(user.id).all(),
