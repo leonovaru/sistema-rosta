@@ -22,6 +22,7 @@ async function commitBucketSpend(write) {
     if (message.includes("Недостаточно средств в корзине")) return "bucket";
     if (message.includes("UNIQUE constraint failed: obligation_payments.obligation_id, obligation_payments.scheduled_due_date")) return "occurrence";
     if (message.includes("Платёж превышает текущий остаток долга или долг уже закрыт")) return "debt";
+    if (message.includes("UNIQUE constraint failed: debt_payments.user_id, debt_payments.request_id")) return "duplicate";
     throw error;
   }
 }
@@ -108,8 +109,14 @@ export async function onRequestPost({request,env}) {
     return json({ok:true,id},201);
   }
   if(action==="debt_payment"){
-    const debtId=String(body.debt_id||""),amount=validAmount(body.amount),date=String(body.paid_on||"");
-    if(!debtId||!amount||!validDate(date))return json({error:"Проверь долг, сумму и дату платежа"},400);
+    const debtId=String(body.debt_id||""),amount=validAmount(body.amount),date=String(body.paid_on||""),requestId=String(body.request_id||"");
+    if(!debtId||!amount||!validDate(date)||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Проверь долг, сумму, дату и идентификатор запроса"},400);
+    const prior=await env.DB.prepare("SELECT id,debt_id,amount FROM debt_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+    if(prior){
+      if(prior.debt_id!==debtId||Math.abs(Number(prior.amount)-amount)>0.0001)return json({error:"Идентификатор запроса уже использован для другого платежа"},409);
+      const current=await env.DB.prepare("SELECT balance FROM debts WHERE id=? AND user_id=?").bind(debtId,user.id).first();
+      return json({ok:true,id:prior.id,balance:Number(current?.balance||0),replayed:true},200);
+    }
     const debt=await env.DB.prepare("SELECT id,balance FROM debts WHERE id=? AND user_id=? AND status='open'").bind(debtId,user.id).first();
     if(!debt)return json({error:"Открытый долг не найден"},404);
     if(amount>Number(debt.balance))return json({error:"Платёж не может превышать остаток долга"},400);
@@ -117,9 +124,13 @@ export async function onRequestPost({request,env}) {
     if(!bucket)return json({error:"Не найдена корзина для долгов и обязательств"},409);
     const available=await bucketAvailable(env,user.id,bucket.id);
     if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
-    const saved=await commitBucketSpend(()=>env.DB.prepare("INSERT INTO debt_payments (id,user_id,debt_id,amount,paid_on,note,bucket_id) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,debtId,amount,date,String(body.note||"").slice(0,500),bucket.id).run());
+    const saved=await commitBucketSpend(()=>env.DB.prepare("INSERT INTO debt_payments (id,user_id,debt_id,amount,paid_on,note,bucket_id,request_id) VALUES (?,?,?,?,?,?,?,?)").bind(id,user.id,debtId,amount,date,String(body.note||"").slice(0,500),bucket.id,requestId).run());
     if(saved==="bucket")return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
     if(saved==="debt")return json({error:"Остаток долга изменился. Обнови данные и повтори операцию."},409);
+    if(saved==="duplicate"){
+      const existing=await env.DB.prepare("SELECT id,debt_id,amount FROM debt_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+      if(!existing||existing.debt_id!==debtId||Math.abs(Number(existing.amount)-amount)>0.0001)return json({error:"Идентификатор запроса уже использован"},409);
+    }
     const updatedDebt=await env.DB.prepare("SELECT balance FROM debts WHERE id=? AND user_id=?").bind(debtId,user.id).first();
     return json({ok:true,id,balance:Number(updatedDebt?.balance||0)},201);
   }

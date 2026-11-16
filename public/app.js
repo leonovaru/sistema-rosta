@@ -877,7 +877,9 @@ $("obligation-form").addEventListener("submit",async e=>{
 });
 $("debt-payment-form").addEventListener("submit",async e=>{
   e.preventDefault();
-  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"debt_payment",debt_id:$("payment-debt").value,amount:$("debt-payment-amount").value,paid_on:$("debt-payment-date").value})});$("debt-payment-amount").value="";await loadFinance();}
+  const form=$("debt-payment-form");
+  form.dataset.requestId=form.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
+  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"debt_payment",debt_id:$("payment-debt").value,amount:$("debt-payment-amount").value,paid_on:$("debt-payment-date").value,request_id:form.dataset.requestId})});delete form.dataset.requestId;$("debt-payment-amount").value="";await loadFinance();}
   catch(err){alert(err.message);}
 });
 $("recurring-expense-suggestions").addEventListener("click",async e=>{

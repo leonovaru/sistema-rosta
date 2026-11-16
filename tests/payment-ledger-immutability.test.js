@@ -36,3 +36,17 @@ test("debt and obligation payment ledger rows cannot be rewritten or deleted",()
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM obligation_payments WHERE obligation_id='o'").get().count,1);
  }finally{db.close();}
 });
+
+test("debt payment request identifiers make retries idempotent",()=>{
+ const db=new DatabaseSync(":memory:");
+ try{
+  db.exec(readFileSync(join(root,"schema.sql"),"utf8"));
+  for(const name of readdirSync(join(root,"migrations")).filter(x=>/^\d+_.+\.sql$/.test(x)).sort((a,b)=>a.localeCompare(b)))db.exec(readFileSync(join(root,"migrations",name),"utf8"));
+  db.prepare("INSERT INTO users(id,email,password_hash,password_salt) VALUES(?,?,?,?)").run("u2","retry@example.test","hash","salt");
+  db.prepare("INSERT INTO debts(id,user_id,title,initial_amount,balance) VALUES(?,?,?,?,?)").run("d2","u2","Тест",100,100);
+  db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,request_id) VALUES(?,?,?,?,?,?)").run("p1","u2","d2",25,"2026-11-16","request-key-00000001");
+  assert.throws(()=>db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,request_id) VALUES(?,?,?,?,?,?)").run("p2","u2","d2",25,"2026-11-16","request-key-00000001"),/UNIQUE constraint failed/);
+  assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d2'").get().balance,75);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payments WHERE user_id='u2' AND request_id='request-key-00000001'").get().count,1);
+ }finally{db.close();}
+});
