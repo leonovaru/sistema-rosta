@@ -455,12 +455,20 @@ $("income-recent").addEventListener("click", async e => {
   } catch(err) { alert(err.message); }
 });
 
+let incomeRequestId=null,incomeRequestPayload=null;
 $("income-form").addEventListener("submit", async e => {
   e.preventDefault();
+  const form=e.currentTarget,button=form.querySelector('button[type="submit"]');
+  const payload={amount:$("income-amount").value,direction_id:$("income-direction").value||null,client_id:$("income-client").value||null,project_id:$("income-project").value||null,received_on:$("income-date").value,note:$("income-note").value};
+  const payloadKey=JSON.stringify(payload);
+  if(!incomeRequestId||incomeRequestPayload!==payloadKey){incomeRequestId=crypto.randomUUID().replace(/-/g,"");incomeRequestPayload=payloadKey;}
+  button.disabled=true;
   try {
-    await api("/api/income", { method: "POST", body: JSON.stringify({ amount: $("income-amount").value, direction_id: $("income-direction").value || null, client_id:$("income-client").value||null, project_id:$("income-project").value||null, received_on: $("income-date").value, note: $("income-note").value }) });
+    await api("/api/income", { method: "POST", body: JSON.stringify({...payload,request_id:incomeRequestId}) });
+    incomeRequestId=null;incomeRequestPayload=null;
     $("income-amount").value = ""; $("income-note").value = ""; await loadDashboardData(); await loadFinance();
   } catch (err) { alert(err.message); }
+  finally{button.disabled=false;}
 });
 
 let analyticsData=null;
@@ -941,10 +949,20 @@ async function loadFinance() {
   await loadRevenuePlan();
   await loadCategoryBudget();
 }
+let expenseRequestId=null,expenseRequestPayload=null;
 $("expense-form").addEventListener("submit",async e=>{
   e.preventDefault();
-  try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"expense",title:$("expense-title").value,amount:$("expense-amount").value,category:$("expense-category").value,direction_id:$("expense-direction").value||null,client_id:$("expense-client").value||null,project_id:$("expense-project").value||null,bucket_id:$("expense-bucket").value==="none"?null:$("expense-bucket").value,spent_on:$("expense-date").value})});$("expense-form").reset();await loadFinance();await loadCashflowForecast();}
-  catch(err){alert(err.message);}
+  const form=e.currentTarget,button=form.querySelector('button[type="submit"]');
+  const payload={action:"expense",title:$("expense-title").value,amount:$("expense-amount").value,category:$("expense-category").value,direction_id:$("expense-direction").value||null,client_id:$("expense-client").value||null,project_id:$("expense-project").value||null,bucket_id:$("expense-bucket").value==="none"?null:$("expense-bucket").value,spent_on:$("expense-date").value};
+  const payloadKey=JSON.stringify(payload);
+  if(!expenseRequestId||expenseRequestPayload!==payloadKey){expenseRequestId=crypto.randomUUID().replace(/-/g,"");expenseRequestPayload=payloadKey;}
+  button.disabled=true;
+  try{
+   await api("/api/finance",{method:"POST",body:JSON.stringify({...payload,request_id:expenseRequestId})});
+   expenseRequestId=null;expenseRequestPayload=null;
+   $("expense-form").reset();await loadFinance();await loadCashflowForecast();
+  }catch(err){alert(err.message);}
+  finally{button.disabled=false;}
 });
 $("debt-form").addEventListener("submit",async e=>{
   e.preventDefault();

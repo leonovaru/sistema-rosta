@@ -70,15 +70,36 @@ export async function onRequestPost({ request, env }) {
   const direction=effectiveDirectionId?await env.DB.prepare("SELECT id,title FROM directions WHERE id=? AND user_id=?").bind(effectiveDirectionId,user.id).first():null;
   if(effectiveDirectionId&&!direction)return json({error:"Направление не найдено"},404);
   const snapshot=buildFinancialAttributionSnapshot({direction,client,project});
+  const note=String(body?.note||"").slice(0,500),requestId=String(body?.request_id||"");
+  if(!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Не удалось подтвердить запрос поступления"},400);
+  const matches=row=>row&&Math.abs(Number(row.amount)-amount)<0.0001&&row.received_on===date&&String(row.note||"")===note&&row.direction_id===(effectiveDirectionId||null)&&row.client_id===(clientId||null)&&row.project_id===(projectId||null);
+  const prior=await env.DB.prepare("SELECT id,amount,received_on,note,direction_id,client_id,project_id FROM income_entries WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+  if(prior){
+   if(!matches(prior))return json({error:"Идентификатор запроса уже использован для другого поступления"},409);
+   const savedAllocations=await env.DB.prepare("SELECT bucket_id,percentage,amount FROM income_bucket_allocations WHERE income_id=? AND user_id=? ORDER BY created_at,id").bind(prior.id,user.id).all();
+   return json({ok:true,id:prior.id,allocations:savedAllocations.results,idempotent:true});
+  }
   const buckets = await env.DB.prepare("SELECT id,percentage,active FROM income_buckets WHERE user_id=? AND active=1 ORDER BY sort_order").bind(user.id).all();
   let allocations;
   try { allocations = allocateIncome(amount, buckets.results); }
   catch { return json({ error: "Сначала настрой корзины так, чтобы распределение составляло 100%" }, 409); }
   const id = newId();
-  await env.DB.batch([
-    env.DB.prepare("INSERT INTO income_entries (id,user_id,direction_id,amount,received_on,note,client_id,project_id,direction_id_snapshot,direction_title_snapshot,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,effectiveDirectionId,amount,date,String(body?.note || "").slice(0,500),clientId,projectId,snapshot.direction_id_snapshot,snapshot.direction_title_snapshot,snapshot.client_id_snapshot,snapshot.client_name_snapshot,snapshot.project_id_snapshot,snapshot.project_title_snapshot),
+  try{
+   await env.DB.batch([
+    env.DB.prepare("INSERT INTO income_entries (id,user_id,direction_id,amount,received_on,note,client_id,project_id,direction_id_snapshot,direction_title_snapshot,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot,request_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,effectiveDirectionId,amount,date,note,clientId,projectId,snapshot.direction_id_snapshot,snapshot.direction_title_snapshot,snapshot.client_id_snapshot,snapshot.client_name_snapshot,snapshot.project_id_snapshot,snapshot.project_title_snapshot,requestId),
     ...allocations.map(row => env.DB.prepare("INSERT INTO income_bucket_allocations (id,user_id,income_id,bucket_id,percentage,amount) VALUES (?,?,?,?,?,?)").bind(newId(),user.id,id,row.bucket_id,row.percentage,row.amount))
-  ]);
+   ]);
+  }catch(error){
+   if(/UNIQUE constraint failed.*income_entries\.user_id, income_entries\.request_id/.test(String(error?.message||error))){
+    const existing=await env.DB.prepare("SELECT id,amount,received_on,note,direction_id,client_id,project_id FROM income_entries WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+    if(matches(existing)){
+     const savedAllocations=await env.DB.prepare("SELECT bucket_id,percentage,amount FROM income_bucket_allocations WHERE income_id=? AND user_id=? ORDER BY created_at,id").bind(existing.id,user.id).all();
+     return json({ok:true,id:existing.id,allocations:savedAllocations.results,idempotent:true});
+    }
+    return json({error:"Идентификатор запроса уже использован"},409);
+   }
+   throw error;
+  }
   return json({ ok: true, id, allocations }, 201);
 }
 

@@ -18,6 +18,7 @@ async function commitBucketSpend(write) {
     if (message.includes("Период обязательства уже оплачен")) return "occurrence";
     if (message.includes("Платёж превышает текущий остаток долга или долг уже закрыт")) return "debt";
     if (message.includes("UNIQUE constraint failed: debt_payments.user_id, debt_payments.request_id")) return "duplicate_debt";
+    if (message.includes("UNIQUE constraint failed: expenses.user_id, expenses.request_id")) return "duplicate_expense";
     if (message.includes("UNIQUE constraint failed: obligation_payments.user_id, obligation_payments.request_id")) return "duplicate_obligation";
     throw error;
   }
@@ -105,14 +106,23 @@ export async function onRequestPost({request,env}) {
     const direction=effectiveDirectionId?await env.DB.prepare("SELECT id,title FROM directions WHERE id=? AND user_id=?").bind(effectiveDirectionId,user.id).first():null;
     if(effectiveDirectionId&&!direction)return json({error:"Направление не найдено"},404);
     const snapshot=buildFinancialAttributionSnapshot({direction,client,project});
-    const bucketId=body.bucket_id?String(body.bucket_id):null;
+    const bucketId=body.bucket_id?String(body.bucket_id):null,note=String(body.note||"").slice(0,500),requestId=String(body.request_id||""),category=String(body.category||"Прочее").trim().slice(0,80)||"Прочее";
+    if(!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Не удалось подтвердить запрос расхода"},400);
+    const matches=row=>row&&row.title===title&&Math.abs(Number(row.amount)-amount)<0.0001&&row.category===category&&row.spent_on===date&&String(row.note||"")===note&&row.bucket_id===(bucketId||null)&&row.direction_id===(effectiveDirectionId||null)&&row.client_id===(clientId||null)&&row.project_id===(projectId||null);
+    const prior=await env.DB.prepare("SELECT id,title,amount,category,spent_on,note,bucket_id,direction_id,client_id,project_id FROM expenses WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+    if(prior){if(!matches(prior))return json({error:"Идентификатор запроса уже использован для другого расхода"},409);return json({ok:true,id:prior.id,idempotent:true});}
     if(bucketId){
       const bucket=await env.DB.prepare("SELECT id,title FROM income_buckets WHERE id=? AND user_id=? AND active=1").bind(bucketId,user.id).first();
       if(!bucket)return json({error:"Корзина не найдена"},404);
       const available=await bucketAvailable(env,user.id,bucketId);
       if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     }
-    const saved=await commitBucketSpend(()=>env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id,client_id,project_id,direction_id_snapshot,direction_title_snapshot,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,effectiveDirectionId,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500),bucketId,clientId,projectId,snapshot.direction_id_snapshot,snapshot.direction_title_snapshot,snapshot.client_id_snapshot,snapshot.client_name_snapshot,snapshot.project_id_snapshot,snapshot.project_title_snapshot).run());
+    const saved=await commitBucketSpend(()=>env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id,client_id,project_id,direction_id_snapshot,direction_title_snapshot,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot,request_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,effectiveDirectionId,category,title,amount,date,note,bucketId,clientId,projectId,snapshot.direction_id_snapshot,snapshot.direction_title_snapshot,snapshot.client_id_snapshot,snapshot.client_name_snapshot,snapshot.project_id_snapshot,snapshot.project_title_snapshot,requestId).run());
+    if(saved==="duplicate_expense"){
+      const existing=await env.DB.prepare("SELECT id,title,amount,category,spent_on,note,bucket_id,direction_id,client_id,project_id FROM expenses WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
+      if(matches(existing))return json({ok:true,id:existing.id,idempotent:true});
+      return json({error:"Идентификатор запроса уже использован"},409);
+    }
     if(!saved)return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
     return json({ok:true,id},201);
   }
