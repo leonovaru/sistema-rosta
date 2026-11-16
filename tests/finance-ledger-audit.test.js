@@ -192,3 +192,17 @@ test("fully repaid debt closes, reversal of the final payment reopens it, and re
   assert.equal(db.prepare("SELECT amount FROM debt_payment_bucket_net WHERE user_id='u' AND bucket_id='b'").get().amount,100);
  }finally{db.close();}
 });
+ 
+test("current-month debt payment offset ignores reversals of payments from earlier months",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO debts(id,user_id,title,initial_amount,balance) VALUES(?,?,?,?,?)").run("d","u","Кредит",1000,1000);
+  db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on) VALUES(?,?,?,?,?)").run("old","u","d",100,"2026-10-30");
+  db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason) VALUES(?,?,?,?,?,?)").run("old-reversal","u","old",100,"2026-11-02","Возврат старого платежа");
+  db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on) VALUES(?,?,?,?,?)").run("current-reversed","u","d",200,"2026-11-03");
+  db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason) VALUES(?,?,?,?,?,?)").run("current-reversal","u","current-reversed",200,"2026-11-04","Отмена платежа текущего месяца");
+  db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on) VALUES(?,?,?,?,?)").run("current-valid","u","d",50,"2026-11-05");
+  const row=db.prepare("SELECT p.debt_id,SUM(p.amount-COALESCE(r.amount,0)) AS paid_this_month FROM debt_payments p LEFT JOIN debt_payment_reversals r ON r.debt_payment_id=p.id AND r.user_id=p.user_id WHERE p.user_id=? AND p.paid_on>=? AND p.paid_on<=? GROUP BY p.debt_id").get("u","2026-11-01","2026-11-30");
+  assert.equal(row.paid_this_month,50);
+ }finally{db.close();}
+});

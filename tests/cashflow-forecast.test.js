@@ -197,3 +197,11 @@ test("archived reserves remain unavailable but receive no future contributions",
  assert.equal(x.summary.ending_balance,1000);
  assert.equal(x.summary.total_expenses,0);
 });
+ 
+test("cashflow forecast subtracts only the net payments already made this month",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:20,startingBalance:1000,debts:[{title:"Кредит",balance:950,minimum_payment:200,due_day:20,status:"open",paid_this_month:50}]});
+ const event=x.events.find(e=>e.source==="debt_minimum");
+ assert.equal(event.amount,150);
+ assert.equal(x.summary.planned_expenses,150);
+ assert.equal(x.summary.ending_balance,850);
+});
