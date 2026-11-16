@@ -140,7 +140,9 @@ test("obligation payment reversal reopens only its occurrence and preserves late
   db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
   db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date,frequency,recurrence_day,category) VALUES(?,?,?,?,?,?,?,?)").run("o","u","Интернет",15,"2026-10-01","monthly",1,"Долги и обязательства");
   db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("op1","u","o",15,"2026-10-01","b","2026-10-01","request-obligation-1");
-  db.prepare("UPDATE payment_obligations SET due_date='2026-11-01' WHERE id='o'");
+  console.log("ROW BEFORE UPDATE",db.prepare("SELECT * FROM payment_obligations").all());
+  console.log("FIRST UPDATE RESULT",db.prepare("UPDATE payment_obligations SET due_date='2026-11-01' WHERE id='o'").run());
+  console.log("ROW AFTER UPDATE",db.prepare("SELECT * FROM payment_obligations").all());
   console.log("DUE AFTER FIRST UPDATE",db.prepare("SELECT id,due_date FROM payment_obligations").all());
   db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("op2","u","o",15,"2026-11-01","b","2026-11-01","request-obligation-2");
   console.log("DUE AFTER SECOND PAYMENT",db.prepare("SELECT id,due_date FROM payment_obligations").all());
