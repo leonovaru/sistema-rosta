@@ -15,6 +15,13 @@ function dateInZone(timeZone) {
   const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));
   return values.year+"-"+values.month+"-"+values.day;
 }
+async function commitBucketSpend(write) {
+  try { await write(); return true; }
+  catch (error) {
+    if (String(error?.message || error).includes("Недостаточно средств в корзине")) return false;
+    throw error;
+  }
+}
 function validAmount(value) {
   const amount=Number(value);
   return Number.isFinite(amount)&&amount>0&&amount<=100000000?amount:null;
@@ -86,7 +93,8 @@ export async function onRequestPost({request,env}) {
       const available=await bucketAvailable(env,user.id,bucketId);
       if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     }
-    await env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id,client_id,project_id,direction_id_snapshot,direction_title_snapshot,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,effectiveDirectionId,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500),bucketId,clientId,projectId,snapshot.direction_id_snapshot,snapshot.direction_title_snapshot,snapshot.client_id_snapshot,snapshot.client_name_snapshot,snapshot.project_id_snapshot,snapshot.project_title_snapshot).run();
+    const saved=await commitBucketSpend(()=>env.DB.prepare("INSERT INTO expenses (id,user_id,direction_id,category,title,amount,spent_on,note,bucket_id,client_id,project_id,direction_id_snapshot,direction_title_snapshot,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,effectiveDirectionId,String(body.category||"Прочее").trim().slice(0,80)||"Прочее",title,amount,date,String(body.note||"").slice(0,500),bucketId,clientId,projectId,snapshot.direction_id_snapshot,snapshot.direction_title_snapshot,snapshot.client_id_snapshot,snapshot.client_name_snapshot,snapshot.project_id_snapshot,snapshot.project_title_snapshot).run());
+    if(!saved)return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
     return json({ok:true,id},201);
   }
   if(action==="debt"){
@@ -107,10 +115,11 @@ export async function onRequestPost({request,env}) {
     const available=await bucketAvailable(env,user.id,bucket.id);
     if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     const next=Math.max(0,Number(debt.balance)-amount);
-    await env.DB.batch([
+    const saved=await commitBucketSpend(()=>env.DB.batch([
       env.DB.prepare("INSERT INTO debt_payments (id,user_id,debt_id,amount,paid_on,note,bucket_id) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,debtId,amount,date,String(body.note||"").slice(0,500),bucket.id),
       env.DB.prepare("UPDATE debts SET balance=?,status=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(next,next===0?"closed":"open",debtId,user.id)
-    ]);
+    ]));
+    if(!saved)return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
     return json({ok:true,id,balance:next},201);
   }
   if(action==="obligation_paid"){
@@ -126,7 +135,8 @@ export async function onRequestPost({request,env}) {
     const statements=[env.DB.prepare("INSERT INTO obligation_payments (id,user_id,obligation_id,amount,paid_on,bucket_id) VALUES (?,?,?,?,?,?)").bind(id,user.id,obligationId,obligation.amount,date,bucket.id)];
     if(nextDue)statements.push(env.DB.prepare("UPDATE payment_obligations SET due_date=? WHERE id=? AND user_id=?").bind(nextDue,obligationId,user.id));
     else statements.push(env.DB.prepare("UPDATE payment_obligations SET active=0 WHERE id=? AND user_id=?").bind(obligationId,user.id));
-    await env.DB.batch(statements);
+    const saved=await commitBucketSpend(()=>env.DB.batch(statements));
+    if(!saved)return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
     return json({ok:true,next_due_date:nextDue});
   }
   if(action==="obligation"){
