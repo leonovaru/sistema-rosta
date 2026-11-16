@@ -439,7 +439,7 @@ $("income-recent").addEventListener("click", async e => {
     const amount=prompt("Сумма поступления, ₽:",String(item.amount));if(amount===null)return;
     const date=prompt("Дата (ГГГГ-ММ-ДД):",item.received_on);if(date===null)return;
     const note=prompt("Комментарий:",item.note||"");if(note===null)return;
-    if(!Number.isFinite(Number(amount))||Number(amount)<=0||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)){alert("Проверь положительную сумму и дату в формате ГГГГ-ММ-ДД.");return;}
+    if(!Number.isFinite(Number(amount))||Number(amount)<=0||!/^\d{4}-\d{2}-\d{2}$/.test(date)){alert("Проверь положительную сумму и дату в формате ГГГГ-ММ-ДД.");return;}
     edit.disabled=true;
     try{await api("/api/income",{method:"POST",body:JSON.stringify({action:"update",id:item.id,amount,received_on:date,note})});await loadDashboardData();await loadFinance();}
     catch(err){edit.disabled=false;alert(err.message);}
