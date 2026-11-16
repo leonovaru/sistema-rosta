@@ -1,5 +1,6 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
 export function isCharityPersonAvailableForProject(person,projectId){return Boolean(person)&&(!person.project_id||person.project_id===projectId);}
+export function isCharityPersonDeletionAllowed(linkedTransactions){return !linkedTransactions;}
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(v){if(!DATE.test(String(v||"")))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
 function amount(v){const n=Number(v);return Number.isFinite(n)&&n>0&&n<=1000000000?n:null;}
@@ -65,6 +66,8 @@ export async function onRequestDelete({request,env}){
   const r=await env.DB.prepare("DELETE FROM charity_transactions WHERE id=? AND user_id=?").bind(id,user.id).run();
   if(!r.meta.changes)return json({error:"Операция не найдена"},404);
  }else if(b.type==="person"){
+  const linked=await env.DB.prepare("SELECT id FROM charity_transactions WHERE person_id=? AND user_id=? LIMIT 1").bind(id,user.id).first();
+  if(!isCharityPersonDeletionAllowed(Boolean(linked)))return json({error:"Контакт используется в истории операций и пока не может быть удалён."},409);
   const r=await env.DB.prepare("DELETE FROM charity_people WHERE id=? AND user_id=?").bind(id,user.id).run();
   if(!r.meta.changes)return json({error:"Участник не найден"},404);
  }else return json({error:"Удаление этого типа записи не поддерживается"},400);
