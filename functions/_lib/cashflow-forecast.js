@@ -12,7 +12,8 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
  for(const row of variableRecurringEvents){if(dateValid(row.date)&&row.date>=today&&row.date<=end)events.push({...row,amount:positive(row.amount),type:"expense",source:"variable_recurring"});}
  for(const row of obligations){
   let due=row.due_date,guard=0;
-  while(due&&due<=end&&guard++<120){
+  // Skip long-overdue recurrence history so the next future occurrence remains visible.
+  while(due&&due<=end&&guard++<10000){
    if(due>=today)events.push({date:due,type:"expense",title:row.title,amount:positive(row.amount),source:"obligation"});
    else if(guard===1)events.push({date:today,type:"expense",title:row.title,amount:positive(row.amount),source:"overdue_obligation",original_due_date:due,overdue_days:Math.floor((Date.parse(today+"T12:00:00Z")-Date.parse(due+"T12:00:00Z"))/86400000)});
    due=addPeriod(due,row.frequency,row.recurrence_day);
