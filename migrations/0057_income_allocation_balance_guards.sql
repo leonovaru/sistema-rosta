@@ -52,13 +52,14 @@ WHEN
   ) AND (
     COALESCE((SELECT SUM(a.amount) FROM income_bucket_allocations a
       WHERE a.user_id=NEW.user_id AND a.bucket_id=NEW.bucket_id AND a.id<>OLD.id),0)
+    + NEW.amount
     - COALESCE((SELECT SUM(e.amount) FROM expenses e
       WHERE e.user_id=NEW.user_id AND e.bucket_id=NEW.bucket_id),0)
     - COALESCE((SELECT SUM(p.amount) FROM debt_payments p
       WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
     - COALESCE((SELECT SUM(p.amount) FROM obligation_payments p
       WHERE p.user_id=NEW.user_id AND p.bucket_id=NEW.bucket_id),0)
-  )+0.0001<NEW.amount
+  )+0.0001<0
   OR (
     OLD.bucket_id<>NEW.bucket_id OR OLD.user_id<>NEW.user_id
   ) AND (
