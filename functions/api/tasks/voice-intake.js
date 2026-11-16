@@ -1,6 +1,7 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
 import { isValidCalendarDate } from "../../_lib/calendar.js";
 import { isClientSelectable, isProjectActiveForWork, isDirectionSelectable } from "../../_lib/workspace-entity-availability.js";
+import { isTaskAvailableForPlanning } from "../../_lib/task-planning-availability.js";
 
 function parseJson(value){
  if(typeof value!=="string")return value;
@@ -57,7 +58,7 @@ export async function onRequestPost({request,env}){
    env.DB.prepare("SELECT id,status FROM clients WHERE user_id=?").bind(user.id).all(),
    env.DB.prepare("SELECT p.id,p.client_id,p.direction_id,p.status,c.status AS client_status FROM projects p LEFT JOIN clients c ON c.id=p.client_id AND c.user_id=p.user_id WHERE p.user_id=?").bind(user.id).all(),
    env.DB.prepare("SELECT id FROM life_areas WHERE user_id=?").bind(user.id).all(),
-   env.DB.prepare("SELECT id,project_id FROM tasks WHERE user_id=? AND status!='done'").bind(user.id).all()
+   env.DB.prepare("SELECT t.id,t.project_id,p.status AS project_status,c.status AS client_status,pc.status AS project_client_status FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN clients pc ON pc.id=p.client_id AND pc.user_id=p.user_id WHERE t.user_id=? AND t.status!='done'").bind(user.id).all()
   ]);
   const allowed={direction_id:new Set(dirs.results.filter(isDirectionSelectable).map(x=>x.id)),client_id:new Set(clients.results.filter(isClientSelectable).map(x=>x.id)),project_id:new Set(projects.results.filter(isVoiceProjectSelectable).map(x=>x.id)),life_area_id:new Set(areas.results.map(x=>x.id))};
   if(requestedTasks.some(t=>t.project_id&&!allowed.project_id.has(t.project_id)))return json({error:"Одна из задач относится к завершённому проекту, архиву или проекту закрытого клиента"},409);
@@ -65,7 +66,7 @@ export async function onRequestPost({request,env}){
   if(requestedTasks.some(t=>t.direction_id&&!allowed.direction_id.has(t.direction_id)))return json({error:"Нельзя создавать задачи в отключённом направлении"},409);
   if(workspaceItems.some(item=>item.type==="project"&&item.client_id&&!allowed.client_id.has(item.client_id)))return json({error:"Нельзя создавать проект для закрытого клиента"},409);
   if(workspaceItems.some(item=>item.type==="project"&&item.direction_id&&!allowed.direction_id.has(item.direction_id)))return json({error:"Нельзя создавать проект в отключённом направлении"},409);
-  const allowedTaskIds=new Set(openTasks.results.map(x=>x.id));
+  const allowedTaskIds=new Set(openTasks.results.filter(isTaskAvailableForPlanning).map(x=>x.id));
   const meetingId=String(body.meeting_id||"");
   let meetingAgreements=[];
   if(meetingId){
@@ -202,7 +203,7 @@ export async function onRequestPost({request,env}){
   env.DB.prepare("SELECT id,name,direction_id,status FROM clients WHERE user_id=? AND status IN ('lead','active','paused')").bind(user.id).all(),
   env.DB.prepare("SELECT p.id,p.title,p.client_id,p.direction_id,p.description,p.expected_result,p.deadline,p.status,c.status AS client_status FROM projects p LEFT JOIN clients c ON c.id=p.client_id AND c.user_id=p.user_id WHERE p.user_id=? AND p.status NOT IN ('done','archived')").bind(user.id).all(),
   env.DB.prepare("SELECT id,title,description FROM life_areas WHERE user_id=? ORDER BY title").bind(user.id).all(),
-  env.DB.prepare("SELECT id,title,description,status,priority,project_id,client_id,direction_id,life_area_id,due_date,parent_task_id,estimated_minutes FROM tasks WHERE user_id=? AND status!='done' ORDER BY created_at DESC LIMIT 200").bind(user.id).all(),
+  env.DB.prepare("SELECT t.id,t.title,t.description,t.status,t.priority,t.project_id,t.client_id,t.direction_id,t.life_area_id,t.due_date,t.parent_task_id,t.estimated_minutes FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN clients pc ON pc.id=p.client_id AND pc.user_id=p.user_id WHERE t.user_id=? AND t.status!='done' AND (p.id IS NULL OR p.status NOT IN ('done','archived')) AND (c.id IS NULL OR c.status!='closed') AND (pc.id IS NULL OR pc.status!='closed') ORDER BY t.created_at DESC LIMIT 200").bind(user.id).all(),
   env.DB.prepare("SELECT s.task_id,s.title,s.status FROM task_steps s JOIN tasks t ON t.id=s.task_id WHERE s.user_id=? AND t.status!='done' ORDER BY s.sort_order LIMIT 400").bind(user.id).all()
  ]);
  const today=localDate(settings?.timezone||"Europe/Moscow");
