@@ -180,3 +180,5 @@ test("missed quarterly irregular expenses accumulate and keep the next due date"
  assert.equal(x.summary.planned_expenses,9000);
  assert.equal(x.summary.ending_balance,1000);
 });
+
+test("goal funding transfers reduce spendable forecast balance but not cash expenses",()=>{const x=buildCashflowForecast({today:"2026-11-01",horizonDays:5,startingBalance:10000,goalFundings:2500});assert.equal(x.summary.ending_balance,10000);assert.equal(x.summary.existing_goal_fundings,2500);assert.equal(x.summary.available_ending_balance,7500);assert.equal(x.summary.total_expenses,0);assert.equal(x.days[0].available_balance,7500);});
