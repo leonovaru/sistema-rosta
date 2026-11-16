@@ -432,6 +432,19 @@ $("voice-analyze").addEventListener("click",async()=>{
 initVoiceInput();
 
 $("income-recent").addEventListener("click", async e => {
+  const edit=e.target.closest("[data-income-edit]");
+  if(edit){
+    const item=(await api("/api/income")).entries.find(row=>row.id===edit.dataset.incomeEdit);
+    if(!item)return;
+    const amount=prompt("Сумма поступления, ₽:",String(item.amount));if(amount===null)return;
+    const date=prompt("Дата (ГГГГ-ММ-ДД):",item.received_on);if(date===null)return;
+    const note=prompt("Комментарий:",item.note||"");if(note===null)return;
+    if(!Number.isFinite(Number(amount))||Number(amount)<=0||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)){alert("Проверь положительную сумму и дату в формате ГГГГ-ММ-ДД.");return;}
+    edit.disabled=true;
+    try{await api("/api/income",{method:"POST",body:JSON.stringify({action:"update",id:item.id,amount,received_on:date,note})});await loadDashboardData();await loadFinance();}
+    catch(err){edit.disabled=false;alert(err.message);}
+    return;
+  }
   const button=e.target.closest("[data-income-delete]");
   if(!button)return;
   if(!confirm("Удалить это поступление и его распределение? Если деньги уже использованы, система сохранит запись и не позволит удалить её."))return;
@@ -1231,7 +1244,7 @@ async function loadIncome() {
   const data = await api("/api/income");
   $("actual").textContent = money(data.month_total);
   $("income-recent").innerHTML = data.entries.length
-    ? '<div class="income-history"><h3>Последние поступления</h3>' + data.entries.slice(0,8).map(item => '<article class="finance-row"><div><b>'+money(item.amount)+'</b><small>'+escapeHtml(item.received_on)+(item.direction_title?' · '+escapeHtml(item.direction_title):'')+(item.note?' · '+escapeHtml(item.note):'')+'</small></div><button type="button" class="button ghost" data-income-delete="'+escapeHtml(item.id)+'" aria-label="Удалить поступление">×</button></article>').join('') + '</div>'
+    ? '<div class="income-history"><h3>Последние поступления</h3>' + data.entries.slice(0,8).map(item => '<article class="finance-row"><div><b>'+money(item.amount)+'</b><small>'+escapeHtml(item.received_on)+(item.direction_title?' · '+escapeHtml(item.direction_title):'')+(item.note?' · '+escapeHtml(item.note):'')+'</small></div><div class="finance-actions"><button type="button" class="button ghost" data-income-edit="'+escapeHtml(item.id)+'">Изменить</button><button type="button" class="button ghost" data-income-delete="'+escapeHtml(item.id)+'" aria-label="Удалить поступление">×</button></div></article>').join('') + '</div>'
     : '<p class="muted">Поступлений пока нет.</p>';
   $("income-date").value = data.today;
   localToday = data.today; $("task-date").value = data.today;

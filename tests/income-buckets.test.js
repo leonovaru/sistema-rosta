@@ -27,3 +27,9 @@ test("bucket balance is allocations minus only expenses assigned to that bucket"
   assert.equal(rows[1].balance,40);
   assert.equal(rows[0].spent,75);
 });
+
+test("income allocation recomputation preserves original bucket percentages when amount changes",()=>{
+ const rows=allocateIncome(125,[{id:"home",percentage:30},{id:"food",percentage:20},{id:"capital",percentage:50}]);
+ assert.deepEqual(rows.map(row=>row.amount),[37.5,25,62.5]);
+ assert.equal(rows.reduce((sum,row)=>sum+row.amount,0),125);
+});

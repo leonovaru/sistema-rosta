@@ -24,6 +24,31 @@ export async function onRequestPost({ request, env }) {
   const user = await requireUser(request, env);
   if (!user) return json({ error: "Необходим вход" }, 401);
   const body = await readJson(request);
+  if (body?.action === "update") {
+    const id=String(body.id||"").trim(),amount=Number(body.amount),date=String(body.received_on||""),note=String(body.note||"").slice(0,500);
+    if(!id||!Number.isFinite(amount)||amount<=0||amount>100000000||!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)){return json({error:"Проверь сумму и дату поступления"},400);}
+    const existing=await env.DB.prepare("SELECT id,amount FROM income_entries WHERE id=? AND user_id=?").bind(id,user.id).first();
+    if(!existing)return json({error:"Поступление не найдено"},404);
+    const allocations=await env.DB.prepare("SELECT id,bucket_id,percentage,amount FROM income_bucket_allocations WHERE income_id=? AND user_id=? ORDER BY created_at,id").bind(id,user.id).all();
+    const rows=allocations.results||[];
+    if(Math.abs(Number(existing.amount)-amount)>0.0001&&!rows.length)return json({error:"У этого поступления нет сохранённого распределения. Сумму нельзя менять автоматически."},409);
+    let next=[];
+    if(rows.length){
+      try{next=allocateIncome(amount,rows.map(row=>({id:row.bucket_id,percentage:Number(row.percentage)})));}
+      catch{return json({error:"Сохранённые доли распределения некорректны. Сумму нельзя изменить автоматически."},409);}
+    }
+    const updateIncome=env.DB.prepare("UPDATE income_entries SET amount=?,received_on=?,note=? WHERE id=? AND user_id=?").bind(amount,date,note,id,user.id);
+    const updateAllocations=rows.map((row,index)=>env.DB.prepare("UPDATE income_bucket_allocations SET amount=? WHERE id=? AND user_id=? AND income_id=?").bind(next[index].amount,row.id,user.id,id));
+    try{
+      const statements=amount<Number(existing.amount)-0.0001?[...updateAllocations,updateIncome]:[updateIncome,...updateAllocations];
+      await env.DB.batch(statements);
+    }catch(error){
+      const message=String(error?.message||error);
+      if(/Нельзя изменить распределение|Сумма дохода меньше уже распределенных средств|FOREIGN KEY constraint failed/i.test(message))return json({error:"Нельзя уменьшить или перераспределить поступление: часть этих денег уже использована. Сумма и распределение оставлены без изменений."},409);
+      throw error;
+    }
+    return json({ok:true,id,allocations:next});
+  }
   const amount = Number(body?.amount);
   const date = String(body?.received_on || new Date().toISOString().slice(0,10));
   const directionId = body?.direction_id ? String(body.direction_id) : null;
