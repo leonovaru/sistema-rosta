@@ -24,7 +24,7 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
    assert.ok(tables.includes(name),`missing table ${name}`);
   }
   const triggers=db.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all().map(row=>row.name);
-  for(const name of ["trg_cashflow_realization_before_insert","trg_cashflow_realization_after_insert","trg_cashflow_realization_after_delete","trg_cashflow_income_amount_guard","trg_cashflow_expense_amount_guard","trg_bucket_expense_balance_insert","trg_bucket_debt_payment_balance_insert","trg_bucket_obligation_payment_balance_insert"]){
+  for(const name of ["trg_cashflow_realization_before_insert","trg_cashflow_realization_after_insert","trg_cashflow_realization_after_delete","trg_cashflow_income_amount_guard","trg_cashflow_expense_amount_guard","trg_bucket_expense_balance_insert","trg_bucket_debt_payment_balance_insert","trg_bucket_obligation_payment_balance_insert","trg_debt_payment_balance_before_insert","trg_debt_payment_balance_after_insert"]){
    assert.ok(triggers.includes(name),`missing trigger ${name}`);
   }
   db.prepare("INSERT INTO users(id,email,password_hash,password_salt) VALUES(?,?,?,?)").run("u1","u1@example.test","hash","salt");
@@ -87,6 +87,8 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
    assert.throws(()=>db.prepare("UPDATE expenses SET amount=71 WHERE id='bucket_expense'").run(),/Недостаточно средств в корзине/);
    assert.equal(db.prepare("SELECT amount FROM expenses WHERE id='bucket_expense'").get().amount,60);
    assert.equal(db.prepare("SELECT COALESCE(SUM(amount),0) AS total FROM debt_payments WHERE user_id='u1' AND bucket_id='bucket_test'").get().total,30);
+   assert.equal(db.prepare("SELECT balance FROM debts WHERE id='debt_test'").get().balance,70);
+   assert.throws(()=>db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on) VALUES(?,?,?,?,?)").run("debt_overpay","u1","debt_test",71,"2026-11-21"),/Платёж превышает текущий остаток долга или долг уже закрыт/);
 
 
   // Historical financial attribution must survive subsequent client/project renames.
