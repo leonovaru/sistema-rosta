@@ -145,6 +145,6 @@ test("long-overdue monthly obligations still expose the next future occurrence",
  const x=buildCashflowForecast({today:"2026-11-15",horizonDays:40,startingBalance:5000,obligations:[{due_date:"2010-01-10",frequency:"monthly",recurrence_day:10,title:"Давнее обязательство",amount:700}]});
  assert.deepEqual(x.events.map(e=>[e.date,e.source]),[["2026-11-15","overdue_obligation"],["2026-12-10","obligation"]]);
  assert.equal(x.events[0].original_due_date,"2010-01-10");
- assert.equal(x.events[0].overdue_days,6150);
+ assert.equal(x.events[0].overdue_days,6153);
  assert.equal(x.summary.planned_expenses,1400);
 });
