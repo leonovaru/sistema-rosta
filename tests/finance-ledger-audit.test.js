@@ -140,21 +140,12 @@ test("obligation payment reversal reopens only its occurrence and preserves late
   db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
   db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date,frequency,recurrence_day,category) VALUES(?,?,?,?,?,?,?,?)").run("o","u","Интернет",15,"2026-10-01","monthly",1,"Долги и обязательства");
   db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("op1","u","o",15,"2026-10-01","b","2026-10-01","request-obligation-1");
-  console.log("ROW BEFORE UPDATE",db.prepare("SELECT * FROM payment_obligations").all());
-  console.log("FIRST UPDATE RESULT",db.prepare("UPDATE payment_obligations SET due_date='2026-11-01' WHERE id='o'").run());
-  console.log("ROW AFTER UPDATE",db.prepare("SELECT * FROM payment_obligations").all());
-  console.log("DUE AFTER FIRST UPDATE",db.prepare("SELECT id,due_date FROM payment_obligations").all());
   db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date,request_id) VALUES(?,?,?,?,?,?,?,?)").run("op2","u","o",15,"2026-11-01","b","2026-11-01","request-obligation-2");
-  console.log("DUE AFTER SECOND PAYMENT",db.prepare("SELECT id,due_date FROM payment_obligations").all());
-  console.log("SECOND UPDATE RESULT",db.prepare("UPDATE payment_obligations SET due_date='2026-12-01' WHERE id='o'").run());
-  console.log("ROW AFTER SECOND UPDATE",db.prepare("SELECT * FROM payment_obligations").all());
-  console.log("DUE DATE BEFORE REVERSAL",db.prepare("SELECT due_date FROM payment_obligations WHERE id='o'").get());
   db.prepare("INSERT INTO obligation_payment_reversals(id,user_id,obligation_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("or1","u","op1",15,"2026-11-15","Ошибочная оплата","reverse-obligation-1");
   assert.equal(db.prepare("SELECT status FROM obligation_payment_occurrences WHERE obligation_id='o' AND scheduled_due_date='2026-10-01'").get().status,"unpaid");
   assert.equal(db.prepare("SELECT status FROM obligation_payment_occurrences WHERE obligation_id='o' AND scheduled_due_date='2026-11-01'").get().status,"paid");
   const reversalTrigger=db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='trg_obligation_payment_reversal_after_insert'").get().sql;
-  assert.doesNotMatch(reversalTrigger,/UPDATE\\s+payment_obligations|due_date/i);
-  console.log("OBLIGATION TRIGGERS",db.prepare("SELECT name,tbl_name,sql FROM sqlite_master WHERE type='trigger'").all());
+  assert.doesNotMatch(reversalTrigger,/UPDATE\s+payment_obligations|due_date/i);
   assert.equal(db.prepare("SELECT due_date FROM payment_obligations WHERE id='o'").get().due_date,"2026-12-01");
   assert.equal(db.prepare("SELECT amount FROM obligation_payment_bucket_net WHERE user_id='u' AND bucket_id='b'").get().amount,15);
   assert.throws(()=>db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date) VALUES(?,?,?,?,?,?,?)").run("op3","u","o",15,"2026-11-16","b","2026-11-01"));
@@ -167,9 +158,7 @@ test("obligation payment reversal reopens only its occurrence and preserves late
   assert.equal(audited.obligations_reversed,15);
   assert.equal(audited.obligations_paid,30);
   assert.equal(audited.available,70);
-  console.log("REVERSAL ROWS",db.prepare("SELECT * FROM obligation_payment_reversals").all());
-  console.log("IMMUTABLE TRIGGER SQL",db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_obligation_payment_reversal_immutable_%'").all());
-  assert.throws(()=>db.prepare("UPDATE obligation_payment_reversals SET reason='изменено'"));
-  assert.throws(()=>db.prepare("DELETE FROM obligation_payment_reversals"));
+  assert.throws(()=>db.prepare("UPDATE obligation_payment_reversals SET reason='изменено'").run());
+  assert.throws(()=>db.prepare("DELETE FROM obligation_payment_reversals").run());
  }finally{db.close();}
 });
