@@ -22,16 +22,23 @@ test("reserve balance changes are journaled and a reserve with history cannot be
   assert.equal(opening.transaction_type,"opening");
   assert.equal(opening.amount,10000);
   assert.equal(opening.balance_after,10000);
+  db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) VALUES(?,?,?,?,?,?,?)").run("c1","u","r","contribution",2500,12500,"Пополнение");
   db.prepare("UPDATE cash_reserves SET current_amount=12500 WHERE id='r'").run();
-  const adjustment=db.prepare("SELECT transaction_type,amount,balance_after FROM cash_reserve_transactions WHERE reserve_id='r' AND transaction_type='adjustment' ORDER BY created_at DESC,id DESC LIMIT 1").get();
-  assert.equal(adjustment.transaction_type,"adjustment");
-  assert.equal(adjustment.amount,2500);
-  assert.equal(adjustment.balance_after,12500);
+  db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) VALUES(?,?,?,?,?,?,?)").run("w1","u","r","withdrawal",1000,11500,"Снятие");
+  db.prepare("UPDATE cash_reserves SET current_amount=11500 WHERE id='r'").run();
+  const operations=db.prepare("SELECT transaction_type,amount,balance_after FROM cash_reserve_transactions WHERE reserve_id='r' ORDER BY id").all();
+  assert.equal(operations.length,3);
+  assert.equal(operations.find(x=>x.transaction_type==="contribution").amount,2500);
+  assert.equal(operations.find(x=>x.transaction_type==="contribution").balance_after,12500);
+  assert.equal(operations.find(x=>x.transaction_type==="withdrawal").amount,1000);
+  assert.equal(operations.find(x=>x.transaction_type==="withdrawal").balance_after,11500);
+  assert.throws(()=>db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after) VALUES('bad','u','r','withdrawal',20000,-8500)").run(),/CHECK constraint failed/);
+  assert.throws(()=>db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after) VALUES('wrong','other','r','contribution',1,11501)").run(),/Операция должна относиться/);
   assert.throws(()=>db.prepare("DELETE FROM cash_reserves WHERE id='r'").run(),/FOREIGN KEY constraint failed/);
   assert.throws(()=>db.prepare("UPDATE cash_reserve_transactions SET amount=1 WHERE reserve_id='r'").run(),/Операцию по резерву нельзя изменить/);
   assert.throws(()=>db.prepare("DELETE FROM cash_reserve_transactions WHERE reserve_id='r'").run(),/Операцию по резерву нельзя удалить/);
   db.prepare("UPDATE cash_reserves SET active=0 WHERE id='r'").run();
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_reserve_transactions WHERE reserve_id='r'").get().count,2);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_reserve_transactions WHERE reserve_id='r'").get().count,3);
  }finally{db.close();}
 });
 
