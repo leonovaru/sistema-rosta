@@ -81,6 +81,8 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
    db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("bucket_alloc","u1","bucket_income","bucket_test",100,100);
    db.prepare("INSERT INTO debts(id,user_id,title,initial_amount,balance) VALUES(?,?,?,?,?)").run("debt_test","u1","Долг",100,100);
    db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date) VALUES(?,?,?,?,?)").run("obligation_test","u1","Платёж",50,"2026-12-01");
+   db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,scheduled_due_date) VALUES(?,?,?,?,?,?)").run("obligation_once","u1","obligation_test",1,"2026-11-20","2026-12-01");
+   assert.throws(()=>db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,scheduled_due_date) VALUES(?,?,?,?,?,?)").run("obligation_twice","u1","obligation_test",1,"2026-11-20","2026-12-01"),/UNIQUE constraint failed/);
    db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?)").run("bucket_expense","u1","Расход",60,"2026-11-20","bucket_test");
    db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,bucket_id) VALUES(?,?,?,?,?,?)").run("bucket_debt_payment","u1","debt_test",30,"2026-11-20","bucket_test");
    assert.throws(()=>db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id) VALUES(?,?,?,?,?,?)").run("bucket_obligation_payment","u1","obligation_test",11,"2026-11-20","bucket_test"),/Недостаточно средств в корзине/);
