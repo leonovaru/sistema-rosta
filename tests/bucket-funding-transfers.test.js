@@ -58,3 +58,21 @@ test("bucket transfer database guard rejects foreign targets, archived sources a
   assert.throws(()=>db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("bad3","u","b","goal","g",1,"2026-11-16","request-invalid-03"),/Недостаточно средств|Цель или резерв/);
  }finally{db.close();}
 });
+
+test("goal transfer cannot exceed the target amount",()=>{
+ const db=dbWithSchema();
+ try{
+  db.prepare("INSERT INTO financial_goals(id,user_id,title,target_amount,saved_amount) VALUES(?,?,?,?,?)").run("small","u","Малая цель",60,50);
+  assert.throws(()=>db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("over_goal","u","b","goal","small",20,"2026-11-16","request-goal-cap"),/Перевод превысит целевую сумму цели/);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM bucket_funding_transfers").get().count,0);
+ }finally{db.close();}
+});
+test("reserve transfer reversal is blocked after its balance has been spent",()=>{
+ const db=dbWithSchema();
+ try{
+  db.prepare("INSERT INTO bucket_funding_transfers(id,user_id,source_bucket_id,target_type,target_id,amount,transferred_on,request_id) VALUES(?,?,?,?,?,?,?,?)").run("tr2","u","b","reserve","r",20,"2026-11-16","request-reserve-02");
+  db.prepare("UPDATE cash_reserves SET current_amount=0 WHERE id='r'").run();
+  assert.throws(()=>db.prepare("INSERT INTO bucket_funding_transfer_reversals(id,user_id,transfer_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("rr2","u","tr2",20,"2026-11-17","Исправление","reverse-reserve-02"),/В резерве уже использована часть перевода/);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM bucket_funding_transfer_reversals").get().count,0);
+ }finally{db.close();}
+});
