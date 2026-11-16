@@ -68,7 +68,8 @@ test("SQL migration reopens a realized plan when a linked income is deleted",()=
 test("SQL migration preserves cancelled status when a linked fact is deleted",()=>{
  const db=createDb();
  try{
-  seedPlan(db,{status:"cancelled"});seedIncome(db,"i1",100);link(db,{id:"r1",incomeId:"i1",amount:100});
+  seedPlan(db);seedIncome(db,"i1",100);link(db,{id:"r1",incomeId:"i1",amount:100});
+  db.prepare("UPDATE planned_cashflows SET status='cancelled' WHERE id='p1'").run();
   db.prepare("DELETE FROM income_entries WHERE id='i1'").run();
   assert.equal(planStatus(db),"cancelled");
  }finally{db.close();}
