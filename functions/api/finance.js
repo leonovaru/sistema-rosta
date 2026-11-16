@@ -14,7 +14,7 @@ async function commitBucketSpend(write) {
   try { await write(); return true; }
   catch (error) {
     const message=String(error?.message || error);
-    if (message.includes("Недостаточно средств в корзине")) return "bucket";
+    if (message.includes("Недостаточно средств в корзине") || message.includes("Средства уже переведены из корзины")) return "bucket";
     if (message.includes("Период обязательства уже оплачен")) return "occurrence";
     if (message.includes("Платёж превышает текущий остаток долга или долг уже закрыт")) return "debt";
     if (message.includes("UNIQUE constraint failed: debt_payments.user_id, debt_payments.request_id")) return "duplicate_debt";
@@ -79,7 +79,7 @@ export async function onRequestPost({request,env}) {
       await env.DB.prepare("UPDATE expenses SET title=?,amount=?,category=?,spent_on=?,note=? WHERE id=? AND user_id=?").bind(title,amount,category||"Прочее",date,body.note==null?String(expense.note||""):String(body.note).slice(0,500),expenseId,user.id).run();
     }catch(error){
       const message=String(error?.message||error);
-      if(message.includes("Недостаточно средств в корзине"))return json({error:"В корзине недостаточно денег для новой суммы. Расход не изменён."},409);
+      if(message.includes("Недостаточно средств в корзине")||message.includes("Средства уже переведены из корзины"))return json({error:"В корзине недостаточно свободных денег для новой суммы. Расход не изменён."},409);
       if(message.includes("Расход по оплате нерегулярного платежа нельзя изменить"))return json({error:"Эту запись можно исправить только через журнал оплат."},409);
       throw error;
     }

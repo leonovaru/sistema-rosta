@@ -25,3 +25,9 @@ test("irregular payment preflight balance subtracts active funding transfers net
  assert.ok(irregular.includes("const [allocated,spent,debt,obligations,transfers]=await Promise.all(["));
  assert.ok(irregular.includes("Number(obligations.total||0)-Number(transfers.total||0)"));
 });
+
+test("database guards for already transferred bucket funds return conflict responses instead of server errors",()=>{
+ assert.ok(finance.includes('message.includes("Средства уже переведены из корзины")) return "bucket"'));
+ assert.ok(finance.includes('message.includes("Средства уже переведены из корзины"))return json({error:"В корзине недостаточно свободных денег для новой суммы. Расход не изменён."},409)'));
+ assert.ok(irregular.includes('message.includes("Средства уже переведены из корзины"))return json({error:"В выбранной корзине недостаточно свободных денег для оплаты."},409)'));
+});

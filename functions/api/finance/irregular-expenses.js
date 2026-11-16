@@ -61,6 +61,7 @@ export async function onRequestPost({request,env}){
     if(existing&&existing.irregular_expense_id===expenseId&&Math.abs(Number(existing.amount)-amount)<0.0001&&existing.paid_on===paidOn&&existing.scheduled_due_date===dueDate)return json({ok:true,payment_id:existing.id,replayed:true});
    }
    if(message.includes("Период нерегулярного расхода уже оплачен"))return json({error:"Этот период уже оплачен"},409);
+   if(message.includes("Недостаточно средств в корзине")||message.includes("Средства уже переведены из корзины"))return json({error:"В выбранной корзине недостаточно свободных денег для оплаты."},409);
    throw error;
   }
   return json({ok:true,payment_id:paymentId,expense_id:expenseEntryId,next_date:advances?nextSchedule.next_date:item.next_date,active:advances?nextSchedule.active:item.active,scheduled_due_date:dueDate});
