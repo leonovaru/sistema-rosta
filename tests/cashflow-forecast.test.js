@@ -212,3 +212,18 @@ test("cashflow forecast accrues monthly debt interest before capping the final p
  assert.equal(x.summary.planned_expenses,1031.01);
  assert.equal(x.summary.ending_balance,968.99);
 });
+ 
+test("forecast skips previously paid overdue recurring obligation periods",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:40,startingBalance:10000,obligations:[{due_date:"2026-09-10",frequency:"monthly",recurrence_day:10,title:"Аренда",amount:2000,paid_occurrences:"2026-09-10,2026-10-10"}]});
+ assert.deepEqual(x.events.map(e=>[e.date,e.source,e.amount]),[["2026-11-15","overdue_obligation",2000],["2026-12-10","obligation",2000]]);
+ assert.equal(x.events[0].overdue_occurrences,1);
+ assert.equal(x.summary.planned_expenses,4000);
+ assert.equal(x.summary.ending_balance,6000);
+});
+ 
+test("reversed recurring obligation period becomes visible in forecast again",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:10,startingBalance:5000,obligations:[{due_date:"2026-10-10",frequency:"monthly",recurrence_day:10,title:"Аренда",amount:1500,paid_occurrences:"2026-10-10"}]});
+ assert.equal(x.events[0].source,"overdue_obligation");
+ assert.equal(x.events[0].amount,1500);
+ assert.equal(x.events[0].overdue_occurrences,1);
+});
