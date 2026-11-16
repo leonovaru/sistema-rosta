@@ -41,5 +41,32 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
   assert.equal(db.prepare("SELECT status FROM planned_cashflows WHERE id='plan1'").get().status,"planned");
   db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("income2","u1",1200,"2026-11-17");
   assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real2","u1","plan1","income2",1200),/Плановый платёж недоступен или превышен/);
+  // Historical financial attribution must survive subsequent client/project renames.
+  db.prepare("INSERT INTO clients(id,user_id,name,status) VALUES(?,?,?,?)").run("client1","u1","Старое имя клиента","active");
+  db.prepare("INSERT INTO projects(id,user_id,client_id,title,status) VALUES(?,?,?,?,?)").run("project1","u1","client1","Старое название проекта","active");
+  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on,note,client_id,project_id,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+   .run("income_history","u1",500,"2026-11-16","", "client1","project1","client1","Старое имя клиента","project1","Старое название проекта");
+  db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on,client_id,project_id,client_id_snapshot,client_name_snapshot,project_id_snapshot,project_title_snapshot) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+   .run("expense_history","u1","Расход",100,"2026-11-16","client1","project1","client1","Старое имя клиента","project1","Старое название проекта");
+  db.prepare("UPDATE clients SET name='Новое имя клиента' WHERE id='client1'").run();
+  db.prepare("UPDATE projects SET title='Новое название проекта' WHERE id='project1'").run();
+  const historicalIncome=db.prepare("SELECT client_name_snapshot,project_title_snapshot FROM income_entries WHERE id='income_history'").get();
+  const historicalExpense=db.prepare("SELECT client_name_snapshot,project_title_snapshot FROM expenses WHERE id='expense_history'").get();
+  assert.deepEqual(historicalIncome,{client_name_snapshot:"Старое имя клиента",project_title_snapshot:"Старое название проекта"});
+  assert.deepEqual(historicalExpense,{client_name_snapshot:"Старое имя клиента",project_title_snapshot:"Старое название проекта"});
+
+  // An active task timer blocks archiving its client/project at the SQL update boundary.
+  db.prepare("INSERT INTO tasks(id,user_id,title,client_id,project_id,status) VALUES(?,?,?,?,?,?)").run("task_archive","u1","Работа","client1","project1","doing");
+  db.prepare("INSERT INTO task_time_entries(id,user_id,task_id,started_at) VALUES(?,?,?,?)").run("timer_archive","u1","task_archive","2026-11-16T10:00:00Z");
+  const archiveClient=db.prepare("UPDATE clients SET status='closed' WHERE id=? AND user_id=? AND NOT EXISTS (SELECT 1 FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id WHERE e.user_id=clients.user_id AND e.ended_at IS NULL AND (t.client_id=clients.id OR p.client_id=clients.id))").run("client1","u1");
+  const archiveProject=db.prepare("UPDATE projects SET status='archived' WHERE id=? AND user_id=? AND NOT EXISTS (SELECT 1 FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id WHERE e.user_id=projects.user_id AND e.ended_at IS NULL AND t.project_id=projects.id)").run("project1","u1");
+  assert.equal(archiveClient.changes,0);
+  assert.equal(archiveProject.changes,0);
+  assert.equal(db.prepare("SELECT status FROM clients WHERE id='client1'").get().status,"active");
+  assert.equal(db.prepare("SELECT status FROM projects WHERE id='project1'").get().status,"active");
+  db.prepare("UPDATE task_time_entries SET ended_at='2026-11-16T10:05:00Z',duration_minutes=5 WHERE id='timer_archive'").run();
+  assert.equal(db.prepare("UPDATE clients SET status='closed' WHERE id='client1'").run().changes,1);
+  assert.equal(db.prepare("UPDATE projects SET status='archived' WHERE id='project1'").run().changes,1);
+
  }finally{db.close();}
 });
