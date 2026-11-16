@@ -103,7 +103,7 @@ test("debt payment reversal restores debt and bucket exactly once without mutati
   assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,100);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payments").get().count,1);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payment_reversals").get().count,1);
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name='trg_debt_payment_reversal_lock_update'").get().count,1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND tbl_name='debt_payment_reversals' AND name LIKE '%immutable%'").get().count,2);
   assert.throws(()=>db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason) VALUES(?,?,?,?,?,?)").run("rev2","u","dp",40,"2026-11-13","Повторная отмена"));
   assert.equal(db.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND tbl_name='debt_payment_reversals' AND name LIKE '%immutable%' OR type='trigger' AND tbl_name='debt_payment_reversals' AND name LIKE '%lock%'").get().count,5);
   const bucket=db.prepare("SELECT 100-COALESCE((SELECT amount FROM debt_payment_bucket_net WHERE user_id='u' AND bucket_id='b'),0) available").get();

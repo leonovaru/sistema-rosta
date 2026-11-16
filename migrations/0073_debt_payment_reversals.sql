@@ -39,14 +39,12 @@ BEGIN
     AND user_id=NEW.user_id;
 END;
 
-DROP TRIGGER IF EXISTS trg_debt_payment_reversal_immutable_update;
-CREATE TRIGGER trg_debt_payment_reversal_immutable_update_v2
+CREATE TRIGGER trg_debt_payment_reversal_immutable_update
 BEFORE UPDATE ON debt_payment_reversals
 BEGIN
   SELECT RAISE(ABORT,'Корректировку платежа нельзя изменить');
 END;
-DROP TRIGGER IF EXISTS trg_debt_payment_reversal_immutable_delete;
-CREATE TRIGGER trg_debt_payment_reversal_immutable_delete_v2
+CREATE TRIGGER trg_debt_payment_reversal_immutable_delete
 BEFORE DELETE ON debt_payment_reversals
 BEGIN
   SELECT RAISE(ABORT,'Корректировку платежа нельзя удалить');
@@ -162,31 +160,3 @@ WHEN NEW.bucket_id IS NOT NULL
 )
 BEGIN SELECT RAISE(ABORT,'Недостаточно средств в корзине'); END;
 
--- Reassert immutable guards after all ledger and bucket triggers are installed.
-DROP TRIGGER IF EXISTS trg_debt_payment_reversal_lock_update;
-DROP TRIGGER IF EXISTS trg_debt_payment_reversal_lock_delete;
-CREATE TRIGGER trg_debt_payment_reversal_lock_update
-BEFORE UPDATE ON debt_payment_reversals
-WHEN NEW.id IS NOT OLD.id
-  OR NEW.user_id IS NOT OLD.user_id
-  OR NEW.debt_payment_id IS NOT OLD.debt_payment_id
-  OR NEW.amount IS NOT OLD.amount
-  OR NEW.reversed_on IS NOT OLD.reversed_on
-  OR NEW.reason IS NOT OLD.reason
-  OR NEW.request_id IS NOT OLD.request_id
-  OR NEW.created_at IS NOT OLD.created_at
-BEGIN
-  SELECT RAISE(ABORT,'Корректировку платежа нельзя изменить');
-END;
-CREATE TRIGGER trg_debt_payment_reversal_lock_delete
-BEFORE DELETE ON debt_payment_reversals
-BEGIN
-  SELECT RAISE(ABORT,'Корректировку платежа нельзя удалить');
-END;
-
-DROP TRIGGER IF EXISTS zz_debt_payment_reversals_immutable;
-CREATE TRIGGER zz_debt_payment_reversals_immutable
-BEFORE UPDATE ON debt_payment_reversals
-BEGIN
-  SELECT RAISE(ABORT,'Корректировка платежа является неизменяемой записью');
-END;
