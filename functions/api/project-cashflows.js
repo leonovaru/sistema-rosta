@@ -55,10 +55,18 @@ export async function onRequestPatch({request,env}){
  const next=Number(total?.total||0)+Number(actual.amount);
  if(next>Number(plan.amount)+0.005)return json({error:"Сумма связанных операций превышает плановый платёж. Проверь выбранные операции."},409);
  const realizationId=newId();
- await env.DB.batch([
-  env.DB.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,expense_id,amount) VALUES(?,?,?,?,?,?)").bind(realizationId,user.id,id,isIncome?actualId:null,isIncome?null:actualId,Number(actual.amount)),
-  env.DB.prepare("UPDATE planned_cashflows SET status=CASE WHEN (SELECT COALESCE(SUM(amount),0) FROM planned_cashflow_realizations WHERE user_id=? AND planned_cashflow_id=?)>=amount-0.005 THEN 'realized' ELSE 'planned' END WHERE id=? AND user_id=? AND archived_at IS NULL").bind(user.id,id,id,user.id)
- ]);
+ try{
+  await env.DB.batch([
+   env.DB.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,expense_id,amount) VALUES(?,?,?,?,?,?)").bind(realizationId,user.id,id,isIncome?actualId:null,isIncome?null:actualId,Number(actual.amount)),
+   env.DB.prepare("UPDATE planned_cashflows SET status=CASE WHEN (SELECT COALESCE(SUM(amount),0) FROM planned_cashflow_realizations WHERE user_id=? AND planned_cashflow_id=?)>=amount-0.005 THEN 'realized' ELSE 'planned' END WHERE id=? AND user_id=? AND archived_at IS NULL").bind(user.id,id,id,user.id)
+  ]);
+ }catch(error){
+  const message=String(error?.message||error);
+  if(/UNIQUE constraint failed|Плановый платёж недоступен или превышен|Связь не соответствует фактической операции/.test(message)){
+   return json({error:"Операция уже связана, платёж изменился или больше недоступен. Обнови график и проверь остаток."},409);
+  }
+  throw error;
+ }
  return json({ok:true,realized_amount:next,remaining_amount:Math.max(0,Number(plan.amount)-next)});
 }
 export async function onRequestDelete({request,env}){
