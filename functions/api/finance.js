@@ -154,6 +154,15 @@ export async function onRequestDelete({request,env}) {
   if(!user)return json({error:"Необходим вход"},401);
   const body=await readJson(request),id=String(body?.id||""),type=String(body?.type||"");
   if(!id||!["expense","obligation"].includes(type))return json({error:"Операцию нельзя удалить или неверный тип"},400);
+  if(type==="obligation"){
+    const obligation=await env.DB.prepare("SELECT id,active FROM payment_obligations WHERE id=? AND user_id=?").bind(id,user.id).first();
+    if(!obligation)return json({error:"Запись не найдена"},404);
+    const payments=await env.DB.prepare("SELECT COUNT(*) AS count FROM obligation_payments WHERE obligation_id=? AND user_id=?").bind(id,user.id).first();
+    if(Number(payments?.count||0)>0){
+      await env.DB.prepare("UPDATE payment_obligations SET active=0 WHERE id=? AND user_id=?").bind(id,user.id).run();
+      return json({ok:true,archived:true,preserved_payments:true});
+    }
+  }
   const table=type==="expense"?"expenses":"payment_obligations";
   const result=await env.DB.prepare("DELETE FROM "+table+" WHERE id=? AND user_id=?").bind(id,user.id).run();
   if(!result.meta.changes)return json({error:"Запись не найдена"},404);
