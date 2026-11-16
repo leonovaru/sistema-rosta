@@ -46,8 +46,16 @@ export async function onRequestPost({request,env}){
   return json({ok:true,payment_id:paymentId,expense_id:expenseEntryId,next_date:nextDate,active});
  }
  if(action==="delete"){
-  const r=await env.DB.prepare("DELETE FROM irregular_expenses WHERE id=? AND user_id=?").bind(clean(b.id,100),user.id).run();
-  if(!r.meta.changes)return json({error:"Расход не найден"},404);return json({ok:true});
+  const id=clean(b.id,100);
+  const item=await env.DB.prepare("SELECT id,active FROM irregular_expenses WHERE id=? AND user_id=?").bind(id,user.id).first();
+  if(!item)return json({error:"Расход не найден"},404);
+  const payments=await env.DB.prepare("SELECT COUNT(*) AS count FROM irregular_expense_payments WHERE irregular_expense_id=? AND user_id=?").bind(id,user.id).first();
+  if(Number(payments?.count||0)>0){
+   await env.DB.prepare("UPDATE irregular_expenses SET active=0,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(id,user.id).run();
+   return json({ok:true,archived:true,preserved_payments:true});
+  }
+  await env.DB.prepare("DELETE FROM irregular_expenses WHERE id=? AND user_id=?").bind(id,user.id).run();
+  return json({ok:true});
  }
  const title=clean(b.title,180),category=clean(b.category,80)||"Нерегулярные расходы",amount=Number(b.amount),date=String(b.next_date||""),frequency=String(b.frequency||"once"),notes=clean(b.notes,500);
  if(!title||!Number.isFinite(amount)||amount<=0||amount>100000000||!validDate(date)||!["once","yearly","quarterly"].includes(frequency))return json({error:"Проверь название, сумму, дату и периодичность"},400);
