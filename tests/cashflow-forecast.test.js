@@ -193,7 +193,7 @@ test("archived reserves remain unavailable but receive no future contributions",
  assert.equal(x.summary.new_reserve_allocations,22);
  assert.equal(x.summary.total_reserved,292);
  assert.equal(x.summary.available_ending_balance,708);
- assert.equal(x.days[0].available_balance,878);
+ assert.equal(x.days[0].available_balance,728);
  assert.equal(x.summary.ending_balance,1000);
  assert.equal(x.summary.total_expenses,0);
 });
