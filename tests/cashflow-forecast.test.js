@@ -182,3 +182,18 @@ test("missed quarterly irregular expenses accumulate and keep the next due date"
 });
 
 test("goal funding transfers reduce spendable forecast balance but not cash expenses",()=>{const x=buildCashflowForecast({today:"2026-11-01",horizonDays:5,startingBalance:10000,goalFundings:2500});assert.equal(x.summary.ending_balance,10000);assert.equal(x.summary.existing_goal_fundings,2500);assert.equal(x.summary.available_ending_balance,7500);assert.equal(x.summary.total_expenses,0);assert.equal(x.days[0].available_balance,7500);});
+
+test("archived reserves remain unavailable but receive no future contributions",()=>{
+ const x=buildCashflowForecast({today:"2026-11-01",horizonDays:10,startingBalance:1000,goalFundings:50,reserves:[
+  {title:"Архивный резерв",target_amount:500,current_amount:120,monthly_contribution:100,active:0},
+  {title:"Активный резерв",target_amount:500,current_amount:100,monthly_contribution:60,active:1}
+ ]});
+ assert.equal(x.summary.existing_reserves,220);
+ assert.equal(x.summary.existing_goal_fundings,50);
+ assert.equal(x.summary.new_reserve_allocations,20);
+ assert.equal(x.summary.total_reserved,290);
+ assert.equal(x.summary.available_ending_balance,710);
+ assert.equal(x.days[0].available_balance,878);
+ assert.equal(x.summary.ending_balance,1000);
+ assert.equal(x.summary.total_expenses,0);
+});
