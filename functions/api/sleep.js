@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
-import { isValidSleepSequence } from "../_lib/sleep.js";
+import { isValidSleepSequence, resolveSleepWallTime } from "../_lib/sleep.js";
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 const LOCAL_DATE_TIME=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
