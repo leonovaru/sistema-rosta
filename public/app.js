@@ -852,6 +852,7 @@ async function loadFinance() {
   $("payment-debt").innerHTML=openDebts.length?openDebts.map(debt=>'<option value="'+escapeHtml(debt.id)+'">'+escapeHtml(debt.title)+' · '+money(debt.balance)+'</option>').join(""):'<option value="">Нет открытых долгов</option>';
   $("debt-payment-form").querySelector("button").disabled=!openDebts.length;
   $("finance-debts").innerHTML=financeData.debts.length?financeData.debts.map(debt=>'<article class="finance-row"><div><b>'+escapeHtml(debt.title)+'</b><small>'+escapeHtml(debt.creditor||"")+(Number(debt.interest_rate)>0?" · "+debt.interest_rate+"% годовых":"")+(Number(debt.minimum_payment)>0?" · платёж "+money(debt.minimum_payment):"")+(debt.due_day?" · до "+debt.due_day+" числа":"")+'</small></div><strong>'+money(debt.balance)+'</strong></article>').join(""):'<p class="muted">Долги пока не добавлены.</p>';
+  $("finance-debt-payments").innerHTML=financeData.debt_payments.length?financeData.debt_payments.map(payment=>'<article class="finance-row"><div><b>'+escapeHtml(payment.debt_title)+' · '+money(payment.amount)+'</b><small>'+payment.paid_on+(payment.reversal_id?' · Отменён '+payment.reversed_on+' · '+escapeHtml(payment.reversal_reason):' · Записан платеж')+'</small></div>'+(payment.reversal_id?'<span class="muted">Отменён</span>':'<button class="button ghost" data-debt-payment-reverse="'+escapeHtml(payment.id)+'">Исправить</button>')+'</article>').join(""):'<p class="muted">Платежей по долгам пока нет.</p>';
   $("finance-obligations").innerHTML=financeData.obligations.length?financeData.obligations.map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.due_date+' · '+(item.frequency==="monthly"?"ежемесячно":item.frequency==="weekly"?"еженедельно":"один раз")+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-obligation-paid="'+escapeHtml(item.id)+'">Оплачено</button></article>').join(""):'<p class="muted">Предстоящих платежей пока нет.</p>';
   const suggestions=financeData.recurring_expense_suggestions||[];
   $("recurring-expense-suggestions").innerHTML=suggestions.length?'<h4>Возможные регулярные платежи</h4><p class="fine">Нашла похожие расходы в истории. Ничего не добавляется автоматически — проверь суммы и даты, затем подтверди создание обязательства.</p>'+suggestions.map((x,i)=>'<article class="finance-row"><div><b>'+escapeHtml(x.title)+'</b><small>'+escapeHtml(x.category)+' · '+x.occurrences+' раза · '+(x.frequency==="monthly"?"ежемесячно":"еженедельно")+' · средняя сумма '+money(x.amount)+'</small><small>Последняя оплата: '+x.last_paid_on+' · следующая дата: '+x.next_date+'</small></div><button class="button ghost" data-recurring-add="'+i+'">Добавить в обязательства</button></article>').join(""):'<p class="muted">Пока не обнаружено достаточно устойчивых повторяющихся расходов. Для предложения нужны минимум три похожие оплаты с близкими суммами и интервалами.</p>';
@@ -882,6 +883,21 @@ $("debt-payment-form").addEventListener("submit",async e=>{
   form.dataset.requestId=form.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
   try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"debt_payment",debt_id:$("payment-debt").value,amount:$("debt-payment-amount").value,paid_on:$("debt-payment-date").value,request_id:form.dataset.requestId})});delete form.dataset.requestId;$("debt-payment-amount").value="";await loadFinance();}
   catch(err){alert(err.message);}
+});
+$("finance-debt-payments").addEventListener("click",async e=>{
+ const button=e.target.closest("[data-debt-payment-reverse]");if(!button)return;
+ const payment=(financeData?.debt_payments||[]).find(row=>row.id===button.dataset.debtPaymentReverse);
+ if(!payment||payment.reversal_id)return;
+ if(!confirm("Отменить запись о погашении на "+money(payment.amount)+"? Сумма вернётся в остаток долга и исходную корзину. Исходная запись останется в истории."))return;
+ const reason=prompt("Укажи причину корректировки (обязательно, от 3 до 500 символов):");
+ if(reason===null)return;
+ if(reason.trim().length<3||reason.trim().length>500){alert("Причина должна содержать от 3 до 500 символов.");return;}
+ button.disabled=true;
+ button.dataset.requestId=button.dataset.requestId||crypto.randomUUID().replace(/-/g,"");
+ try{
+  await api("/api/finance",{method:"POST",body:JSON.stringify({action:"debt_payment_reverse",debt_payment_id:payment.id,reversed_on:financeData.today,reason:reason.trim(),request_id:button.dataset.requestId})});
+  await loadFinance();
+ }catch(err){button.disabled=false;alert(err.message);}
 });
 $("recurring-expense-suggestions").addEventListener("click",async e=>{
  const button=e.target.closest("[data-recurring-add]");if(!button)return;
