@@ -48,7 +48,7 @@ export function buildCashflowForecast({today,horizonDays=90,startingBalance=0,pl
   const income=dayEvents.filter(e=>e.type==="income").reduce((s,e)=>s+e.amount,0);
   const fixedExpense=dayEvents.filter(e=>e.type==="expense").reduce((s,e)=>s+e.amount,0);
   const month=date.slice(0,7),daysInMonth=monthDays(month),variableExpense=(variableByMonth.get(month)||0)/daysInMonth;
-  if(!reserveRates.has(month)){const rates=activeReserves.map(r=>{const amount=r.targetDate&&month+"-01">r.targetDate?0:Math.min(r.monthly,r.remaining);r.remaining=Math.max(0,r.remaining-amount);return {targetDate:r.targetDate,rate:amount/daysInMonth};});reserveRates.set(month,rates);}
+  if(!reserveRates.has(month)){const monthEnd=addDays(month+"-"+String(daysInMonth).padStart(2,"0"),0);const rates=activeReserves.map(r=>{const planned=Math.min(r.monthly,r.remaining);const from=date>month+"-01"?date:month+"-01";const through=r.targetDate&&r.targetDate<monthEnd?r.targetDate:monthEnd;const eligibleDays=through<from?0:Math.floor((Date.parse(through+"T12:00:00Z")-Date.parse(from+"T12:00:00Z"))/86400000)+1;const rate=planned/daysInMonth;r.remaining=Math.max(0,r.remaining-rate*eligibleDays);return {targetDate:r.targetDate,rate};});reserveRates.set(month,rates);}
   const dailyReserve=reserveRates.get(month).reduce((sum,r)=>sum+(r.targetDate&&date>r.targetDate?0:r.rate),0);
   const expense=fixedExpense+variableExpense;
   totalNewReserveAllocations+=dailyReserve;totalVariableExpenses+=variableExpense;balance+=income-expense;
