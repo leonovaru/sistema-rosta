@@ -18,7 +18,9 @@ function dateInZone(timeZone) {
 async function commitBucketSpend(write) {
   try { await write(); return true; }
   catch (error) {
-    if (/Недостаточно средств в корзине|Платёж превышает текущий остаток долга или долг уже закрыт/.test(String(error?.message || error))) return false;
+    const message=String(error?.message || error);
+    if (message.includes("Недостаточно средств в корзине")) return "bucket";
+    if (message.includes("Платёж превышает текущий остаток долга или долг уже закрыт")) return "debt";
     throw error;
   }
 }
@@ -115,7 +117,8 @@ export async function onRequestPost({request,env}) {
     const available=await bucketAvailable(env,user.id,bucket.id);
     if(amount>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     const saved=await commitBucketSpend(()=>env.DB.prepare("INSERT INTO debt_payments (id,user_id,debt_id,amount,paid_on,note,bucket_id) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,debtId,amount,date,String(body.note||"").slice(0,500),bucket.id).run());
-    if(!saved)return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
+    if(saved==="bucket")return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
+    if(saved==="debt")return json({error:"Остаток долга изменился. Обнови данные и повтори операцию."},409);
     const updatedDebt=await env.DB.prepare("SELECT balance FROM debts WHERE id=? AND user_id=?").bind(debtId,user.id).first();
     return json({ok:true,id,balance:Number(updatedDebt?.balance||0)},201);
   }
