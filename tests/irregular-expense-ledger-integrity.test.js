@@ -36,3 +36,18 @@ test("an irregular expense without payments can still be deleted",()=>{
   assert.equal(db.prepare("SELECT COUNT(*) count FROM irregular_expenses WHERE id='x'").get().count,0);
  }finally{db.close();}
 });
+
+test("an irregular payment stays linked to its single expense fact",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO irregular_expenses(id,user_id,title,category,amount,next_date,frequency) VALUES(?,?,?,?,?,?,?)").run("x","u","Страховка","Дом",12000,"2026-11-16","yearly");
+  db.prepare("INSERT INTO expenses(id,user_id,category,title,amount,spent_on,note) VALUES(?,?,?,?,?,?,?)").run("e","u","Дом","Страховка",12000,"2026-11-16","Оплата нерегулярного расхода");
+  db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on,expense_id) VALUES(?,?,?,?,?,?)").run("p","u","x",12000,"2026-11-16","e");
+  assert.equal(db.prepare("SELECT COALESCE(SUM(amount),0) total FROM expenses WHERE user_id='u'").get().total,12000);
+  assert.equal(db.prepare("SELECT COALESCE(SUM(amount),0) total FROM irregular_expense_payments WHERE user_id='u'").get().total,12000);
+  assert.throws(()=>db.prepare("DELETE FROM expenses WHERE id='e'").run(),/Расход по оплате нерегулярного платежа нельзя удалить/);
+  assert.throws(()=>db.prepare("UPDATE expenses SET amount=1 WHERE id='e'").run(),/Расход по оплате нерегулярного платежа нельзя изменить/);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses WHERE id='e'").get().count,1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM irregular_expense_payments WHERE expense_id='e'").get().count,1);
+ }finally{db.close();}
+});
