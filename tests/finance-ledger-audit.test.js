@@ -167,6 +167,8 @@ test("obligation payment reversal reopens only its occurrence and preserves late
   assert.equal(audited.obligations_reversed,15);
   assert.equal(audited.obligations_paid,30);
   assert.equal(audited.available,70);
+  console.log("REVERSAL ROWS",db.prepare("SELECT * FROM obligation_payment_reversals").all());
+  console.log("IMMUTABLE TRIGGER SQL",db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_obligation_payment_reversal_immutable_%'").all());
   assert.throws(()=>db.prepare("UPDATE obligation_payment_reversals SET reason='изменено'"));
   assert.throws(()=>db.prepare("DELETE FROM obligation_payment_reversals"));
  }finally{db.close();}
