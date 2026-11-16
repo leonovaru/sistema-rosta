@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../_lib/auth.js";
-import { addDays, addPeriod } from "../_lib/finance.js";
+import { addDays, addPeriod, dateInZone } from "../_lib/finance.js";
 import { detectRecurringExpenses } from "../_lib/recurring-expense-detection.js";
 import { buildFinancialAttributionSnapshot } from "../_lib/financial-attribution.js";
 import { isClientSelectable, isProjectSelectable } from "../_lib/workspace-entity-availability.js";
@@ -9,11 +9,6 @@ function validDate(value) {
   if(!DATE.test(value))return false;
   const date=new Date(value+"T12:00:00Z");
   return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value;
-}
-function dateInZone(timeZone) {
-  const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
-  const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));
-  return values.year+"-"+values.month+"-"+values.day;
 }
 async function commitBucketSpend(write) {
   try { await write(); return true; }
@@ -112,6 +107,8 @@ export async function onRequestPost({request,env}) {
   if(action==="debt_payment"){
     const debtId=String(body.debt_id||""),amount=validAmount(body.amount),date=String(body.paid_on||""),requestId=String(body.request_id||"");
     if(!debtId||!amount||!validDate(date)||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Проверь долг, сумму, дату и идентификатор запроса"},400);
+    const dateSettings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+    if(date>dateInZone(dateSettings?.timezone||"Europe/Moscow"))return json({error:"Нельзя отметить будущую дату как уже совершённый платёж"},400);
     const prior=await env.DB.prepare("SELECT id,debt_id,amount FROM debt_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
     if(prior){
       if(prior.debt_id!==debtId||Math.abs(Number(prior.amount)-amount)>0.0001)return json({error:"Идентификатор запроса уже использован для другого платежа"},409);
@@ -140,6 +137,8 @@ export async function onRequestPost({request,env}) {
   if(action==="obligation_paid"){
     const obligationId=String(body.obligation_id||""),date=String(body.paid_on||""),requestId=String(body.request_id||"");
     if(!obligationId||!validDate(date)||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Проверь обязательство, дату и идентификатор запроса"},400);
+    const dateSettings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+    if(date>dateInZone(dateSettings?.timezone||"Europe/Moscow"))return json({error:"Нельзя отметить будущую дату как уже совершённый платёж"},400);
     const prior=await env.DB.prepare("SELECT id,obligation_id FROM obligation_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();
     if(prior){if(prior.obligation_id!==obligationId)return json({error:"Идентификатор запроса уже использован"},409);return json({ok:true,replayed:true});}
     const obligation=await env.DB.prepare("SELECT * FROM payment_obligations WHERE id=? AND user_id=? AND active=1").bind(obligationId,user.id).first();

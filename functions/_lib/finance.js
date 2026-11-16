@@ -61,3 +61,9 @@ export function advanceIrregularExpenseAfterPayment(nextDate,frequency,recurrenc
   const next=nextIrregularDate(nextDate,frequency,recurrenceDay);
   return next?{next_date:next,active:1}:null;
 }
+
+export function dateInZone(timeZone="Europe/Moscow",now=new Date()) {
+ const parts=new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(now);
+ const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));
+ return values.year+"-"+values.month+"-"+values.day;
+}

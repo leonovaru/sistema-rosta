@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
-import { advanceIrregularExpenseAfterPayment } from "../../_lib/finance.js";
+import { advanceIrregularExpenseAfterPayment, dateInZone } from "../../_lib/finance.js";
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 function validDate(v){if(!DATE.test(v))return false;const d=new Date(v+"T12:00:00Z");return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===v;}
 const clean=(v,n)=>String(v||"").trim().slice(0,n);
@@ -15,6 +15,8 @@ export async function onRequestPost({request,env}){
  if(action==="paid"){
   const expenseId=clean(b.id,100),paidOn=String(b.paid_on||"");
   if(!expenseId||!validDate(paidOn))return json({error:"Укажи корректную дату оплаты"},400);
+  const dateSettings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+  if(paidOn>dateInZone(dateSettings?.timezone||"Europe/Moscow"))return json({error:"Нельзя отметить будущую дату как уже совершённый платёж"},400);
   const requestId=String(b.request_id||"");
   if(!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Не удалось подтвердить запрос оплаты"},400);
   const prior=await env.DB.prepare("SELECT id,irregular_expense_id FROM irregular_expense_payments WHERE user_id=? AND request_id=?").bind(user.id,requestId).first();

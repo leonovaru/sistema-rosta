@@ -29,3 +29,9 @@ test("quarterly and yearly irregular expenses keep their original calendar day",
 test("one-time irregular expenses have no next date",()=>{
   assert.equal(nextIrregularDate("2026-11-15","once"),null);
 });
+
+test("dateInZone uses the user's calendar date rather than UTC date",()=>{
+ const {dateInZone}=awaitImportFinance();
+ assert.equal(dateInZone("Europe/Moscow",new Date("2026-11-15T22:30:00.000Z")),"2026-11-16");
+ assert.equal(dateInZone("America/Los_Angeles",new Date("2026-11-16T02:00:00.000Z")),"2026-11-15");
+});
