@@ -44,6 +44,7 @@ WHEN NOT EXISTS (
   WHERE p.id=NEW.planned_cashflow_id
     AND p.user_id=NEW.user_id
     AND p.archived_at IS NULL
+    AND p.status<>'cancelled'
     AND (
       (NEW.income_entry_id IS NOT NULL
        AND NEW.expense_id IS NULL
