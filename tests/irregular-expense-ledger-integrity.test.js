@@ -56,11 +56,21 @@ test("the ledger rejects duplicate payments for the same schedule and date",()=>
  const db=database();
  try{
   db.prepare("INSERT INTO irregular_expenses(id,user_id,title,category,amount,next_date,frequency) VALUES(?,?,?,?,?,?,?)").run("x","u","Страховка","Дом",12000,"2026-11-16","yearly");
-  db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on) VALUES(?,?,?,?,?)").run("p1","u","x",12000,"2026-11-16");
+  db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on,scheduled_due_date) VALUES(?,?,?,?,?,?)").run("p1","u","x",12000,"2026-11-16","2026-11-10");
   assert.throws(
-   ()=>db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on) VALUES(?,?,?,?,?)").run("p2","u","x",12000,"2026-11-16"),
-   /Оплата за эту дату уже зарегистрирована/
+   ()=>db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on,scheduled_due_date) VALUES(?,?,?,?,?,?)").run("p2","u","x",12000,"2026-11-17","2026-11-10"),
+   /UNIQUE constraint failed/
   );
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM irregular_expense_payments WHERE irregular_expense_id='x' AND paid_on='2026-11-16'").get().count,1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM irregular_expense_payments WHERE irregular_expense_id='x' AND scheduled_due_date='2026-11-10'").get().count,1);
+ }finally{db.close();}
+});
+
+test("migration preserves historical payment rows without guessing their scheduled dates",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO irregular_expenses(id,user_id,title,category,amount,next_date,frequency) VALUES(?,?,?,?,?,?,?)").run("legacy","u","Старый расход","Дом",5000,"2026-11-16","once");
+  db.prepare("INSERT INTO irregular_expense_payments(id,user_id,irregular_expense_id,amount,paid_on) VALUES(?,?,?,?,?)").run("old","u","legacy",5000,"2026-11-12");
+  const row=db.prepare("SELECT scheduled_due_date FROM irregular_expense_payments WHERE id='old'").get();
+  assert.equal(row.scheduled_due_date,null);
  }finally{db.close();}
 });
