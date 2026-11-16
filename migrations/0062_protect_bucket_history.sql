@@ -7,5 +7,5 @@ WHEN EXISTS(SELECT 1 FROM income_bucket_allocations WHERE bucket_id=OLD.id AND u
  OR EXISTS(SELECT 1 FROM debt_payments WHERE bucket_id=OLD.id AND user_id=OLD.user_id)
  OR EXISTS(SELECT 1 FROM obligation_payments WHERE bucket_id=OLD.id AND user_id=OLD.user_id)
 BEGIN
- SELECT RAISE(ABORT,'Корзину с финансовой историей нельзя удалить: архивируй её');
+ SELECT RAISE(ABORT,'Нельзя удалить распределение и финансовую историю корзины: архивируй её');
 END;
