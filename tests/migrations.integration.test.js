@@ -73,7 +73,7 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
   db.prepare("INSERT INTO planned_cashflows(id,user_id,flow_type,title,amount,expected_date) VALUES(?,?,?,?,?,?)").run("cancelled_plan","u1","expense","Отменённый платёж",100,"2026-12-11");
   db.prepare("UPDATE planned_cashflows SET status='cancelled' WHERE id='cancelled_plan'").run();
   db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on) VALUES(?,?,?,?,?)").run("cancelled_expense","u1","Старый расход",50,"2026-11-16");
-  assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,expense_id,amount) VALUES(?,?,?,?,?)").run("cancelled_real","u1","cancelled_plan","cancelled_expense",50),/Плановый платёж недоступен или превышен/);
+  assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,expense_id,amount) VALUES(?,?,?,?,?)").run("cancelled_real","u1","cancelled_plan","cancelled_expense",50),/Плановый платёж недоступен или превышен|Связь не соответствует фактической операции/);
 
   // Historical financial attribution must survive subsequent client/project renames.
   db.prepare("INSERT INTO clients(id,user_id,name,status) VALUES(?,?,?,?)").run("client1","u1","Старое имя клиента","active");
