@@ -227,3 +227,13 @@ test("reversed recurring obligation period becomes visible in forecast again",()
  assert.equal(x.events[0].amount,1500);
  assert.equal(x.events[0].overdue_occurrences,1);
 });
+ 
+test("goal baseline savings and net transfers reduce spendable money exactly once",()=>{
+ const x=buildCashflowForecast({today:"2026-11-15",horizonDays:5,startingBalance:20000,goalFundings:3500,reserves:[{title:"Emergency fund",target_amount:5000,current_amount:1500,monthly_contribution:0,active:1}]});
+ assert.equal(x.summary.ending_balance,20000);
+ assert.equal(x.summary.existing_goal_fundings,3500);
+ assert.equal(x.summary.existing_reserves,1500);
+ assert.equal(x.summary.total_reserved,5000);
+ assert.equal(x.summary.available_ending_balance,15000);
+ assert.equal(x.summary.total_expenses,0);
+});
