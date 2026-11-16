@@ -103,6 +103,7 @@ test("debt payment reversal restores debt and bucket exactly once without mutati
   assert.equal(db.prepare("SELECT balance FROM debts WHERE id='d'").get().balance,100);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payments").get().count,1);
   assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payment_reversals").get().count,1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM sqlite_master WHERE type='trigger' AND name='trg_debt_payment_reversal_lock_update'").get().count,1);
   assert.throws(()=>db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason) VALUES(?,?,?,?,?,?)").run("rev2","u","dp",40,"2026-11-13","Повторная отмена"));
   assert.throws(()=>db.prepare("UPDATE debt_payment_reversals SET reason='изменено' WHERE id='rev'"));
   assert.throws(()=>db.prepare("DELETE FROM debt_payment_reversals WHERE id='rev'"));
