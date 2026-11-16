@@ -6,6 +6,7 @@ import {fileURLToPath} from "node:url";
 import {DatabaseSync} from "node:sqlite";
 const root=join(dirname(fileURLToPath(import.meta.url)),"..");
 const api=readFileSync(join(root,"functions/api/finance/reserves.js"),"utf8");
+const income=readFileSync(join(root,"functions/api/income.js"),"utf8");
 const app=readFileSync(join(root,"public/app.js"),"utf8");
 function database(){
  const db=new DatabaseSync(":memory:");
@@ -32,4 +33,9 @@ test("reserve ledger enforces unique request IDs while keeping legacy rows nulla
   db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) VALUES(?,?,?,?,?,?,?)").run("legacy","u","r","adjustment",5,130,"Старая запись");
   assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_reserve_transactions WHERE request_id='reserve-request-0001'").get().count,1);
  }finally{db.close();}
+});
+
+test("income edits and deletion translate transfer-protection trigger errors into conflict responses",()=>{
+ assert.ok(income.includes("Нельзя изменить распределение|Средства уже переведены из корзины|Сумма дохода меньше уже распределенных средств"));
+ assert.ok(income.includes("Нельзя удалить распределение|Нельзя изменить распределение|Средства уже переведены из корзины"));
 });

@@ -44,7 +44,7 @@ export async function onRequestPost({ request, env }) {
       await env.DB.batch(statements);
     }catch(error){
       const message=String(error?.message||error);
-      if(/Нельзя изменить распределение|Сумма дохода меньше уже распределенных средств|FOREIGN KEY constraint failed/i.test(message))return json({error:"Нельзя уменьшить или перераспределить поступление: часть этих денег уже использована. Сумма и распределение оставлены без изменений."},409);
+      if(/Нельзя изменить распределение|Средства уже переведены из корзины|Сумма дохода меньше уже распределенных средств|FOREIGN KEY constraint failed/i.test(message))return json({error:"Нельзя уменьшить или перераспределить поступление: часть этих денег уже использована. Сумма и распределение оставлены без изменений."},409);
       throw error;
     }
     return json({ok:true,id,allocations:next});
@@ -96,7 +96,7 @@ export async function onRequestDelete({ request, env }) {
     return json({ ok: true, id });
   } catch (error) {
     const message = String(error?.message || "");
-    if (/Нельзя удалить распределение|Нельзя изменить распределение|FOREIGN KEY constraint failed/i.test(message)) {
+    if (/Нельзя удалить распределение|Нельзя изменить распределение|Средства уже переведены из корзины|FOREIGN KEY constraint failed/i.test(message)) {
       return json({ error: "Нельзя удалить поступление: распределённые деньги уже обеспечивают сохранённые расходы или платежи. Сначала исправь связанные операции." }, 409);
     }
     throw error;
