@@ -41,6 +41,26 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
   assert.equal(db.prepare("SELECT status FROM planned_cashflows WHERE id='plan1'").get().status,"planned");
   db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("income2","u1",1200,"2026-11-17");
   assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real2","u1","plan1","income2",1200),/Плановый платёж недоступен или превышен/);
+  // Expense realizations follow the same partial/full, amount-sync and delete rules.
+  db.prepare("INSERT INTO planned_cashflows(id,user_id,flow_type,title,amount,expected_date) VALUES(?,?,?,?,?,?)").run("expense_plan","u1","expense","Расход проекта",500,"2026-12-10");
+  db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on) VALUES(?,?,?,?,?)").run("expense_actual","u1","Первая часть",300,"2026-11-16");
+  db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,expense_id,amount) VALUES(?,?,?,?,?)").run("expense_real","u1","expense_plan","expense_actual",300);
+  assert.equal(db.prepare("SELECT status FROM planned_cashflows WHERE id='expense_plan'").get().status,"planned");
+  assert.throws(()=>db.prepare("UPDATE expenses SET amount=600 WHERE id='expense_actual'").run(),/Изменение суммы превысит плановый платёж/);
+  assert.equal(db.prepare("SELECT amount FROM expenses WHERE id='expense_actual'").get().amount,300);
+  db.prepare("UPDATE expenses SET amount=500 WHERE id='expense_actual'").run();
+  assert.equal(db.prepare("SELECT amount FROM planned_cashflow_realizations WHERE id='expense_real'").get().amount,500);
+  assert.equal(db.prepare("SELECT status FROM planned_cashflows WHERE id='expense_plan'").get().status,"realized");
+  db.prepare("DELETE FROM expenses WHERE id='expense_actual'").run();
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM planned_cashflow_realizations WHERE id='expense_real'").get().count,0);
+  assert.equal(db.prepare("SELECT status FROM planned_cashflows WHERE id='expense_plan'").get().status,"planned");
+
+  // Partial payment deletion must reopen a plan, while a cancelled plan stays cancelled.
+  db.prepare("INSERT INTO planned_cashflows(id,user_id,flow_type,title,amount,expected_date) VALUES(?,?,?,?,?,?)").run("cancelled_plan","u1","expense","Отменённый платёж",100,"2026-12-11");
+  db.prepare("UPDATE planned_cashflows SET status='cancelled' WHERE id='cancelled_plan'").run();
+  db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on) VALUES(?,?,?,?,?)").run("cancelled_expense","u1","Старый расход",50,"2026-11-16");
+  assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,expense_id,amount) VALUES(?,?,?,?,?)").run("cancelled_real","u1","cancelled_plan","cancelled_expense",50),/Плановый платёж недоступен или превышен/);
+
   // Historical financial attribution must survive subsequent client/project renames.
   db.prepare("INSERT INTO clients(id,user_id,name,status) VALUES(?,?,?,?)").run("client1","u1","Старое имя клиента","active");
   db.prepare("INSERT INTO projects(id,user_id,client_id,title,status) VALUES(?,?,?,?,?)").run("project1","u1","client1","Старое название проекта","active");
