@@ -919,7 +919,7 @@ async function loadFinance() {
   const openDebts=financeData.debts.filter(debt=>debt.status==="open");
   $("payment-debt").innerHTML=openDebts.length?openDebts.map(debt=>'<option value="'+escapeHtml(debt.id)+'">'+escapeHtml(debt.title)+' · '+money(debt.balance)+'</option>').join(""):'<option value="">Нет открытых долгов</option>';
   $("debt-payment-form").querySelector("button").disabled=!openDebts.length;
-  $("finance-debts").innerHTML=financeData.debts.length?financeData.debts.map(debt=>'<article class="finance-row"><div><b>'+escapeHtml(debt.title)+'</b><small>'+escapeHtml(debt.creditor||"")+(Number(debt.interest_rate)>0?" · "+debt.interest_rate+"% годовых":"")+(Number(debt.minimum_payment)>0?" · платёж "+money(debt.minimum_payment):"")+(debt.due_day?" · до "+debt.due_day+" числа":"")+'</small></div><strong>'+money(debt.balance)+'</strong></article>').join(""):'<p class="muted">Долги пока не добавлены.</p>';
+   $("finance-debts").innerHTML=financeData.debts.length?financeData.debts.map(debt=>'<article class="finance-row"><div><b>'+escapeHtml(debt.title)+'</b><small>'+escapeHtml(debt.creditor||"")+(Number(debt.interest_rate)>0?" · "+debt.interest_rate+"% годовых":"")+(Number(debt.minimum_payment)>0?" · платёж "+money(debt.minimum_payment):"")+(debt.due_day?" · до "+debt.due_day+" числа":"")+(debt.status==="closed"?" · закрыт":"")+'</small></div><strong>'+money(debt.balance)+'</strong><button class="button ghost" data-debt-edit="'+escapeHtml(debt.id)+'">Изменить условия</button></article>').join(""):'<p class="muted">Долги пока не добавлены.</p>';
   $("finance-debt-payments").innerHTML=financeData.debt_payments.length?financeData.debt_payments.map(payment=>'<article class="finance-row"><div><b>'+escapeHtml(payment.debt_title)+' · '+money(payment.amount)+'</b><small>'+payment.paid_on+(payment.reversal_id?' · Отменён '+payment.reversed_on+' · '+escapeHtml(payment.reversal_reason):' · Записан платеж')+'</small></div>'+(payment.reversal_id?'<span class="muted">Отменён</span>':'<button class="button ghost" data-debt-payment-reverse="'+escapeHtml(payment.id)+'">Исправить</button>')+'</article>').join(""):'<p class="muted">Платежей по долгам пока нет.</p>';
   $("finance-obligations").innerHTML=financeData.obligations.length?financeData.obligations.map(item=>'<article class="finance-row"><div><b>'+escapeHtml(item.title)+'</b><small>'+item.due_date+' · '+(item.frequency==="monthly"?"ежемесячно":item.frequency==="weekly"?"еженедельно":"один раз")+'</small></div><strong>'+money(item.amount)+'</strong><button class="button ghost" data-obligation-paid="'+escapeHtml(item.id)+'">Оплачено</button></article>').join(""):'<p class="muted">Предстоящих платежей пока нет.</p>';
   $("finance-obligation-payments").innerHTML=(financeData.obligation_payments||[]).length?financeData.obligation_payments.map(payment=>'<article class="finance-row"><div><b>'+escapeHtml(payment.obligation_title)+' · '+money(payment.amount)+'</b><small>Период: '+escapeHtml(payment.scheduled_due_date||"не сохранён")+' · Оплачено: '+payment.paid_on+(payment.reversal_id?' · Отменён '+payment.reversed_on+' · '+escapeHtml(payment.reversal_reason):'')+'</small></div>'+(payment.reversal_id?'<button class="button ghost" data-obligation-repay="'+escapeHtml(payment.obligation_id)+'" data-obligation-period="'+escapeHtml(payment.scheduled_due_date||"")+'">Оплатить период повторно</button>':'<button class="button ghost" data-obligation-reverse="'+escapeHtml(payment.id)+'">Исправить</button>')+'</article>').join(""):'<p class="muted">Оплат обязательств пока нет.</p>';
@@ -945,6 +945,22 @@ $("obligation-form").addEventListener("submit",async e=>{
   e.preventDefault();
   try{await api("/api/finance",{method:"POST",body:JSON.stringify({action:"obligation",title:$("obligation-title").value,amount:$("obligation-amount").value,due_date:$("obligation-date").value,frequency:$("obligation-frequency").value,category:$("obligation-category").value})});$("obligation-form").reset();await loadFinance();}
   catch(err){alert(err.message);}
+});
+$("finance-debts").addEventListener("click",async e=>{
+ const button=e.target.closest("[data-debt-edit]");if(!button)return;
+ const debt=(financeData?.debts||[]).find(row=>row.id===button.dataset.debtEdit);if(!debt)return;
+ const ask=(label,value)=>prompt(label,value==null?"":String(value));
+ const title=ask("Название долга:",debt.title);if(title===null)return;
+ const creditor=ask("Кредитор:",debt.creditor||"");if(creditor===null)return;
+ const rate=ask("Ставка, % годовых:",debt.interest_rate);if(rate===null)return;
+ const minimum=ask("Минимальный платёж в месяц, ₽:",debt.minimum_payment);if(minimum===null)return;
+ const dueDay=ask("День платежа (1–31, пусто — не задан):",debt.due_day??"");if(dueDay===null)return;
+ const notes=ask("Примечание:",debt.notes||"");if(notes===null)return;
+ button.disabled=true;
+ try{
+  await api("/api/finance",{method:"POST",body:JSON.stringify({action:"debt_update",id:debt.id,title,creditor,interest_rate:rate,minimum_payment:minimum,due_day:dueDay,notes})});
+  await loadFinance();
+ }catch(err){button.disabled=false;alert(err.message);}
 });
 $("debt-payment-form").addEventListener("submit",async e=>{
   e.preventDefault();

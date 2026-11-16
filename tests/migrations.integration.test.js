@@ -112,6 +112,11 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
    assert.throws(()=>db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason) VALUES(?,?,?,?,?,?)").run("debt_reverse_duplicate","u1","bucket_debt_payment",30,"2026-11-23","Повторная отмена"),/UNIQUE constraint failed/);
    assert.equal(db.prepare("SELECT balance FROM debts WHERE id='debt_test'").get().balance,100);
    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM debt_payment_reversals WHERE debt_payment_id='bucket_debt_payment'").get().count,1);
+    // Editing debt terms must not rewrite principal, current balance or payment history.
+    db.prepare("UPDATE debts SET title=?,interest_rate=?,minimum_payment=?,due_day=?,notes=?,updated_at=datetime('now') WHERE id=? AND user_id=?").run("Долг с новыми условиями",18.5,15,12,"Уточнённый график","debt_test","u1");
+    const editedDebt=db.prepare("SELECT initial_amount,balance,title,interest_rate,minimum_payment,due_day,notes FROM debts WHERE id='debt_test'").get();
+    assert.deepEqual(editedDebt,{initial_amount:100,balance:100,title:"Долг с новыми условиями",interest_rate:18.5,minimum_payment:15,due_day:12,notes:"Уточнённый график"});
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM debt_payments WHERE debt_id='debt_test'").get().count,1);
 
 
 

@@ -123,6 +123,18 @@ export async function onRequestPost({request,env}) {
     await env.DB.prepare("INSERT INTO debts (id,user_id,title,creditor,initial_amount,balance,interest_rate,minimum_payment,due_day,notes) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(id,user.id,title,String(body.creditor||"").slice(0,160),amount,amount,rate,minimum,dueDay,String(body.notes||"").slice(0,1000)).run();
     return json({ok:true,id},201);
   }
+  if(action==="debt_update"){
+    const debtId=String(body.id||""),title=String(body.title||"").trim(),creditor=String(body.creditor||"").trim();
+    const rate=Number(String(body.interest_rate??"0").replace(",","."));
+    const minimum=Number(String(body.minimum_payment??"0").replace(",","."));
+    const dueDay=body.due_day===""||body.due_day==null?null:Number(body.due_day);
+    const notes=String(body.notes||"");
+    if(!debtId||!title||title.length>180||creditor.length>160||!Number.isFinite(rate)||rate<0||rate>1000||!Number.isFinite(minimum)||minimum<0||minimum>100000000||(dueDay!==null&&(!Number.isInteger(dueDay)||dueDay<1||dueDay>31))||notes.length>1000)return json({error:"Проверь название, кредитора, ставку, минимальный платёж и день оплаты"},400);
+    const result=await env.DB.prepare("UPDATE debts SET title=?,creditor=?,interest_rate=?,minimum_payment=?,due_day=?,notes=?,updated_at=datetime('now') WHERE id=? AND user_id=?").bind(title,creditor,rate,minimum,dueDay,notes,debtId,user.id).run();
+    if(!result.meta.changes)return json({error:"Долг не найден"},404);
+    const updated=await env.DB.prepare("SELECT id,title,creditor,initial_amount,balance,interest_rate,minimum_payment,due_day,notes,status FROM debts WHERE id=? AND user_id=?").bind(debtId,user.id).first();
+    return json({ok:true,debt:updated});
+  }
   if(action==="debt_payment"){
     const debtId=String(body.debt_id||""),amount=validAmount(body.amount),date=String(body.paid_on||""),requestId=String(body.request_id||"");
     if(!debtId||!amount||!validDate(date)||!/^[a-zA-Z0-9_-]{16,100}$/.test(requestId))return json({error:"Проверь долг, сумму, дату и идентификатор запроса"},400);
