@@ -11,7 +11,7 @@ const app=readFileSync(join(root,"public/app.js"),"utf8");
 function database(){
  const db=new DatabaseSync(":memory:");
  db.exec(readFileSync(join(root,"schema.sql"),"utf8"));
- for(const name of readdirSync(join(root,"migrations")).filter(x=>/^\\d+_.+\\.sql$/.test(x)).sort((a,b)=>a.localeCompare(b)))db.exec(readFileSync(join(root,"migrations",name),"utf8"));
+ for(const name of readdirSync(join(root,"migrations")).filter(x=>/^\d+_.+\.sql$/.test(x)).sort((a,b)=>a.localeCompare(b)))db.exec(readFileSync(join(root,"migrations",name),"utf8"));
  db.prepare("INSERT INTO users(id,email,password_hash,password_salt) VALUES(?,?,?,?)").run("u","reserve-idempotency@example.test","hash","salt");
  db.prepare("INSERT INTO cash_reserves(id,user_id,title,target_amount,current_amount) VALUES(?,?,?,?,?)").run("r","u","Резерв",500,100);
  return db;
