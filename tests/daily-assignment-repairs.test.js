@@ -1,0 +1,109 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { buildDailyAssignmentRepairs } from "../functions/_lib/daily-assignment-repairs.js";
+
+function baseWeek(){
+ return {daily_assignment_issues:[{task_id:"a",type:"stale"}],days:[
+  {date:"2026-11-16",working_day:true,available_minutes:60,tasks:[]},
+  {date:"2026-11-17",working_day:true,available_minutes:60,tasks:[]},
+  {date:"2026-11-18",working_day:true,available_minutes:60,tasks:[]}
+ ]};
+}
+const task={id:"a",title:"Подготовить отчёт",status:"doing",estimated_minutes:100,actual_minutes:20,due_date:"2026-11-18"};
+test("repairs changed remaining estimate while preserving preferred dates",()=>{
+ const result=buildDailyAssignmentRepairs(baseWeek(),[
+  {task_id:"a",allocation_date:"2026-11-16",minutes:40},
+  {task_id:"a",allocation_date:"2026-11-17",minutes:40}
+ ],[task]);
+ assert.deepEqual(result.schedules[0].allocations,[{date:"2026-11-16",minutes:40},{date:"2026-11-17",minutes:40}]);
+ assert.equal(result.proposals[0].old_minutes,80);
+ assert.equal(result.proposals[0].new_minutes,80);
+ assert.equal(result.requires_confirmation,true);
+});
+test("adds missing minutes after a task estimate increases",()=>{
+ const result=buildDailyAssignmentRepairs(baseWeek(),[{task_id:"a",allocation_date:"2026-11-16",minutes:40}],[{...task,estimated_minutes:120,actual_minutes:20}]);
+ assert.deepEqual(result.schedules[0].allocations,[{date:"2026-11-16",minutes:40},{date:"2026-11-17",minutes:60}]);
+});
+test("reduces saved minutes when the remaining estimate decreases",()=>{
+ const result=buildDailyAssignmentRepairs(baseWeek(),[
+  {task_id:"a",allocation_date:"2026-11-16",minutes:50},
+  {task_id:"a",allocation_date:"2026-11-17",minutes:50}
+ ],[{...task,estimated_minutes:70,actual_minutes:20}]);
+ assert.deepEqual(result.schedules[0].allocations,[{date:"2026-11-16",minutes:50},{date:"2026-11-17",minutes:0}].filter(row=>row.minutes>0));
+});
+test("respects deadline and working-day capacity and reports an impossible repair",()=>{
+ const week=baseWeek();week.days[1].working_day=false;week.days[2].available_minutes=10;
+ const result=buildDailyAssignmentRepairs(week,[{task_id:"a",allocation_date:"2026-11-16",minutes:40}],[{...task,estimated_minutes:140,actual_minutes:20}]);
+ assert.equal(result.schedules.length,0);
+ assert.equal(result.unresolved[0].minutes,50);
+});
+test("does not displace other tasks and leaves input untouched",()=>{
+ const week=baseWeek();week.days[0].tasks=[{id:"b",minutes:40}];
+ const snapshot=JSON.stringify(week);
+ const result=buildDailyAssignmentRepairs(week,[{task_id:"a",allocation_date:"2026-11-16",minutes:40}],[task]);
+ assert.deepEqual(result.schedules[0].allocations,[{date:"2026-11-16",minutes:20},{date:"2026-11-17",minutes:60}]);
+ assert.equal(JSON.stringify(week),snapshot);
+});
+
+test("an unresolved repair does not reserve partial capacity from a later feasible task",()=>{
+ const week=baseWeek();
+ week.daily_assignment_issues=[{task_id:"a",type:"stale"},{task_id:"b",type:"stale"}];
+ week.days[0].available_minutes=30;
+ week.days[1].working_day=false;
+ week.days[2].working_day=false;
+ const result=buildDailyAssignmentRepairs(week,[
+  {task_id:"a",allocation_date:"2026-11-16",minutes:30}
+ ],[
+  {...task,estimated_minutes:100,actual_minutes:0,due_date:"2026-11-16"},
+  {id:"b",title:"Вторая задача",status:"todo",estimated_minutes:30,actual_minutes:0,due_date:"2026-11-16"}
+ ]);
+ assert.deepEqual(result.schedules,[{task_id:"b",allocations:[{date:"2026-11-16",minutes:30}]}]);
+ assert.equal(result.unresolved.length,1);
+ assert.equal(result.unresolved[0].task_id,"a");
+});
+
+test("coordinates capacity across multiple affected tasks without double counting old shares",()=>{
+ const week=baseWeek();
+ week.daily_assignment_issues=[{task_id:"a",type:"stale"},{task_id:"b",type:"stale"}];
+ week.days[0].available_minutes=90;
+ week.days[0].tasks=[{id:"a",minutes:30},{id:"b",minutes:30}];
+ const result=buildDailyAssignmentRepairs(week,[
+  {task_id:"a",allocation_date:"2026-11-16",minutes:30},
+  {task_id:"b",allocation_date:"2026-11-16",minutes:30}
+ ],[
+  {...task,estimated_minutes:60,actual_minutes:0,due_date:"2026-11-16"},
+  {id:"b",title:"Вторая задача",status:"todo",estimated_minutes:30,actual_minutes:0,due_date:"2026-11-16"}
+ ]);
+ assert.deepEqual(result.schedules,[
+  {task_id:"a",allocations:[{date:"2026-11-16",minutes:60}]},
+  {task_id:"b",allocations:[{date:"2026-11-16",minutes:30}]}
+ ]);
+ assert.equal(result.unresolved.length,0);
+});
+
+test("does not propose repairs for completed tasks with historical saved allocations",()=>{
+ const week=baseWeek();
+ week.daily_assignment_issues=[{task_id:"done-task",type:"stale"}];
+ const result=buildDailyAssignmentRepairs(week,[
+  {task_id:"done-task",allocation_date:"2026-11-16",minutes:60}
+ ],[
+  {id:"done-task",title:"Уже выполненная задача",status:"done",estimated_minutes:60,actual_minutes:60,due_date:"2026-11-16"}
+ ]);
+ assert.deepEqual(result,{schedules:[],proposals:[],unresolved:[]});
+});
+
+test("recalculates reopened todo tasks from estimate minus recorded actual time",()=>{
+ const week=baseWeek();
+ const result=buildDailyAssignmentRepairs(week,[{task_id:"a",allocation_date:"2026-11-16",minutes:100}],
+ [{id:"a",title:"Повторно открытая задача",status:"todo",estimated_minutes:120,actual_minutes:45,due_date:"2026-11-18"}]);
+ assert.equal(result.proposals[0].new_minutes,75);
+ assert.equal(result.schedules[0].allocations.reduce((sum,row)=>sum+row.minutes,0),75);
+});
+
+test("does not repair unfinished tasks belonging to completed projects",()=>{
+ const week=baseWeek();
+ week.daily_assignment_issues=[{task_id:"done-project-task",type:"stale"}];
+ const result=buildDailyAssignmentRepairs(week,[{task_id:"done-project-task",allocation_date:"2026-11-16",minutes:60}],
+ [{id:"done-project-task",title:"Задача завершённого проекта",status:"todo",estimated_minutes:60,actual_minutes:0,project_status:"done"}]);
+ assert.deepEqual(result,{schedules:[],proposals:[],unresolved:[]});
+});

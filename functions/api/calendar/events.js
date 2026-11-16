@@ -1,5 +1,5 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
-import { expandRecurringEvents } from "../../_lib/calendar.js";
+import { expandRecurringEvents, createSleepCalendarEvents, isValidCalendarDate, isValidCalendarDateTime, isValidCalendarRange } from "../../_lib/calendar.js";
 
 const TYPES = ["meeting","travel","hobby","sleep","work","personal","other"];
 const MODES = ["none","online","offline"];
@@ -12,8 +12,6 @@ async function invalidateTodayPlan(env,userId) {
   const today=values.year+"-"+values.month+"-"+values.day;
   await env.DB.prepare("DELETE FROM daily_plans WHERE user_id=? AND plan_date=?").bind(userId,today).run();
 }
-const DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function cleanEvent(body) {
   const title = String(body?.title || "").trim();
@@ -28,9 +26,9 @@ function cleanEvent(body) {
   const repeat_until = body?.repeat_until ? String(body.repeat_until) : null;
   if (!title || title.length > 180) return { error:"Укажи название события (до 180 символов)" };
   if (!TYPES.includes(event_type) || !MODES.includes(mode) || !STATUSES.includes(status) || !REPEATS.includes(repeat_rule)) return { error:"Некорректный тип, повторение или статус события" };
-  if (!DATE_TIME.test(start_at) || !DATE_TIME.test(end_at) || end_at <= start_at) return { error:"Проверь дату и время начала и окончания" };
-  if ((actual_start_at && !DATE_TIME.test(actual_start_at)) || (actual_end_at && !DATE_TIME.test(actual_end_at)) || (actual_start_at && actual_end_at && actual_end_at <= actual_start_at)) return { error:"Проверь фактическое время" };
-  if (repeat_rule !== "none" && (!repeat_until || !DATE.test(repeat_until) || repeat_until < start_at.slice(0,10))) return { error:"Для повторяющегося события укажи дату окончания повторения не раньше первого события" };
+  if (!isValidCalendarDateTime(start_at) || !isValidCalendarDateTime(end_at) || end_at <= start_at) return { error:"Проверь дату и время начала и окончания" };
+  if ((actual_start_at && !isValidCalendarDateTime(actual_start_at)) || (actual_end_at && !isValidCalendarDateTime(actual_end_at)) || (actual_start_at && actual_end_at && actual_end_at <= actual_start_at)) return { error:"Проверь фактическое время" };
+  if (repeat_rule !== "none" && (!repeat_until || !isValidCalendarDate(repeat_until) || repeat_until < start_at.slice(0,10))) return { error:"Для повторяющегося события укажи дату окончания повторения не раньше первого события" };
   if (repeat_rule !== "none" && status !== "planned") return { error:"Серию событий можно оставить запланированной. Фактическое время фиксируй отдельным событием на конкретную дату." };
   if (repeat_rule !== "none" && (actual_start_at || actual_end_at)) return { error:"Фактическое время фиксируй отдельным событием на конкретную дату, не в шаблоне серии." };
   return { value:{
@@ -46,14 +44,22 @@ export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
   const from = String(url.searchParams.get("from") || "");
   const to = String(url.searchParams.get("to") || "");
-  if (!DATE_TIME.test(from) || !DATE_TIME.test(to) || to <= from) return json({ error:"Укажи корректный период календаря" },400);
+  if (!isValidCalendarRange(from,to)) return json({ error:"Укажи корректный период календаря не более 366 дней" },400);
   const { results } = await env.DB.prepare(`
     SELECT * FROM calendar_events
     WHERE user_id=? AND status!='cancelled'
       AND ((start_at < ? AND end_at > ?) OR (repeat_rule!='none' AND start_at < ? AND repeat_until >= ?))
     ORDER BY start_at
   `).bind(user.id,to,from,to,from.slice(0,10)).all();
-  return json({ events:expandRecurringEvents(results,from,to) });
+  const settings = await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(user.id).first();
+  const timezone = settings?.timezone || "Europe/Moscow";
+  const fromDate = new Date(from.slice(0,10) + "T12:00:00Z");
+  fromDate.setUTCDate(fromDate.getUTCDate() - 1);
+  const sleepFrom = fromDate.toISOString().slice(0,10);
+  const sleepRows = await env.DB.prepare("SELECT * FROM sleep_sessions WHERE user_id=? AND sleep_date>=? AND sleep_date<=? AND fell_asleep_at IS NOT NULL AND woke_at IS NOT NULL").bind(user.id,sleepFrom,to.slice(0,10)).all();
+  const events = expandRecurringEvents(results,from,to);
+  const sleepEvents = createSleepCalendarEvents(sleepRows.results,from,to,timezone,events);
+  return json({ events:[...events,...sleepEvents].sort((a,b)=>a.start_at.localeCompare(b.start_at)) });
 }
 
 export async function onRequestPost({ request, env }) {

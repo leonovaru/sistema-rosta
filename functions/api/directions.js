@@ -16,7 +16,7 @@ export async function onRequestGet({ request, env }) {
     SELECT d.*,
       COALESCE(SUM(CASE WHEN i.received_on >= ? AND i.received_on <= ? THEN i.amount ELSE 0 END),0) AS actual_month
     FROM directions d
-    LEFT JOIN income_entries i ON i.direction_id=d.id AND i.user_id=d.user_id
+    LEFT JOIN income_entries i ON COALESCE(i.direction_id_snapshot,i.direction_id)=d.id AND i.user_id=d.user_id
     WHERE d.user_id=?
     GROUP BY d.id
     ORDER BY d.sort_order,d.id

@@ -1,0 +1,89 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readdirSync,readFileSync} from "node:fs";
+import {join,dirname} from "node:path";
+import {fileURLToPath} from "node:url";
+import {DatabaseSync} from "node:sqlite";
+
+const root=join(dirname(fileURLToPath(import.meta.url)),"..");
+function database(){
+ const db=new DatabaseSync(":memory:");
+ db.exec(readFileSync(join(root,"schema.sql"),"utf8"));
+ for(const name of readdirSync(join(root,"migrations")).filter(x=>/^[0-9]+_.+\.sql$/.test(x)).sort((a,b)=>a.localeCompare(b)))db.exec(readFileSync(join(root,"migrations",name),"utf8"));
+ db.prepare("INSERT INTO users(id,email,password_hash,password_salt) VALUES(?,?,?,?)").run("u","history@example.test","hash","salt");
+ return db;
+}
+
+test("reserve balance changes are journaled and a reserve with history cannot be deleted",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO cash_reserves(id,user_id,title,target_amount,current_amount) VALUES(?,?,?,?,?)").run("r","u","Подушка",50000,10000);
+  const opening=db.prepare("SELECT transaction_type,amount,balance_after FROM cash_reserve_transactions WHERE reserve_id='r'").get();
+  assert.equal(opening.transaction_type,"opening");
+  assert.equal(opening.amount,10000);
+  assert.equal(opening.balance_after,10000);
+  db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) VALUES(?,?,?,?,?,?,?)").run("c1","u","r","contribution",2500,12500,"Пополнение");
+  db.prepare("UPDATE cash_reserves SET current_amount=12500 WHERE id='r'").run();
+  db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) VALUES(?,?,?,?,?,?,?)").run("w1","u","r","withdrawal",1000,11500,"Снятие");
+  db.prepare("UPDATE cash_reserves SET current_amount=11500 WHERE id='r'").run();
+  const operations=db.prepare("SELECT transaction_type,amount,balance_after FROM cash_reserve_transactions WHERE reserve_id='r' ORDER BY id").all();
+  assert.equal(operations.length,3);
+  assert.equal(operations.find(x=>x.transaction_type==="contribution").amount,2500);
+  assert.equal(operations.find(x=>x.transaction_type==="contribution").balance_after,12500);
+  assert.equal(operations.find(x=>x.transaction_type==="withdrawal").amount,1000);
+  assert.equal(operations.find(x=>x.transaction_type==="withdrawal").balance_after,11500);
+  db.prepare("UPDATE cash_reserves SET current_amount=12000 WHERE id='r' AND current_amount=11500").run();
+  db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) SELECT 'race','u','r','contribution',500,12000,'Пополнение' WHERE changes()=1").run();
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_reserve_transactions WHERE id='race'").get().count,1);
+  db.prepare("UPDATE cash_reserves SET current_amount=13000 WHERE id='r' AND current_amount=11500").run();
+  db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) SELECT 'stale','u','r','contribution',1000,13000,'Устаревшая операция' WHERE changes()=1").run();
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_reserve_transactions WHERE id='stale'").get().count,0);
+  assert.throws(()=>db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after) VALUES('bad','u','r','withdrawal',20000,-8500)").run(),/CHECK constraint failed/);
+  assert.throws(()=>db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after) VALUES('wrong','other','r','contribution',1,11501)").run(),/Операция должна относиться/);
+  assert.throws(()=>db.prepare("DELETE FROM cash_reserves WHERE id='r'").run(),/FOREIGN KEY constraint failed/);
+  assert.throws(()=>db.prepare("UPDATE cash_reserve_transactions SET amount=1 WHERE reserve_id='r'").run(),/Операцию по резерву нельзя изменить/);
+  assert.throws(()=>db.prepare("DELETE FROM cash_reserve_transactions WHERE reserve_id='r'").run(),/Операцию по резерву нельзя удалить/);
+  db.prepare("UPDATE cash_reserves SET active=0 WHERE id='r'").run();
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_reserve_transactions WHERE reserve_id='r'").get().count,4);
+ }finally{db.close();}
+});
+
+test("bucket archive preserves allocations and spending and rejects new allocations",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("b","u","Резерв",100);
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("b2","u","Другие расходы",0);
+  db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on) VALUES(?,?,?,?)").run("i","u",100,"2026-11-16");
+  db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a","u","i","b",100,100);
+  db.prepare("INSERT INTO expenses(id,user_id,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?)").run("e","u","Покупка",40,"2026-11-16","b");
+  assert.throws(()=>db.prepare("DELETE FROM income_buckets WHERE id='b'").run(),/Нельзя удалить распределение и финансовую историю корзины/);
+  db.prepare("UPDATE income_buckets SET active=0,percentage=0 WHERE id='b'").run();
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM income_bucket_allocations WHERE bucket_id='b'").get().count,1);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses WHERE bucket_id='b'").get().count,1);
+  assert.throws(()=>db.prepare("INSERT INTO income_bucket_allocations(id,user_id,income_id,bucket_id,percentage,amount) VALUES(?,?,?,?,?,?)").run("a2","u","i","b",0,0),/Нельзя распределять деньги в архивную корзину/);
+ }finally{db.close();}
+});
+
+test("archived buckets reject new expenses, debt payments and obligation payments",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage,active) VALUES(?,?,?,?,?)").run("archived","u","Архив",0,0);
+  db.prepare("INSERT INTO debts(id,user_id,title,initial_amount,balance) VALUES(?,?,?,?,?)").run("d","u","Долг",1000,1000);
+  db.prepare("INSERT INTO payment_obligations(id,user_id,title,amount,due_date) VALUES(?,?,?,?,?)").run("o","u","Счёт",100,"2026-11-20");
+  assert.throws(()=>db.prepare("INSERT INTO expenses(id,user_id,category,title,amount,spent_on,bucket_id) VALUES(?,?,?,?,?,?,?)").run("e","u","Прочее","Покупка",10,"2026-11-16","archived"),/Нельзя записать новый расход в архивную корзину/);
+  assert.throws(()=>db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on,bucket_id) VALUES(?,?,?,?,?,?)").run("dp","u","d",10,"2026-11-16","archived"),/Нельзя записать платёж в архивную корзину/);
+  assert.throws(()=>db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id) VALUES(?,?,?,?,?,?)").run("op","u","o",10,"2026-11-16","archived"),/Нельзя записать обязательный платёж в архивную корзину/);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM expenses WHERE bucket_id='archived'").get().count,0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM debt_payments WHERE bucket_id='archived'").get().count,0);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM obligation_payments WHERE bucket_id='archived'").get().count,0);
+ }finally{db.close();}
+});
+
+test("database prevents archiving the last active income bucket",()=>{
+ const db=database();
+ try{
+  db.prepare("INSERT INTO income_buckets(id,user_id,title,percentage) VALUES(?,?,?,?)").run("only","u","Единственная",100);
+  assert.throws(()=>db.prepare("UPDATE income_buckets SET active=0,percentage=0 WHERE id='only'").run(),/Нельзя архивировать последнюю активную корзину/);
+  assert.equal(db.prepare("SELECT active FROM income_buckets WHERE id='only'").get().active,1);
+ }finally{db.close();}
+});

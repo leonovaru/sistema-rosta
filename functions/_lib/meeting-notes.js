@@ -1,0 +1,48 @@
+export function isValidMeetingDate(value){
+ const s=String(value||"");
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
+ const date=new Date(s+"T00:00:00Z");
+ return !Number.isNaN(date.getTime())&&date.toISOString().slice(0,10)===s;
+}
+export function cleanMeetingItems(value,max=20){
+ return (Array.isArray(value)?value:[]).slice(0,max).map(item=>String(item||"").trim().slice(0,1000)).filter(Boolean);
+}
+export function normalizeMeetingAgreements(value,validProjectIds=new Set(),validClientIds=new Set(),projects=[]){
+ return (Array.isArray(value)?value:[]).slice(0,20).map(item=>{
+  const projectId=validProjectIds.has(item?.project_id)?item.project_id:null;
+  const project=projects.find(row=>row.id===projectId)||null;
+  const clientId=project?.client_id&&validClientIds.has(project.client_id)?project.client_id:(validClientIds.has(item?.client_id)?item.client_id:null);
+  return {
+   task:String(item?.task||"").trim().slice(0,240),
+   assignee:item?.assignee?String(item.assignee).trim().slice(0,160):null,
+   due_date:isValidMeetingDate(item?.due_date)?item.due_date:null,
+   project_id:projectId,
+   client_id:clientId
+  };
+ }).filter(item=>item.task);
+}
+
+export function normalizeMeetingLinks(projectId,clientId,projects=[],clients=[]){
+ const project=projects.find(item=>item.id===projectId)||null;
+ let client=clients.find(item=>item.id===clientId)||null;
+ if(project?.client_id){
+  const projectClient=clients.find(item=>item.id===project.client_id)||null;
+  if(projectClient)client=projectClient;
+ }
+ return {project_id:project?.id||null,client_id:client?.id||null};
+}
+
+export function isMeetingTaskLinkCompatible(agreement,task){
+ if(!agreement||!task)return false;
+ if(agreement.project_id&&task.project_id&&agreement.project_id!==task.project_id)return false;
+ const taskClientId=task.client_id||task.project_client_id||null;
+ if(agreement.client_id&&taskClientId&&agreement.client_id!==taskClientId)return false;
+ return true;
+}
+
+export function shouldResetMeetingTaskLinks(existing,next){
+ if(!existing)return false;
+ return (existing.project_id||null)!==(next.project_id||null)
+  ||(existing.client_id||null)!==(next.client_id||null)
+  ||String(existing.agreements_json||"[]")!==JSON.stringify(next.agreements||[]);
+}

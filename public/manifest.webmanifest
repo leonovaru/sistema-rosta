@@ -1,0 +1,11 @@
+{
+  "name": "Система роста",
+  "short_name": "Система роста",
+  "description": "Личная система управления делами, проектами и финансами",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f6fa",
+  "theme_color": "#f5f6fa"
+}

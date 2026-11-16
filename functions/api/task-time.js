@@ -1,0 +1,70 @@
+import { json, requireUser, readJson, newId } from "../_lib/auth.js";
+import { elapsedMinutes } from "../_lib/time-tracking.js";
+import { isTaskAvailableForPlanning } from "../_lib/task-planning-availability.js";
+
+async function invalidateTodayPlan(env,userId) {
+  const settings=await env.DB.prepare("SELECT timezone FROM settings WHERE user_id=?").bind(userId).first();
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:settings?.timezone||"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));
+  await env.DB.prepare("DELETE FROM daily_plans WHERE user_id=? AND plan_date=?").bind(userId,values.year+"-"+values.month+"-"+values.day).run();
+}
+
+export async function onRequestGet({ request, env }) {
+  const user = await requireUser(request, env);
+  if (!user) return json({ error:"Необходим вход" },401);
+  const active = await env.DB.prepare(`
+    SELECT e.id,e.task_id,e.started_at,t.title
+    FROM task_time_entries e JOIN tasks t ON t.id=e.task_id AND t.user_id=e.user_id
+    WHERE e.user_id=? AND e.ended_at IS NULL LIMIT 1
+  `).bind(user.id).first();
+  const { results } = await env.DB.prepare(`
+    SELECT task_id,COUNT(*) AS sessions,COALESCE(SUM(duration_minutes),0) AS tracked_minutes
+    FROM task_time_entries WHERE user_id=? AND ended_at IS NOT NULL GROUP BY task_id
+  `).bind(user.id).all();
+  return json({ active_timer:active || null, totals:results });
+}
+
+export async function onRequestPost({ request, env }) {
+  const user = await requireUser(request, env);
+  if (!user) return json({ error:"Необходим вход" },401);
+  const body = await readJson(request) || {};
+  const action = String(body.action || "");
+  if (action === "start") {
+    const taskId = String(body.task_id || "");
+    if (!taskId) return json({ error:"Выберите задачу" },400);
+    const task = await env.DB.prepare("SELECT t.id,t.status,p.status AS project_status,c.status AS client_status,pc.status AS project_client_status FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN clients pc ON pc.id=p.client_id AND pc.user_id=p.user_id WHERE t.id=? AND t.user_id=?").bind(taskId,user.id).first();
+    if (!task) return json({ error:"Задача не найдена" },404);
+    if (task.status==="done") return json({ error:"Нельзя запустить таймер завершённой задачи" },400);
+    if(!isTaskAvailableForPlanning(task))return json({error:"Нельзя запускать таймер задачи архивного проекта или закрытого клиента"},409);
+    const active = await env.DB.prepare("SELECT id,task_id FROM task_time_entries WHERE user_id=? AND ended_at IS NULL").bind(user.id).first();
+    if (active) return json({ error:active.task_id===taskId?"Таймер этой задачи уже запущен":"Сначала остановите таймер другой задачи" },409);
+    const id = newId();
+    const now = new Date().toISOString();
+    try {
+      const [, timerInsert] = await env.DB.batch([
+        env.DB.prepare("UPDATE tasks SET status='doing' WHERE id=? AND user_id=? AND status!='done' AND NOT EXISTS (SELECT 1 FROM projects p LEFT JOIN clients c ON c.id=p.client_id AND c.user_id=p.user_id WHERE p.id=tasks.project_id AND p.user_id=tasks.user_id AND (p.status IN ('archived','done') OR c.status='closed')) AND NOT EXISTS (SELECT 1 FROM clients c WHERE c.id=tasks.client_id AND c.user_id=tasks.user_id AND c.status='closed') AND NOT EXISTS (SELECT 1 FROM task_time_entries WHERE user_id=? AND ended_at IS NULL)").bind(taskId,user.id,user.id),
+        env.DB.prepare("INSERT INTO task_time_entries(id,user_id,task_id,started_at,attribution_captured,direction_id,project_id,life_area_id,client_id,direction_title,project_title,life_area_title,client_name) SELECT ?,?,?,?,1,COALESCE(t.direction_id,p.direction_id,c.direction_id),t.project_id,t.life_area_id,t.client_id,d.title,p.title,la.title,c.name FROM tasks t LEFT JOIN projects p ON p.id=t.project_id AND p.user_id=t.user_id LEFT JOIN clients c ON c.id=t.client_id AND c.user_id=t.user_id LEFT JOIN clients pc ON pc.id=p.client_id AND pc.user_id=p.user_id LEFT JOIN directions d ON d.id=COALESCE(t.direction_id,p.direction_id,c.direction_id) AND d.user_id=t.user_id LEFT JOIN life_areas la ON la.id=t.life_area_id AND la.user_id=t.user_id WHERE t.id=? AND t.user_id=? AND t.status='doing' AND (p.id IS NULL OR (p.status NOT IN ('archived','done') AND (pc.id IS NULL OR pc.status!='closed'))) AND (c.id IS NULL OR c.status!='closed') AND NOT EXISTS (SELECT 1 FROM task_time_entries WHERE user_id=? AND ended_at IS NULL)").bind(id,user.id,taskId,now,taskId,user.id,user.id)
+      ]);
+      if (!timerInsert.meta.changes) return json({ error:"Задача уже завершена или запущен другой таймер. Обновите страницу." },409);
+    } catch {
+      return json({ error:"Уже запущен другой таймер. Обновите страницу." },409);
+    }
+    await invalidateTodayPlan(env,user.id);
+    return json({ ok:true,active_timer:{id,task_id:taskId,started_at:now} },201);
+  }
+  if (action === "stop" || action === "pause") {
+    const active = await env.DB.prepare("SELECT id,task_id,started_at FROM task_time_entries WHERE user_id=? AND ended_at IS NULL").bind(user.id).first();
+    if (!active) return json({ error:"Активный таймер не найден" },404);
+    const endedAt = new Date().toISOString();
+    const minutes = elapsedMinutes(active.started_at,endedAt);
+    if (minutes===null) return json({ error:"Не удалось рассчитать время таймера" },500);
+    const [update] = await env.DB.batch([
+      env.DB.prepare("UPDATE task_time_entries SET ended_at=?,duration_minutes=? WHERE id=? AND user_id=? AND ended_at IS NULL").bind(endedAt,minutes,active.id,user.id),
+      env.DB.prepare("UPDATE tasks SET actual_minutes=COALESCE(actual_minutes,0)+? WHERE id=? AND user_id=? AND changes()=1 AND EXISTS (SELECT 1 FROM task_time_entries WHERE id=? AND user_id=? AND ended_at=? AND duration_minutes=?)").bind(minutes,active.task_id,user.id,active.id,user.id,endedAt,minutes)
+    ]);
+    if (!update.meta.changes) return json({ error:"Таймер уже остановлен" },409);
+    await invalidateTodayPlan(env,user.id);
+    return json({ ok:true,task_id:active.task_id,tracked_minutes:minutes,ended_at:endedAt });
+  }
+  return json({ error:"Неизвестное действие" },400);
+}

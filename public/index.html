@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#f5f6fa">
   <title>Система роста</title>
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -18,6 +19,30 @@
       <section id="app-view" class="hidden">
         <div class="welcome"><div><p class="eyebrow">ТВОЯ РАБОЧАЯ ПАНЕЛЬ</p><h1>Добро пожаловать!</h1><p class="muted">Сначала главное — что приближает к доходу.</p></div><div class="date-pill" id="today"></div></div>
         <div class="metrics"><article class="metric"><span>Цель на месяц</span><strong id="target">300 000 ₽</strong></article><article class="metric"><span>Получено в этом месяце</span><strong id="actual">0 ₽</strong></article><article class="metric"><span>Осталось до цели</span><strong id="gap">300 000 ₽</strong></article><article class="metric"><span>Прогноз на месяц</span><strong id="forecast">—</strong></article></div>
+        <section class="panel workspace-panel">
+          <div class="section-head"><div><p class="eyebrow">СТРУКТУРА ДЕЛ</p><h2>Клиенты, проекты и личная жизнь</h2></div><span class="muted">Работа и личное — в одной системе</span></div>
+          <div class="workspace-forms">
+            <form id="client-form" class="workspace-form"><h3>Новый клиент</h3><label>Имя / компания<input id="client-name" required maxlength="160"></label><label>Направление дохода<select id="client-direction"><option value="">Выбрать направление</option></select></label><label>Контакт<input id="client-contact" maxlength="240"></label><label>Заметки<textarea id="client-notes" rows="2" maxlength="3000"></textarea></label><button class="button primary">Добавить клиента</button></form>
+            <form id="project-form" class="workspace-form"><h3>Новый проект</h3><label>Название проекта<input id="project-title" required maxlength="180"></label><label>Клиент<select id="project-client"><option value="">Собственный проект / без клиента</option></select></label><label>Направление дохода<select id="project-direction"><option value="">Без направления</option></select></label><label>Описание задачи<textarea id="project-description" rows="3" maxlength="5000" placeholder="Что нужно сделать, исходные условия и требования"></textarea></label><label>Ожидаемый результат<textarea id="project-result" rows="2" maxlength="2000"></textarea></label><div class="workspace-inline"><label>Срок<input id="project-deadline" type="date"></label><label>Плановая сумма договора / выручки, ₽<input id="project-budget" type="number" min="0" step="0.01"></label><label>Бюджет прямых расходов, ₽<input id="project-cost-budget" type="number" min="0" step="0.01"></label></div><button class="button primary">Создать проект</button></form>
+            <form id="life-area-form" class="workspace-form"><h3>Новая личная область</h3><label>Название<input id="life-area-title" required maxlength="100" placeholder="Например, Обучение"></label><label>Описание<input id="life-area-description" maxlength="1000"></label><button class="button primary">Добавить область</button><p class="fine">Стартовые области: дом, покупки, коты, уход за собой, здоровье и отдых, личное развитие.</p></form>
+          </div>
+          <section class="recurring-section">
+            <div class="section-head"><div><p class="eyebrow">РЕГУЛЯРНЫЕ ДЕЛА</p><h3>Повторяющиеся задачи</h3></div><span class="muted">Автоматически создаются на ближайшие 30 дней</span></div>
+            <form id="recurring-task-form" class="recurring-form">
+              <label class="recurring-wide">Что нужно делать?<input id="recurring-title" required maxlength="240" placeholder="Например, убрать кухню или проверить корм у котов"></label>
+              <label>Личная область<select id="recurring-area"><option value="">Без области</option></select></label>
+              <label>Повторять<select id="recurring-rule"><option value="daily">Каждый день</option><option value="weekly">Каждую неделю</option><option value="monthly">Каждый месяц</option></select></label>
+              <label>Начать с<input id="recurring-start" type="date" required></label>
+              <label>Последняя дата (необязательно)<input id="recurring-end" type="date"></label>
+              <label>Сколько минут<input id="recurring-minutes" type="number" min="5" max="10000" step="5" placeholder="Например, 20"></label>
+              <label>Приоритет<select id="recurring-priority"><option value="high">Высокий</option><option value="medium" selected>Обычный</option><option value="low">Низкий</option></select></label>
+              <label class="recurring-wide">Комментарий<textarea id="recurring-description" rows="2" maxlength="2000" placeholder="Что именно входит в задачу"></textarea></label><label class="recurring-wide">Подзадачи — каждая с новой строки<textarea id="recurring-subtasks" rows="4" maxlength="4000" placeholder="Протереть поверхности&#10;Помыть пол&#10;Вынести мусор"></textarea><small class="fine">Подзадачи будут создаваться вместе с каждой повторяющейся задачей.</small></label>
+              <button class="button primary">Создать повторяющуюся задачу</button>
+            </form>
+            <div id="recurring-task-list" class="recurring-list"></div>
+          </section>
+          <div class="workspace-columns"><div><h3>Клиенты</h3><div id="workspace-clients" class="workspace-list"></div></div><div><h3>Проекты</h3><div id="project-workload-summary" class="project-workload-summary"></div><div id="workspace-projects" class="workspace-list"></div><div id="project-plan-preview" class="project-plan-preview hidden"></div></div><div><h3>Личные области</h3><div id="workspace-areas" class="workspace-list"></div></div></div>
+        </section>
         <section class="panel finance-panel">
           <div class="section-head"><div><p class="eyebrow">ФИНАНСОВАЯ КАРТИНА</p><h2>Деньги, расходы и обязательства</h2></div><span class="muted" id="finance-period"></span></div>
           <div class="finance-metrics">
@@ -28,12 +53,126 @@
             <article><span>Остаток долгов</span><b id="finance-debt-balance">0 ₽</b></article>
             <article><span>Просрочено и к оплате за 30 дней</span><b id="finance-upcoming">0 ₽</b></article><article><span>Останется после них</span><b id="finance-after-upcoming">0 ₽</b></article>
           </div>
+          <section class="profitability-section"><div class="section-head"><div><p class="eyebrow">ЭКОНОМИКА НАПРАВЛЕНИЙ</p><h3>Что приносит больше результата</h3></div><div class="analytics-actions"><span id="profitability-period" class="muted"></span><button id="refresh-profitability" type="button" class="button ghost">Обновить</button></div></div><div id="profitability-summary" class="analytics-metrics"></div><div id="profitability-directions" class="analytics-list"></div><div class="time-allocation"><div class="section-head"><div><h4>Куда направить дополнительные часы</h4><p class="fine">Предложение рассчитывается по фактическому вкладу на час, конверсии, длительности продаж и объёму данных. Оно не меняет календарь автоматически.</p></div><label>Часов в неделю <input id="allocation-hours" type="number" min="1" max="80" step="1" value="5"></label></div><div id="time-allocation-results" class="analytics-list"></div><button id="create-allocation-tasks" type="button" class="button ghost" disabled>Создать задачи по предложению</button></div><p class="fine">Вклад = поступления минус расходы, прямо отнесённые к направлению. Почасовые показатели распределяют закрытые сессии таймера по направлению на момент запуска, а остаток ручного фактического времени завершённой задачи — по направлению на момент завершения. Минуты таймера вычитаются из общего факта задачи, чтобы не учитывать их дважды. Воронка и длительность продаж показываются за последние 90 дней; рядом указано количество наблюдений. Это управленческая оценка, а не бухгалтерская прибыль: общие расходы и проценты по долгам сюда не распределяются. Низкая конверсия при малой выборке — сигнал собрать данные, а не основание автоматически отключать направление.</p></section>
+          <section class="cashflow-section">
+            <div class="section-head"><div><p class="eyebrow">ПЛАНИРОВАНИЕ ДЕНЕГ</p><h3>Прогноз денежного потока</h3></div><div class="analytics-actions"><select id="cashflow-days" aria-label="Период прогноза"><option value="30">30 дней</option><option value="90" selected>90 дней</option></select><button type="button" class="button ghost" id="refresh-cashflow">Обновить</button></div></div>
+            <div class="cashflow-opening"><label>Общий остаток денег на счетах, ₽<input id="cashflow-opening-balance" type="number" min="0" step="0.01" value="0"></label><button type="button" class="button ghost" id="save-opening-balance">Сохранить остаток</button><small class="fine">Укажи весь фактический остаток, включая уже отложенные в резервы деньги. Резервы будут отдельно вычтены из доступной для трат суммы.</small></div>
+            <div class="analytics-metrics" id="cashflow-summary"></div>
+            <section class="deal-cashflow-scenarios"><h4>Как продажи могут повлиять на остаток денег</h4><p class="fine">Это отдельные сценарии поверх базового прогноза. Сделки не считаются гарантированными поступлениями и не меняют основной остаток.</p><div id="deal-cashflow-scenario-cards" class="deal-cashflow-grid"></div><div id="deal-cashflow-note" class="fine"></div></section><section class="financial-risk-actions"><h4>Что сделать, чтобы закрыть кассовый разрыв</h4><div id="financial-risk-actions" class="finance-list"></div><div id="risk-sales-plan" class="risk-sales-plan"></div><p class="fine">Это рекомендации, а не созданные задачи. Проверяй даты оплаты и вероятность сделок; новые задачи добавляй после подтверждения.</p></section><div id="variable-expense-forecast" class="finance-list"></div>
+            <section class="category-budget-section">
+              <div class="section-head"><div><p class="eyebrow">ФИНАНСОВАЯ ЗАЩИТА</p><h3>Резервы и крупные расходы</h3></div></div>
+              <p class="fine">Откладываемая сумма считается недоступной для повседневных трат, но не записывается как расход и не уменьшает фактический денежный остаток. Разовые крупные покупки добавляй выше в план денежных потоков с конкретной датой.</p>
+              <div id="reserve-summary" class="analytics-metrics"></div>
+              <form id="reserve-form" class="finance-form">
+                <label>На что копим<input id="reserve-title" maxlength="160" required placeholder="Ремонт, техника, ветеринарный резерв"></label>
+                <label>Целевая сумма, ₽<input id="reserve-target" type="number" min="0.01" step="0.01" required></label>
+                <label>Уже отложено, ₽<input id="reserve-current" type="number" min="0" step="0.01" value="0"></label>
+                <label>Откладывать в месяц, ₽<input id="reserve-monthly" type="number" min="0" step="0.01" value="0"></label>
+                <label>Желаемая дата<input id="reserve-date" type="date"></label>
+                <label>Комментарий<input id="reserve-purpose" maxlength="500" placeholder="Для чего нужен резерв"></label>
+                <button class="button primary">Создать резерв</button>
+              </form>
+              <div id="cash-reserves" class="finance-list"></div>
+            </section>
+            <section class="category-budget-section">
+              <div class="section-head"><div><p class="eyebrow">НЕРЕГУЛЯРНЫЕ ТРАТЫ</p><h3>Сезонные и крупные расходы</h3></div></div>
+              <p class="fine">Добавляй расходы, которые повторяются раз в год или квартал, а также разовые траты с известной датой. Они попадут в прогноз отдельными событиями и не смешаются со средними повседневными расходами.</p>
+              <form id="irregular-expense-form" class="finance-form">
+                <label>Название<input id="irregular-title" maxlength="180" required placeholder="Страховка, обслуживание, сезонная одежда"></label>
+                <label>Категория<input id="irregular-category" maxlength="80" placeholder="Дом, здоровье, транспорт"></label>
+                <label>Сумма, ₽<input id="irregular-amount" type="number" min="0.01" step="0.01" required></label>
+                <label>Ближайшая дата<input id="irregular-date" type="date" required></label>
+                <label>Повторение<select id="irregular-frequency"><option value="once">Один раз</option><option value="yearly">Каждый год</option><option value="quarterly">Каждый квартал</option></select></label>
+                <label>Комментарий<input id="irregular-notes" maxlength="500" placeholder="Дополнительные сведения"></label>
+                <button class="button primary">Добавить расход</button>
+              </form>
+              <div id="irregular-expense-list" class="finance-list"></div>
+            </section>
+            <section class="category-budget-section">
+              <div class="section-head"><div><p class="eyebrow">БЮДЖЕТ И КОНТРОЛЬ</p><h3>План и факт расходов по категориям</h3></div><label>Месяц<input id="budget-month" type="month"></label></div>
+              <form id="budget-form" class="finance-form">
+                <label>Категория<input id="budget-category" list="budget-category-options" maxlength="80" required placeholder="Продукты, транспорт, связь"></label>
+                <datalist id="budget-category-options"><option value="Продукты"><option value="Транспорт"><option value="Жильё"><option value="Связь и интернет"><option value="Здоровье"><option value="Коты"><option value="Дом"><option value="Обучение"><option value="Развлечения"><option value="Прочее"></datalist>
+                <label>План на месяц, ₽<input id="budget-amount" type="number" min="0" max="100000000" step="0.01" required></label>
+                <button class="button primary">Сохранить бюджет</button>
+              </form>
+              <div id="budget-summary" class="analytics-metrics"></div>
+              <div id="budget-categories" class="finance-list"></div>
+              <div id="budget-insights" class="finance-list"></div>
+              <p class="fine">Факт берётся из внесённых расходов за выбранный месяц. Категории без заданного лимита тоже отображаются — их можно включить в бюджет.</p>
+            </section>
+            <div class="cashflow-columns"><div><h4>Планируемое поступление или разовая покупка</h4><p class="fine">Добавляй сюда крупные траты с известной датой: техника, ремонт, поездка, лечение или ежегодный платёж.</p><form id="cashflow-form" class="finance-form">
+              <label>Название<input id="cashflow-title" maxlength="180" required placeholder="Оплата клиента, закупка, сервис"></label>
+              <label>Тип<select id="cashflow-type"><option value="income">Ожидаемое поступление</option><option value="expense">Планируемый расход</option></select></label>
+              <label>Сумма, ₽<input id="cashflow-amount" type="number" min="0.01" step="0.01" required></label>
+              <label>Дата<input id="cashflow-date" type="date" required></label>
+              <label>Направление дохода<select id="cashflow-direction"><option value="">Без направления</option></select></label>
+              <button class="button primary">Добавить в план</button>
+            </form></div><div><h4>Ожидаемые движения</h4><div id="cashflow-events" class="finance-list"></div></div></div>
+            <div class="cashflow-days"><h4>Динамика остатка по дням</h4><div id="cashflow-daily" class="finance-list"></div></div>
+            <p class="fine">Прогноз денежных потоков учитывает плановые записи, платежи с конкретными датами и минимальные платежи по долгам. Отдельно показывается прогноз переменных расходов на следующий месяц по категориям на основе трёх последних завершённых месяцев. Он не распределяет эти переменные расходы по конкретным дням, чтобы не придумывать даты покупок. Отрицательные дни показывают риск кассового разрыва.</p>
+          </section>
+          <section class="revenue-plan-section">
+            <div class="section-head"><div><p class="eyebrow">ЦЕЛЬ 300 000 ₽</p><h3>План дохода по направлениям</h3></div><button type="button" class="button ghost" id="refresh-revenue-plan">Обновить</button></div>
+            <p class="fine">Распредели месячную цель между направлениями. Для каждого можно указать средний чек — система рассчитает нужное число продаж, недельный и дневной ориентиры. Пока доли не заданы, показывается равное предварительное распределение.</p>
+            <div id="revenue-plan-summary" class="analytics-metrics"></div>
+            <div id="revenue-plan-directions" class="revenue-plan-list"></div>
+            <div class="revenue-plan-actions"><span id="revenue-plan-share-note" class="fine"></span><button type="button" class="button primary" id="save-revenue-plan">Сохранить распределение</button></div>
+            <section class="scenario-section"><div class="section-head"><div><p class="eyebrow">СЦЕНАРИИ РОСТА</p><h3>Три варианта достижения цели</h3></div><button type="button" class="button ghost" id="refresh-revenue-scenarios">Обновить сценарии</button></div><div id="revenue-scenarios" class="scenario-grid"></div><p id="revenue-scenarios-note" class="fine"></p></section>
+            <section class="sales-plan-section"><div class="section-head"><div><p class="eyebrow">ВОРОНКА КЛИЕНТОВ</p><h3>План продаж и действий на неделю</h3></div><button type="button" class="button ghost" id="refresh-sales-plan">Пересчитать</button></div><p class="fine">Настрой конверсии для каждого направления. Первоначальные 40% и 20% — только стартовые допущения, не фактическая статистика.</p><div id="sales-plan-directions" class="sales-plan-grid"></div><div class="revenue-plan-actions"><span id="sales-plan-note" class="fine"></span><button type="button" class="button primary" id="save-sales-plan">Сохранить конверсии</button></div></section>
+            <section class="deals-section">
+              <div class="section-head"><div><p class="eyebrow">ФАКТИЧЕСКАЯ ВОРОНКА</p><h3>Сделки и ожидаемые поступления</h3></div><button type="button" class="button ghost" id="refresh-deals">Обновить</button></div>
+              <form id="deal-form" class="deal-form">
+                <label>Название сделки<input id="deal-title" required maxlength="180" placeholder="Например, аудит процессов"></label>
+                <div class="deal-form-grid">
+                  <label>Клиент<select id="deal-client"><option value="">Без клиента</option></select></label>
+                  <label>Направление<select id="deal-direction" required></select></label>
+                  <label>Сумма, ₽<input id="deal-amount" type="number" min="0.01" max="100000000" step="0.01" required></label>
+                  <label>Этап<select id="deal-stage"><option value="contact">Первичный контакт</option><option value="negotiation">Переговоры</option><option value="proposal">Предложение отправлено</option><option value="awaiting_payment">Ожидает оплаты</option><option value="won">Выиграна</option><option value="lost">Проиграна</option></select></label>
+                  <label>Вероятность, %<input id="deal-probability" type="number" min="0" max="100" step="1" value="20"></label>
+                  <label>Ожидаемая дата закрытия сделки<input id="deal-date" type="date"></label>
+                  <label>Ожидаемая дата поступления оплаты<input id="deal-payment-date" type="date"></label>
+                </div>
+                <div id="deal-loss-fields" class="deal-loss-fields hidden">
+                  <label>Почему сделка проиграна?<select id="deal-loss-reason"><option value="">Выберите причину</option><option value="price">Цена / бюджет</option><option value="timing">Сроки</option><option value="no_need">Нет потребности</option><option value="competitor">Выбрали конкурента</option><option value="no_response">Нет ответа</option><option value="trust">Недостаток доверия</option><option value="scope">Не подошёл объём / формат</option><option value="other">Другая причина</option></select></label>
+                  <label>Пояснение<input id="deal-loss-details" maxlength="1200" placeholder="Что именно произошло? Для варианта «Другая причина» обязательно"></label>
+                </div>
+                <label>Комментарий<input id="deal-notes" maxlength="1500" placeholder="Следующий шаг, договорённости"></label>
+                <div class="deal-form-actions"><button class="button primary" id="deal-form-submit" type="submit">Добавить сделку</button><button class="button ghost hidden" id="deal-form-cancel" type="button">Отменить редактирование</button></div>
+              </form>
+              <div id="deals-summary" class="analytics-metrics"></div>
+              <section class="deal-monthly-section"><h4>План и факт поступлений по месяцам</h4><div id="deals-monthly-forecast" class="deal-monthly-forecast"></div><p class="fine">План — открытые сделки с указанной датой оплаты. Прогноз — сумма с учётом вероятности. Факт — зарегистрированные поступления в финансовом учёте. Выигранные сделки не дублируются в факте автоматически.</p></section>
+              <div id="deals-loss-analysis" class="deals-loss-analysis"></div><div id="deals-list" class="analytics-list"></div>
+              <p class="fine">Взвешенный прогноз = сумма сделки × вероятность. Выигранные сделки учитываются отдельно; они не заменяют фактические поступления в финансовом учёте.</p>
+            </section>
+          </section>
           <p class="fine">Погашение долгов и оплата обязательных платежей учитываются отдельно. Не записывай их повторно как обычные расходы. Проценты по долгам пока фиксируются справочно и не начисляются автоматически.</p>
+          <section class="debt-management-section">
+            <div class="section-head"><div><p class="eyebrow">ОТДЕЛЬНЫЙ РАЗДЕЛ</p><h3>Долги и график погашения</h3></div><button type="button" class="button ghost" id="refresh-debt-forecast">Пересчитать</button></div>
+            <p class="fine">Показывает прогноз процентов, платежей и срока закрытия. Дополнительная сумма применяется ежемесячно к каждому открытому долгу. Фактический договор может считать проценты иначе — это расчётный ориентир, не банковский график.</p>
+            <div class="debt-forecast-controls"><label>Дополнительно в месяц на каждый долг, ₽<input id="debt-extra-payment" type="number" min="0" step="100" value="0"></label><label>Горизонт<select id="debt-forecast-months"><option value="12">12 месяцев</option><option value="24">24 месяца</option><option value="36">36 месяцев</option><option value="60" selected>60 месяцев</option></select></label></div>
+            <div id="debt-forecast-summary" class="analytics-metrics"></div><div id="debt-forecast-list" class="analytics-list"></div>
+            <h4>График по месяцам</h4><div id="debt-forecast-months-list" class="finance-list"></div>
+          </section>
+          <section class="income-buckets-section">
+            <div class="section-head"><div><p class="eyebrow">РАСПРЕДЕЛЕНИЕ ПОСТУПЛЕНИЙ</p><h3>Корзины дохода</h3></div><button type="button" class="button ghost" id="refresh-income-buckets">Обновить</button></div>
+            <p class="fine">Каждое новое поступление автоматически распределяется по процентам. Расход из выбранной корзины уменьшает её остаток. Проценты применяются только к новым поступлениям; прошлые распределения не пересчитываются.</p>
+            <form id="create-income-bucket-form" class="revenue-plan-actions">
+              <label>Новая корзина<input id="new-income-bucket-title" maxlength="60" minlength="2" required placeholder="Например, Обучение или Отпуск"></label>
+              <button type="submit" class="button ghost">Добавить корзину</button>
+            </form>
+            <div id="income-bucket-summary" class="analytics-metrics"></div>
+            <div id="income-bucket-list" class="finance-list"></div>
+            <div id="income-bucket-recommendations" class="finance-list"></div>
+            <div class="revenue-plan-actions"><button type="button" class="button ghost" id="apply-bucket-recommendations" disabled>Подставить рекомендации</button><span id="income-bucket-note" class="fine">Сумма долей должна составлять 100%.</span><button type="button" class="button primary" id="save-income-buckets">Сохранить проценты</button></div>
+          </section>
           <div class="finance-forms">
             <form id="expense-form" class="finance-form"><h3>Записать расход</h3>
               <label>На что<input id="expense-title" required maxlength="180" placeholder="Продукты, аренда, сервис"></label>
               <label>Сумма, ₽<input id="expense-amount" type="number" min="0.01" step="0.01" required></label>
               <label>Категория<input id="expense-category" maxlength="80" value="Прочее"></label>
+              <label>Направление дохода<select id="expense-direction"><option value="">Не распределять / личный расход</option></select></label><label>Клиент<select id="expense-client"><option value="">Без клиента</option></select></label><label>Проект<select id="expense-project"><option value="">Без проекта</option></select></label>
+              <label>Списать из корзины<select id="expense-bucket" required><option value="">Выбери корзину или вне корзин</option><option value="none">Вне корзин</option></select></label>
               <label>Дата<input id="expense-date" type="date" required></label>
               <button class="button primary">Добавить расход</button>
             </form>
@@ -49,6 +188,7 @@
             <form id="obligation-form" class="finance-form"><h3>Запланировать платёж</h3>
               <label>Название<input id="obligation-title" required maxlength="180" placeholder="Аренда, связь, подписка"></label>
               <label>Сумма, ₽<input id="obligation-amount" type="number" min="0.01" step="0.01" required></label>
+              <label>Корзина<select id="obligation-category"><option value="Долги и обязательства">Долги и обязательства</option><option value="Жильё">Жильё</option><option value="Питание">Питание</option><option value="Коты">Коты</option><option value="Транспорт">Транспорт</option><option value="Здоровье и уход">Здоровье и уход</option><option value="Свободные расходы">Свободные расходы</option></select></label>
               <label>Дата оплаты<input id="obligation-date" type="date" required></label>
               <label>Повторение<select id="obligation-frequency"><option value="once">Один раз</option><option value="monthly">Ежемесячно</option><option value="weekly">Еженедельно</option></select></label>
               <button class="button primary">Добавить платёж</button>
@@ -57,10 +197,79 @@
           <div class="finance-lists">
             <div><h3>Долги</h3><div id="finance-debts" class="finance-list"></div>
               <form id="debt-payment-form" class="finance-inline-form"><label>Погасить долг<select id="payment-debt" required></select></label><label>Сумма, ₽<input id="debt-payment-amount" type="number" min="0.01" step="0.01" required></label><label>Дата<input id="debt-payment-date" type="date" required></label><button class="button primary">Записать погашение</button></form>
+              <h4>История погашений</h4><div id="finance-debt-payments" class="finance-list"></div>
             </div>
-            <div><h3>Ближайшие обязательные платежи</h3><div id="finance-obligations" class="finance-list"></div></div>
+            <div><h3>Ближайшие обязательные платежи</h3><div id="finance-obligations" class="finance-list"></div><h4>История оплат обязательств</h4><div id="finance-obligation-payments" class="finance-list"></div>
+              <div id="recurring-expense-suggestions" class="finance-list"></div></div>
             <div><h3>Последние расходы</h3><div id="finance-expense-list" class="finance-list"></div></div>
           </div>
+        </section>
+                <section class="panel charity-panel">
+          <div class="section-head"><div><p class="eyebrow">СОЦИАЛЬНЫЙ ВКЛАД</p><h2>Благотворительные проекты</h2></div><span class="muted">Отдельно от коммерческих доходов</span></div>
+          <div id="charity-summary" class="finance-metrics"></div>
+          <div class="charity-forms">
+            <form id="charity-project-form" class="finance-form"><h3>Новый проект помощи</h3>
+              <label>Название<input id="charity-project-title" required maxlength="180" placeholder="Например, помощь приюту"></label>
+              <label>Организация / получатель<input id="charity-project-organization" maxlength="180" placeholder="Название приюта или фонда"></label>
+              <label>Цель и описание<textarea id="charity-project-purpose" rows="2" maxlength="2000"></textarea></label>
+              <label>Целевая сумма, ₽<input id="charity-project-target" type="number" min="0" step="0.01" value="0"></label>
+              <div class="workspace-inline"><label>Начало<input id="charity-project-start" type="date"></label><label>Окончание<input id="charity-project-end" type="date"></label></div>
+              <button class="button primary">Создать проект</button>
+            </form>
+            <form id="charity-transaction-form" class="finance-form"><h3>Записать поступление или расход</h3>
+              <label>Проект<select id="charity-transaction-project" required><option value="">Сначала создай проект</option></select></label>
+              <label>Операция<select id="charity-transaction-type"><option value="donation">Пожертвование / сбор</option><option value="expense">Расход на помощь</option></select></label>
+              <label>Название<input id="charity-transaction-title" required maxlength="180" placeholder="Пожертвование, корм, лечение"></label>
+              <label>Категория<input id="charity-transaction-category" maxlength="80" placeholder="Корм, лечение, транспорт"></label>
+              <label>Сумма, ₽<input id="charity-transaction-amount" type="number" min="0.01" step="0.01" required></label>
+              <label>Дата<input id="charity-transaction-date" type="date" required></label>
+              <label>Примечание<textarea id="charity-transaction-note" rows="2" maxlength="1000"></textarea></label>
+              <button class="button primary">Добавить операцию</button>
+            </form>
+            <form id="charity-person-form" class="finance-form"><h3>Партнёр, волонтёр или сторонник</h3>
+              <label>Имя / организация<input id="charity-person-name" required maxlength="160"></label>
+              <label>Роль<select id="charity-person-role"><option value="partner">Партнёр</option><option value="volunteer">Волонтёр</option><option value="supporter">Сторонник / жертвователь</option></select></label>
+              <label>Проект<select id="charity-person-project"><option value="">Общий контакт</option></select></label>
+              <label>Контакт<input id="charity-person-contact" maxlength="240"></label>
+              <label>Заметки<textarea id="charity-person-notes" rows="2" maxlength="1000"></textarea></label>
+              <button class="button primary">Добавить участника</button>
+            </form>
+          </div>
+          <div class="charity-columns"><div><h3>Проекты и сборы</h3><div id="charity-projects" class="workspace-list"></div></div><div><h3>Последние операции</h3><div id="charity-transactions" class="finance-list"></div></div><div><h3>Люди и партнёры</h3><div id="charity-people" class="workspace-list"></div></div></div>
+          <p class="fine">Операции этого раздела не попадают в коммерческую выручку и личные расходы. Для отражения реального движения денег в общем бюджете позднее добавим явную связь с личными счетами, чтобы не задваивать пожертвования и переводы.</p>
+        </section>
+                <section class="panel dreams-panel">
+          <div class="section-head"><div><p class="eyebrow">ЖИЗНЬ, К КОТОРОЙ ИДЁМ</p><h2>Мечты и финансовые цели</h2></div><span class="muted">Мечта становится планом только по твоему решению</span></div>
+          <form id="dream-form" class="dream-form">
+            <h3>Добавить мечту</h3>
+            <div class="dream-form-grid">
+              <label>Что хочется осуществить?<input id="dream-title" required maxlength="180" placeholder="Например, собственный дом"></label>
+              <label>Категория<select id="dream-category"><option value="home">Дом и недвижимость</option><option value="travel">Путешествия</option><option value="business">Бизнес и проекты</option><option value="health">Здоровье</option><option value="learning">Обучение</option><option value="experience">Впечатления</option><option value="help">Помощь другим</option><option value="purchase">Покупки</option><option value="other">Другое</option></select></label>
+              <label>Примерная стоимость, ₽<input id="dream-cost" type="number" min="0" step="0.01" placeholder="Можно пока не указывать"></label>
+              <label>Желаемый срок<input id="dream-date" type="date"></label>
+              <label>Приоритет<select id="dream-priority"><option value="high">Очень хочется</option><option value="medium" selected>Важно</option><option value="low">Когда-нибудь</option></select></label>
+              <label>Ссылка на изображение<input id="dream-image" type="url" maxlength="1000" placeholder="https://..."></label>
+              <label class="dream-wide">Ссылка / источник<input id="dream-link" type="url" maxlength="1000" placeholder="Сайт, объявление, место"></label>
+              <label class="dream-wide">Описание<textarea id="dream-description" rows="2" maxlength="3000" placeholder="Как ты представляешь эту мечту?"></textarea></label>
+              <label class="dream-wide">Почему это важно<textarea id="dream-reason" rows="2" maxlength="1000"></textarea></label>
+            </div>
+            <button class="button primary">Сохранить мечту</button>
+          </form>
+          <div class="dreams-layout"><div><h3>Мои мечты</h3><div id="dreams-list" class="dreams-list"></div></div><div><h3>Финансовые цели</h3><div id="financial-goals-list" class="dreams-list"></div></div></div>
+          <p class="fine">Мечты не входят в бюджет и не создают обязательств. Финансовая цель появляется только после отдельного подтверждения.</p>
+        </section>
+        <section class="panel analytics-panel">
+          <div class="section-head"><div><p class="eyebrow">АНАЛИЗ РЕЗУЛЬТАТОВ</p><h2>Время и эффективность</h2></div><div class="analytics-actions"><span class="muted" id="analytics-period"></span><button type="button" class="button ghost" id="refresh-analytics">Обновить</button></div></div>
+          <div class="analytics-metrics" id="analytics-summary"></div>
+          <div class="analytics-columns">
+            <div><h3>По направлениям дохода</h3><div id="analytics-directions" class="analytics-list"></div></div>
+            <div><h3>По клиентам</h3><div id="analytics-clients" class="analytics-list"></div></div>
+            <div><h3>По проектам</h3><div id="analytics-projects" class="analytics-list"></div></div>
+            <div><h3>Личные области</h3><div id="analytics-life-areas" class="analytics-list"></div></div>
+            <div><h3>Динамика по месяцам</h3><div id="analytics-months" class="analytics-list"></div></div>
+            <div class="analytics-wide"><h3>Время в календаре по типам событий</h3><div id="analytics-calendar" class="analytics-list"></div></div>
+          </div>
+          <p class="fine">Закрытые сессии таймера относятся к дате сессии и направлению на момент запуска. Остаток фактического времени завершённой задачи после вычета всех её сессий таймера относится к дате и направлению завершения. Поле «Факт всего» — итог задачи, в него уже могут входить закрытые сессии таймера; отдельная сумма сессий нужна для проверки и не прибавляется повторно. Ручная корректировка факта не меняет историю таймера. Календарь сравнивает запланированную и фактическую длительность событий, если фактическое время заполнено.</p>
         </section>
         <section class="panel calendar-panel">
           <div class="section-head"><div><p class="eyebrow">ВРЕМЯ И РИТМ ЖИЗНИ</p><h2>Календарь</h2></div><div class="calendar-nav"><button type="button" class="button ghost" id="calendar-prev" aria-label="Предыдущий период">←</button><button type="button" class="button ghost" id="calendar-today">Сегодня</button><button type="button" class="button ghost" id="calendar-next" aria-label="Следующий период">→</button></div></div>
@@ -76,18 +285,57 @@
             <button class="button primary" type="submit">Сохранить событие</button>
           </form>
         </section>
-        <section class="panel planner-panel"><div class="section-head"><div><p class="eyebrow">УПРАВЛЕНИЕ ДНЁМ</p><h2>План на сегодня</h2></div><span class="muted" id="planner-date"></span></div><div class="planner-controls"><label>Сколько времени доступно сегодня?<select id="planner-capacity"><option value="120">2 часа</option><option value="180">3 часа</option><option value="240">4 часа</option><option value="300">5 часов</option><option value="360" selected>6 часов</option><option value="420">7 часов</option><option value="480">8 часов</option><option value="600">10 часов</option></select></label><button type="button" class="button primary" id="make-day-plan">Сформировать план дня с ИИ</button></div><div id="day-plan" class="day-plan"><p class="muted">План учитывает сроки, приоритеты, оценку времени и движение к финансовой цели.</p></div></section>
+        <section class="panel sleep-panel">
+          <div class="section-head"><div><p class="eyebrow">ВОССТАНОВЛЕНИЕ</p><h2>Сон и пробуждение</h2></div><span class="muted">Фиксируем факты, не догадки</span></div>
+          <p class="fine">Отметь, когда ложишься. Время засыпания можно добавить отдельно, если помнишь его. Утреннее подтверждение пробуждения сохранит фактическое время нажатия.</p>
+          <form id="sleep-goal-form" class="sleep-goal-form"><label>Моя цель продолжительности сна, часов<input id="sleep-goal-hours" type="number" min="3" max="12" step="0.25" placeholder="Например, 8"></label><button type="submit" class="button ghost">Сохранить цель</button><button type="button" id="sleep-goal-clear" class="button ghost">Не задавать цель</button><span id="sleep-goal-status" class="fine" aria-live="polite">Цель не задана</span></form>
+          <div id="sleep-summary" class="sleep-summary"></div>
+          <div id="sleep-chart"></div>
+          <div class="sleep-actions">
+            <button type="button" class="button secondary" id="sleep-bed">Ложусь спать</button>
+            <button type="button" class="button ghost" id="sleep-asleep">Уже уснула</button>
+            <button type="button" class="button primary" id="sleep-wake">Подтвердить пробуждение</button>
+          </div>
+          <div class="wake-notification-settings">
+            <button type="button" class="button ghost" id="wake-notifications-toggle">Включить уведомление в 06:00</button>
+            <p id="wake-notifications-status" class="fine" aria-live="polite">Проверяем поддержку уведомлений…</p><p class="fine">На iPhone сначала добавьте приложение на экран «Домой», затем разрешите уведомления. Если push недоступен, пробуждение можно отметить внутри приложения.</p>
+          </div>
+          <p id="sleep-status" class="fine" aria-live="polite">Загрузка записей сна…</p>
+          <div id="sleep-history" class="sleep-history"></div>
+        </section>
+        <section class="panel planner-panel"><div class="section-head"><div><p class="eyebrow">УПРАВЛЕНИЕ ДНЁМ</p><h2>План на сегодня</h2></div><span class="muted" id="planner-date"></span></div><section class="work-capacity-settings"><div><h3>Рабочая доступность на неделю</h3><p class="fine">Укажи дни и среднее количество часов, которые реально можешь выделять на работу. Это настройка общей ёмкости, а не обязательство работать каждый день.</p></div><div class="capacity-weekdays"><label><input type="checkbox" data-workday="1" checked> Пн</label><label><input type="checkbox" data-workday="2" checked> Вт</label><label><input type="checkbox" data-workday="3" checked> Ср</label><label><input type="checkbox" data-workday="4" checked> Чт</label><label><input type="checkbox" data-workday="5" checked> Пт</label><label><input type="checkbox" data-workday="6" > Сб</label><label><input type="checkbox" data-workday="7" > Вс</label></div><label>Доступно в выбранный день<select id="weekly-capacity"><option value="120">2 часа</option><option value="180">3 часа</option><option value="240">4 часа</option><option value="300">5 часов</option><option value="360" selected>6 часов</option><option value="420">7 часов</option><option value="480">8 часов</option><option value="600">10 часов</option></select></label><button type="button" class="button ghost" id="save-work-capacity">Сохранить рабочий график</button><span id="work-capacity-status" class="fine" aria-live="polite">График ещё не настроен — оценка перегрузки отключена.</span></section><div id="weekly-workload" class="weekly-workload"><p class="muted">Загружаем рабочую неделю…</p></div><section id="weekly-targets" class="weekly-targets"><p class="muted">Загружаем недельные ориентиры…</p></section><div class="planner-controls"><label>Сколько времени доступно сегодня?<select id="planner-capacity"><option value="120">2 часа</option><option value="180">3 часа</option><option value="240">4 часа</option><option value="300">5 часов</option><option value="360" selected>6 часов</option><option value="420">7 часов</option><option value="480">8 часов</option><option value="600">10 часов</option></select></label><button type="button" class="button primary" id="make-day-plan">Сформировать план дня с ИИ</button></div><div id="day-plan" class="day-plan"><p class="muted">План учитывает сроки, приоритеты, оценку времени и движение к финансовой цели.</p></div></section>
         <div class="main-grid">
-          <section class="panel"><div class="section-head"><div><p class="eyebrow">ФОКУС</p><h2>Задачи</h2></div><span class="count" id="task-count">0</span></div><form id="task-form" class="task-create">
+          <section class="panel"><div class="section-head"><div><p class="eyebrow">ФОКУС</p><h2>Задачи</h2></div><span class="count" id="task-count">0</span></div><section class="voice-intake" aria-labelledby="voice-title">
+            <div class="section-head"><div><p class="eyebrow">БЫСТРЫЙ ВВОД</p><h3 id="voice-title">Надиктовать задачи</h3></div><span class="voice-status" id="voice-status" aria-live="polite">Готово к записи</span></div>
+            <p class="fine">Говори естественно. Назови проект или клиента, если знаешь, что у задачи есть привязка, и укажи срок словами. ИИ подготовит черновик, но ничего не сохранит без подтверждения.</p>
+            <details class="voice-guide"><summary>Как лучше формулировать диктовку</summary>
+              <p><b>1. Назови контекст:</b> «По проекту Решай360…», «Для клиента…», «Личное дело — коты…».</p>
+              <p><b>2. Скажи действие и результат:</b> «Проверить диагностику и исправить найденные ошибки».</p>
+              <p><b>3. Добавь срок и важные условия:</b> «До пятницы», «занимает около часа», «сначала согласовать со мной».</p>
+              <p><b>Пример:</b> «По проекту Решай360 до пятницы проверь диагностику седьмого класса. Если найдёшь ошибки, создай отдельные задачи на исправление. Потом обнови список проверки».</p>
+              <p class="fine">Можно диктовать несколько дел подряд. Делай небольшие паузы между ними. Если не знаешь, к какому проекту отнести задачу, просто опиши её — система попробует найти подходящий проект, а сомнения покажет перед сохранением.</p><p class="fine">Важно: распознавание зависит от браузера и интернета. В некоторых браузерах, включая Chrome, аудио может обрабатываться сервисом распознавания браузера. Перед отправкой текста ИИ проверь имена, суммы, даты и названия проектов.</p>
+            </details>
+            <div class="voice-controls"><button type="button" class="button primary" id="voice-start">🎙 Начать запись</button><button type="button" class="button ghost" id="voice-stop" disabled>Остановить</button><button type="button" class="button ghost" id="voice-clear">Очистить</button></div>
+            <label>Распознанный текст — можно исправить вручную<textarea id="voice-transcript" rows="3" maxlength="6000" placeholder="Например: По проекту Решай360 проверь диагностику седьмого класса до пятницы. Затем обнови список задач."></textarea></label>
+            <div class="voice-controls"><button type="button" class="button primary" id="voice-analyze">Разобрать и распределить</button><span class="fine">Нужен интернет и поддерживаемый браузер. Если микрофон недоступен, можно вставить текст.</span></div>
+            <div id="voice-preview" class="voice-preview hidden" aria-live="polite"></div>
+            <div class="meeting-capture panel-subsection">
+              <div class="section-head"><div><p class="eyebrow">ПОСЛЕ РАЗГОВОРА</p><h3>Протокол встречи</h3></div><span class="fine">Решения отдельно от идей</span></div>
+              <p class="fine">Надиктуй или вставь итоги встречи в поле выше, затем нажми «Разобрать как встречу». Система выделит решения, договорённости, предложения и открытые вопросы.</p>
+              <button type="button" class="button secondary" id="meeting-analyze">Разобрать как встречу</button>
+              <div id="meeting-preview" class="voice-preview hidden" aria-live="polite"></div>
+            </div>
+          </section>
+          <form id="task-form" class="task-create">
             <input id="task-title" placeholder="Следующий конкретный шаг…" required maxlength="240">
             <textarea id="task-description" rows="2" placeholder="Контекст и ожидаемый результат (необязательно)"></textarea>
-            <div class="task-create-options"><label>Срок<input id="task-date" type="date"></label><label>Направление<select id="task-direction"><option value="">Без привязки</option></select></label><label>Приоритет<select id="task-priority"><option value="high">Высокий</option><option value="medium" selected>Обычный</option><option value="low">Низкий</option></select></label></div>
+            <div class="task-create-options"><label>Срок<input id="task-date" type="date"></label><label>Направление<select id="task-direction"><option value="">Без привязки</option></select></label><label>Клиент<select id="task-client"><option value="">Без клиента</option></select></label><label>Проект<select id="task-project"><option value="">Без проекта</option></select></label><label>Личная область<select id="task-life-area"><option value="">Не личная задача</option></select></label><label>Подзадача к<select id="task-parent"><option value="">Самостоятельная задача</option></select></label><label>Приоритет<select id="task-priority"><option value="high">Высокий</option><option value="medium" selected>Обычный</option><option value="low">Низкий</option></select></label></div>
             <div class="estimate-actions"><button type="button" class="button ghost" id="estimate-task">Оценить время и делегирование с ИИ</button><span class="fine">ИИ предложит длительность и покажет, что сможет взять на себя.</span></div><div id="estimate-result" class="estimate-result hidden" aria-live="polite"></div>
             <button class="button primary">Добавить задачу</button>
           </form>
           <div class="task-filters"><button type="button" class="filter active" data-task-filter="today">Сегодня</button><button type="button" class="filter" data-task-filter="week">Неделя</button><button type="button" class="filter" data-task-filter="all">Все</button></div>
           <div id="tasks" class="task-list"></div></section>
-          <section class="panel"><div class="section-head"><div><p class="eyebrow">ДЕНЬГИ</p><h2>Добавить доход</h2></div></div><form id="income-form" class="stack-form"><label>Сумма, ₽<input id="income-amount" type="number" min="1" step="0.01" required placeholder="Например, 15000"></label><label>Направление<select id="income-direction"></select></label><label>Дата<input id="income-date" type="date" required></label><label>Комментарий<input id="income-note" maxlength="500" placeholder="За что поступление"></label><button class="button primary">Записать поступление</button></form><div id="income-recent" class="income-recent"></div></section>
+          <section class="panel"><div class="section-head"><div><p class="eyebrow">ДЕНЬГИ</p><h2>Добавить доход</h2></div></div><form id="income-form" class="stack-form"><label>Сумма, ₽<input id="income-amount" type="number" min="1" step="0.01" required placeholder="Например, 15000"></label><label>Направление<select id="income-direction"></select></label><label>Дата<input id="income-date" type="date" required></label><label>Клиент<select id="income-client"><option value="">Без клиента</option></select></label><label>Проект<select id="income-project"><option value="">Без проекта</option></select></label><label>Комментарий<input id="income-note" maxlength="500" placeholder="За что поступление"></label><button class="button primary">Записать поступление</button></form><div id="income-recent" class="income-recent"></div></section>
         </div>
         <section class="panel directions-panel"><div class="section-head"><div><p class="eyebrow">ПОРТФЕЛЬ</p><h2>Направления дохода</h2></div><span class="muted">8 потоков</span></div><div id="directions" class="directions-grid"></div></section>
       </section>

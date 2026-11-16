@@ -1,0 +1,2 @@
+-- Superseded by 0067_irregular_payment_scheduled_occurrence.sql.
+-- Duplicate protection is keyed by scheduled occurrence, not actual payment date.

@@ -1,21 +1,13 @@
 import { json, requireUser, readJson, newId } from "../../_lib/auth.js";
-import { expandRecurringEvents } from "../../_lib/calendar.js";
+import { expandRecurringEvents, createSleepCalendarEvents } from "../../_lib/calendar.js";
+import { mergeMinuteIntervals, intersectMinuteIntervals, allocateTaskSlots } from "../../_lib/planner-scheduling.js";
+import { taskTimeIntervalsForLocalDay, calculateUnionWorkMinutes } from "../../_lib/work-time-overlap.js";
+import { orderPlannerTasks, normalizePlannerItems, calibrateTaskEstimates } from "../../_lib/planner-priorities.js";
 
 function localDate(timeZone) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(new Date());
   const values = Object.fromEntries(parts.map(part => [part.type,part.value]));
   return `${values.year}-${values.month}-${values.day}`;
-}
-function mergeIntervals(intervals) {
-  const sorted=[...intervals].filter(x=>x.end>x.start).sort((a,b)=>a.start-b.start);
-  const merged=[];
-  for(const item of sorted){const last=merged[merged.length-1];if(last&&item.start<=last.end)last.end=Math.max(last.end,item.end);else merged.push({...item});}
-  return merged;
-}
-function intersectIntervals(left,right) {
-  const result=[];
-  for(const a of left) for(const b of right){const start=Math.max(a.start,b.start),end=Math.min(a.end,b.end);if(end>start)result.push({start,end});}
-  return mergeIntervals(result);
 }
 function localDateTime(date, minute) {
   const value=new Date(date+"T00:00:00Z");value.setUTCMinutes(minute);
@@ -31,13 +23,13 @@ function fallbackPlan(tasks, capacity) {
   const sorted = [...tasks].sort((a,b) => {
     const overdueA = a.due_date && a.due_date < a.today ? 1 : 0;
     const overdueB = b.due_date && b.due_date < b.today ? 1 : 0;
-    return overdueB-overdueA || priority[b.priority]-priority[a.priority] ||
+    return Number(b.status === "doing")-Number(a.status === "doing") || overdueB-overdueA || priority[b.priority]-priority[a.priority] ||
       (a.due_date || "9999").localeCompare(b.due_date || "9999");
   });
   let used = 0;
   const selected = [];
   for (const task of sorted) {
-    const minutes = Number(task.estimated_minutes) || 30;
+    const minutes = Number(task.planning_minutes) || Number(task.estimated_minutes) || 30;
     if (used + minutes <= capacity) {
       selected.push({ task_id: task.id, title: task.title, minutes, reason: task.due_date && task.due_date < task.today ? "Просроченный срок" : task.priority === "high" ? "Высокий приоритет" : "Подходит по доступному времени" });
       used += minutes;
@@ -73,6 +65,10 @@ export async function onRequestPost({ request, env }) {
   const tomorrowKey = tomorrow.toISOString().slice(0,10);
   const calendarQuery = await env.DB.prepare("SELECT id,title,event_type,start_at,end_at,actual_start_at,actual_end_at,status,mode,location,repeat_rule,repeat_until FROM calendar_events WHERE user_id=? AND status!='cancelled' AND ((start_at < ? AND end_at > ?) OR (repeat_rule!='none' AND start_at < ? AND repeat_until >= ?)) ORDER BY start_at").bind(user.id,tomorrowKey+"T00:00",today+"T00:00",tomorrowKey+"T00:00",today).all();
   const calendarEvents = expandRecurringEvents(calendarQuery.results,today+"T00:00",tomorrowKey+"T00:00");
+  const yesterday = new Date(today+"T12:00:00Z"); yesterday.setUTCDate(yesterday.getUTCDate()-1);
+  const sleepQuery = await env.DB.prepare("SELECT * FROM sleep_sessions WHERE user_id=? AND sleep_date>=? AND sleep_date<=? AND fell_asleep_at IS NOT NULL AND woke_at IS NOT NULL").bind(user.id,yesterday.toISOString().slice(0,10),tomorrowKey).all();
+  const sleepEvents = createSleepCalendarEvents(sleepQuery.results,today+"T00:00",tomorrowKey+"T00:00",timezone,calendarEvents);
+  calendarEvents.push(...sleepEvents);
   const busyIntervals = calendarEvents.filter(event => event.event_type !== "work").map(event => {
     const startValue = event.status === "completed" && event.actual_start_at ? event.actual_start_at : event.start_at;
     const endValue = event.status === "completed" && event.actual_end_at ? event.actual_end_at : event.end_at;
@@ -90,13 +86,14 @@ export async function onRequestPost({ request, env }) {
     if(interval.end>start){busyFutureMinutes+=interval.end-start;cursor=interval.end;}
   }
   if(cursor<1440) freeIntervals.push({start:cursor,end:1440});
-  const workWindows=mergeIntervals(calendarEvents.filter(event=>event.event_type==="work"&&event.status!=="completed").map(event=>{
+  const hasExplicitWorkWindows=calendarEvents.some(event=>event.event_type==="work");
+  const workWindows=mergeMinuteIntervals(calendarEvents.filter(event=>event.event_type==="work").map(event=>{
     const startDate=event.start_at.slice(0,10),endDate=event.end_at.slice(0,10);
     const start=startDate<today?0:startDate>today?1440:Number(event.start_at.slice(11,13))*60+Number(event.start_at.slice(14,16));
     const end=endDate>today?1440:endDate<today?0:Number(event.end_at.slice(11,13))*60+Number(event.end_at.slice(14,16));
     return {start:Math.max(nowMinute,start),end:Math.min(1440,end)};
   }));
-  const schedulingIntervals=workWindows.length?intersectIntervals(freeIntervals,workWindows):freeIntervals;
+  const schedulingIntervals=hasExplicitWorkWindows?intersectMinuteIntervals(freeIntervals,workWindows):freeIntervals;
   const workIntervals = calendarEvents.filter(event=>event.event_type==="work"&&(event.status==="completed"||event.actual_start_at||event.actual_end_at)).map(event=>{
     const endValue=event.status==="completed"&&event.actual_end_at?event.actual_end_at:event.end_at;
     const startValue=event.status==="completed"&&event.actual_start_at?event.actual_start_at:event.start_at;
@@ -105,19 +102,25 @@ export async function onRequestPost({ request, env }) {
     const end=endDate>today?1440:endDate<today?0:Number(endValue.slice(11,13))*60+Number(endValue.slice(14,16));
     return {start:Math.max(0,start),end:Math.min(nowMinute,end)};
   }).filter(interval=>interval.end>interval.start).sort((a,b)=>a.start-b.start);
-  let workDoneMinutes=0, workCursor=0;
-  for(const interval of workIntervals){const start=Math.max(workCursor,interval.start);if(interval.end>start){workDoneMinutes+=interval.end-start;workCursor=interval.end;}}
+  const utcQueryEnd=new Date(today+"T00:00:00Z");utcQueryEnd.setUTCDate(utcQueryEnd.getUTCDate()+2);
+  const utcQueryStart=new Date(today+"T00:00:00Z");utcQueryStart.setUTCDate(utcQueryStart.getUTCDate()-1);
+  const trackedRows=await env.DB.prepare("SELECT started_at,ended_at FROM task_time_entries WHERE user_id=? AND started_at<? AND (ended_at IS NULL OR ended_at>?)").bind(user.id,utcQueryEnd.toISOString(),utcQueryStart.toISOString()).all();
+  const trackedIntervals=taskTimeIntervalsForLocalDay(trackedRows.results,today,timezone);
+  const workDoneMinutes=calculateUnionWorkMinutes(workIntervals,trackedIntervals);
   const remainingWorkCapacity=Math.max(0,dailyCapacity-workDoneMinutes);
   const freeAfterCalendar=schedulingIntervals.reduce((sum,interval)=>sum+interval.end-interval.start,0);
   const capacity=Math.min(remainingWorkCapacity,freeAfterCalendar);
   const tasksResult = await env.DB.prepare(`
-    SELECT t.id,t.title,t.description,t.status,t.priority,t.due_date,t.estimated_minutes,d.title AS direction_title,d.target_month AS direction_target
+    SELECT t.id,t.title,t.description,t.status,t.priority,t.due_date,t.estimated_minutes,t.actual_minutes,t.direction_id,d.title AS direction_title,d.target_month AS direction_target
     FROM tasks t LEFT JOIN directions d ON d.id=t.direction_id
-    WHERE t.user_id=? AND t.status IN ('todo','doing','waiting')
-    ORDER BY t.due_date IS NULL,t.due_date
+    WHERE t.user_id=? AND t.status IN ('todo','doing') AND (t.due_date IS NULL OR t.due_date<=?)
+    ORDER BY CASE t.status WHEN 'doing' THEN 0 ELSE 1 END,t.due_date IS NULL,t.due_date,
+      CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END
     LIMIT 60
-  `).bind(user.id).all();
-  const tasks = tasksResult.results.map(task => ({ ...task, today }));
+  `).bind(user.id,today).all();
+  const historyResult = await env.DB.prepare("SELECT direction_id,estimated_minutes,actual_minutes FROM tasks WHERE user_id=? AND status='done' AND estimated_minutes>=5 AND actual_minutes>0 ORDER BY completed_at DESC LIMIT 100").bind(user.id).all();
+  const calibratedTasks = calibrateTaskEstimates(tasksResult.results, historyResult.results);
+  const tasks = orderPlannerTasks(calibratedTasks.map(task => ({ ...task, today })), today);
   const monthStart = today.slice(0,7) + "-01";
   const actualRow = await env.DB.prepare("SELECT COALESCE(SUM(amount),0) AS actual FROM income_entries WHERE user_id=? AND received_on>=? AND received_on<=?").bind(user.id,monthStart,today).first();
   const day = Number(today.slice(8,10));
@@ -143,34 +146,17 @@ export async function onRequestPost({ request, env }) {
       });
       const parsed = parseJson(response?.response);
       if (!parsed || !Array.isArray(parsed.items)) throw new Error("Invalid planner response");
-      const byId = new Map(tasks.map(task => [task.id,task]));
-      const items = Array.isArray(parsed?.items) ? parsed.items.slice(0,7).map(item => {
-        const task = byId.get(String(item.task_id));
-        if (!task) return null;
-        const minutes = Math.max(5,Math.min(capacity,Math.round(Number(item.minutes)||task.estimated_minutes||30)));
-        return { task_id:task.id,title:task.title,minutes,reason:String(item.reason||"Приоритет на сегодня").slice(0,240) };
-      }).filter(Boolean) : [];
-      let used = 0;
-      const bounded = [];
-      for (const item of items) { if (used+item.minutes<=capacity) { bounded.push(item); used+=item.minutes; } }
+      const bounded = normalizePlannerItems(parsed.items, tasks, capacity);
+      const used = bounded.reduce((sum, item) => sum + item.minutes, 0);
       plan = { headline:String(parsed.headline||"План на сегодня").slice(0,180),focus:String(parsed.focus||"Двигай самые важные задачи").slice(0,400),items:bounded,total_minutes:used,reserve_minutes:capacity-used };
       source = "ai";
     } catch { /* безопасно используем алгоритмический план */ }
   }
-  const slotPool=schedulingIntervals.map(interval=>({...interval}));
-  const placed=[],unplaced=[];
-  for(const item of plan.items){
-    const slot=slotPool.find(interval=>interval.end-interval.start>=item.minutes);
-    if(!slot){unplaced.push({...item,scheduled:false,schedule_note:"Нет непрерывного свободного окна такой длины"});continue;}
-    const start=slot.start,end=start+item.minutes;
-    placed.push({...item,scheduled:true,start_at:localDateTime(today,start),end_at:localDateTime(today,end)});
-    slot.start=end;
-  }
-  placed.sort((a,b)=>a.start_at.localeCompare(b.start_at));
-  plan.items=[...placed,...unplaced];
-  plan.total_minutes=placed.reduce((sum,item)=>sum+item.minutes,0);
-  plan.reserve_minutes=Math.max(0,capacity-plan.total_minutes);
-  plan.unscheduled_count=unplaced.length;
+  const allocation = allocateTaskSlots(plan.items, schedulingIntervals, today);
+  plan.items = allocation.items;
+  plan.total_minutes = allocation.scheduled_minutes;
+  plan.reserve_minutes = Math.max(0, capacity - plan.total_minutes);
+  plan.unscheduled_count = allocation.unscheduled_count;
   plan.source = source;
   plan.daily_capacity_minutes = dailyCapacity;
   plan.available_minutes = capacity;
