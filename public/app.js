@@ -558,13 +558,39 @@ async function loadCashReserves(){
  cashReservesData=await api("/api/finance/reserves");
  const summary=cashReservesData.summary;
  $("reserve-summary").innerHTML=[["Цели резервов",money(summary.target)],["Уже отложено",money(summary.saved)],["План откладывать в месяц",money(summary.monthly)]].map(x=>'<article><span>'+x[0]+'</span><b>'+x[1]+'</b></article>').join("");
- $("cash-reserves").innerHTML=cashReservesData.reserves.length?cashReservesData.reserves.map(r=>{const pct=Math.min(100,Math.round(Number(r.current_amount)/Number(r.target_amount)*100));return '<article class="finance-row"><div><b>'+escapeHtml(r.title)+'</b><small>'+money(r.current_amount)+' из '+money(r.target_amount)+' · '+pct+'% · '+money(r.monthly_contribution)+'/мес.'+(r.target_date?' · до '+r.target_date:'')+'</small><small>'+escapeHtml(r.purpose||"")+'</small></div><div><button class="button ghost" data-reserve-add="'+escapeHtml(r.id)+'" '+(Number(r.current_amount)>=Number(r.target_amount)?"disabled":"")+'>Пополнить</button> <button class="button ghost" data-reserve-delete="'+escapeHtml(r.id)+'">Удалить</button></div></article>';}).join(""):'<p class="muted">Пока нет созданных резервов.</p>';
+ const labels={opening:"Начальный остаток",contribution:"Пополнение",withdrawal:"Снятие",adjustment:"Корректировка"};
+ const rows=cashReservesData.reserves||[];
+ const cards=rows.length?rows.map(r=>{
+  const archived=Number(r.active)===0,pct=Math.min(100,Math.round(Number(r.current_amount)/Number(r.target_amount)*100));
+  return '<article class="finance-row"><div><b>'+escapeHtml(r.title)+(archived?' · архив':'')+'</b><small>'+money(r.current_amount)+' из '+money(r.target_amount)+' · '+pct+'% · '+money(r.monthly_contribution)+'/мес.'+(r.target_date?' · до '+r.target_date:'')+'</small><small>'+escapeHtml(r.purpose||"")+'</small></div><div>'+(archived?'':('<button class="button ghost" data-reserve-add="'+escapeHtml(r.id)+'" '+(Number(r.current_amount)>=Number(r.target_amount)?"disabled":"")+'>Пополнить</button> <button class="button ghost" data-reserve-withdraw="'+escapeHtml(r.id)+'" '+(Number(r.current_amount)<=0?"disabled":"")+'>Снять</button> <button class="button ghost" data-reserve-delete="'+escapeHtml(r.id)+'">Архивировать</button>'))+'</div></article>';
+ }).join(""):'<p class="muted">Пока нет созданных резервов.</p>';
+ const byId=new Map(rows.map(r=>[r.id,r.title]));
+ const transactions=(cashReservesData.transactions||[]).slice(0,30);
+ const history=transactions.length?'<h4>История операций</h4>'+transactions.map(t=>'<article class="finance-row"><div><b>'+escapeHtml(byId.get(t.reserve_id)||"Резерв")+' · '+(labels[t.transaction_type]||"Операция")+'</b><small>'+escapeHtml(t.created_at||"")+(t.note?' · '+escapeHtml(t.note):'')+'</small></div><strong>'+money(t.amount)+' · остаток '+money(t.balance_after)+'</strong></article>').join(""):'';
+ $("cash-reserves").innerHTML=cards+history;
 }
 $("reserve-form").addEventListener("submit",async e=>{e.preventDefault();try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({title:$("reserve-title").value,target_amount:$("reserve-target").value,current_amount:$("reserve-current").value,monthly_contribution:$("reserve-monthly").value,target_date:$("reserve-date").value||null,purpose:$("reserve-purpose").value})});$("reserve-form").reset();$("reserve-current").value="0";$("reserve-monthly").value="0";await loadCashReserves();await loadCashflowForecast();}catch(err){alert(err.message);}});
 $("cash-reserves").addEventListener("click",async e=>{
  const add=e.target.closest("[data-reserve-add]");
- if(add){const r=cashReservesData.reserves.find(x=>x.id===add.dataset.reserveAdd);if(!r)return;const raw=prompt("Сколько добавить к резерву? Осталось накопить: "+money(Number(r.target_amount)-Number(r.current_amount)));if(raw===null)return;const amount=Number(raw);if(!Number.isFinite(amount)||amount<=0){alert("Укажи сумму больше нуля.");return;}try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({action:"update",id:r.id,title:r.title,purpose:r.purpose,target_amount:r.target_amount,current_amount:Math.min(Number(r.target_amount),Number(r.current_amount)+amount),monthly_contribution:r.monthly_contribution,target_date:r.target_date})});await loadCashReserves();await loadCashflowForecast();}catch(err){alert(err.message);}return;}
- const b=e.target.closest("[data-reserve-delete]");if(!b)return;if(!confirm("Удалить этот резерв?"))return;try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({action:"delete",id:b.dataset.reserveDelete})});await loadCashReserves();await loadCashflowForecast();}catch(err){alert(err.message);}
+ const withdraw=e.target.closest("[data-reserve-withdraw]");
+ const operation=add||withdraw;
+ if(operation){
+  const id=operation.dataset.reserveAdd||operation.dataset.reserveWithdraw;
+  const r=cashReservesData.reserves.find(x=>x.id===id);if(!r)return;
+  const isWithdrawal=Boolean(withdraw);
+  const limit=isWithdrawal?Number(r.current_amount):Number(r.target_amount)-Number(r.current_amount);
+  const raw=prompt((isWithdrawal?"Сколько снять из резерва?":"Сколько добавить к резерву?")+" Доступно: "+money(limit));
+  if(raw===null)return;
+  const amount=Number(raw);
+  if(!Number.isFinite(amount)||amount<=0||amount>limit){alert("Укажи положительную сумму в пределах доступного остатка.");return;}
+  try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({action:isWithdrawal?"withdrawal":"contribution",id:r.id,amount,note:isWithdrawal?"Снятие из резерва":"Пополнение резерва"})});await loadCashReserves();await loadCashflowForecast();}
+  catch(err){alert(err.message);}
+  return;
+ }
+ const b=e.target.closest("[data-reserve-delete]");if(!b)return;
+ if(!confirm("Архивировать резерв? История накоплений сохранится."))return;
+ try{await api("/api/finance/reserves",{method:"POST",body:JSON.stringify({action:"delete",id:b.dataset.reserveDelete})});await loadCashReserves();await loadCashflowForecast();}
+ catch(err){alert(err.message);}
 });
 let irregularExpenseData=null;
 async function loadIrregularExpenses(){
