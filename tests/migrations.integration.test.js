@@ -12,7 +12,7 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
  try{
   db.exec(readFileSync(join(root,"schema.sql"),"utf8"));
   const migrations=readdirSync(join(root,"migrations"))
-   .filter(name=>/^\\d+_.+\\.sql$/.test(name))
+   .filter(name=>/^[0-9]+_.+\.sql$/.test(name))
    .sort((a,b)=>a.localeCompare(b));
   assert.ok(migrations.length>=50,"expected the complete migration history");
   for(const name of migrations){
