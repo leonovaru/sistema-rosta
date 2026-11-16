@@ -20,6 +20,7 @@ async function commitBucketSpend(write) {
   catch (error) {
     const message=String(error?.message || error);
     if (message.includes("Недостаточно средств в корзине")) return "bucket";
+    if (message.includes("UNIQUE constraint failed: obligation_payments.obligation_id, obligation_payments.scheduled_due_date")) return "occurrence";
     if (message.includes("Платёж превышает текущий остаток долга или долг уже закрыт")) return "debt";
     throw error;
   }
@@ -132,11 +133,12 @@ export async function onRequestPost({request,env}) {
     const available=await bucketAvailable(env,user.id,bucket.id);
     if(Number(obligation.amount)>available+0.0001)return json({error:"В корзине «"+bucket.title+"» недостаточно денег. Доступно: "+Math.max(0,available).toFixed(2)+" ₽"},409);
     const nextDue=addPeriod(obligation.due_date,obligation.frequency,obligation.recurrence_day);
-    const statements=[env.DB.prepare("INSERT INTO obligation_payments (id,user_id,obligation_id,amount,paid_on,bucket_id) VALUES (?,?,?,?,?,?)").bind(id,user.id,obligationId,obligation.amount,date,bucket.id)];
+    const statements=[env.DB.prepare("INSERT INTO obligation_payments (id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date) VALUES (?,?,?,?,?,?,?)").bind(id,user.id,obligationId,obligation.amount,date,bucket.id,obligation.due_date)];
     if(nextDue)statements.push(env.DB.prepare("UPDATE payment_obligations SET due_date=? WHERE id=? AND user_id=?").bind(nextDue,obligationId,user.id));
     else statements.push(env.DB.prepare("UPDATE payment_obligations SET active=0 WHERE id=? AND user_id=?").bind(obligationId,user.id));
     const saved=await commitBucketSpend(()=>env.DB.batch(statements));
-    if(!saved)return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
+    if(saved==="bucket")return json({error:"Остаток корзины изменился. Обнови баланс и повтори операцию."},409);
+    if(saved==="occurrence")return json({error:"Этот период обязательства уже оплачен. Обнови список платежей."},409);
     return json({ok:true,next_due_date:nextDue});
   }
   if(action==="obligation"){
