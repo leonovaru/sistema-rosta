@@ -24,7 +24,7 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
    assert.ok(tables.includes(name),`missing table ${name}`);
   }
   const triggers=db.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all().map(row=>row.name);
-  for(const name of ["trg_cashflow_realization_before_insert","trg_cashflow_realization_after_insert","trg_cashflow_realization_after_delete","trg_cashflow_income_amount_guard","trg_cashflow_expense_amount_guard","trg_bucket_expense_balance_insert","trg_bucket_debt_payment_balance_insert","trg_bucket_obligation_payment_balance_insert","trg_debt_payment_balance_before_insert","trg_debt_payment_balance_after_insert"]){
+  for(const name of ["trg_cashflow_realization_before_insert","trg_cashflow_realization_after_insert","trg_cashflow_realization_after_delete","trg_cashflow_income_amount_guard","trg_cashflow_expense_amount_guard","trg_bucket_expense_balance_insert","trg_bucket_debt_payment_balance_insert","trg_bucket_obligation_payment_balance_insert","trg_debt_payment_balance_before_insert","trg_debt_payment_balance_after_insert","trg_bucket_allocation_validate_insert","trg_bucket_allocation_balance_update","trg_bucket_allocation_balance_delete","trg_income_amount_allocation_guard"]){
    assert.ok(triggers.includes(name),`missing trigger ${name}`);
   }
   db.prepare("INSERT INTO users(id,email,password_hash,password_salt) VALUES(?,?,?,?)").run("u1","u1@example.test","hash","salt");
@@ -91,6 +91,15 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
    assert.equal(db.prepare("SELECT COALESCE(SUM(amount),0) AS total FROM debt_payments WHERE user_id='u1' AND bucket_id='bucket_test'").get().total,30);
    assert.equal(db.prepare("SELECT balance FROM debts WHERE id='debt_test'").get().balance,70);
    assert.throws(()=>db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on) VALUES(?,?,?,?,?)").run("debt_overpay","u1","debt_test",71,"2026-11-21"),/Платёж превышает текущий остаток долга или долг уже закрыт/);
+
+   // A recorded spend cannot be invalidated by shrinking/deleting its source allocation.
+   assert.throws(()=>db.prepare("UPDATE income_bucket_allocations SET amount=89 WHERE id='bucket_alloc'").run(),/Нельзя изменить распределение|Распределение не соответствует/);
+   assert.throws(()=>db.prepare("DELETE FROM income_bucket_allocations WHERE id='bucket_alloc'").run(),/Нельзя удалить распределение/);
+   assert.throws(()=>db.prepare("UPDATE income_entries SET amount=99 WHERE id='bucket_income'").run(),/Сумма дохода меньше уже распределенных средств/);
+   assert.throws(()=>db.prepare("DELETE FROM income_entries WHERE id='bucket_income'").run(),/Нельзя удалить распределение/);
+   assert.throws(()=>db.prepare("DELETE FROM income_buckets WHERE id='bucket_test'").run(),/Нельзя удалить распределение/);
+   assert.equal(db.prepare("SELECT amount FROM income_bucket_allocations WHERE id='bucket_alloc'").get().amount,100);
+   assert.equal(db.prepare("SELECT amount FROM income_entries WHERE id='bucket_income'").get().amount,100);
 
 
   // Historical financial attribution must survive subsequent client/project renames.
