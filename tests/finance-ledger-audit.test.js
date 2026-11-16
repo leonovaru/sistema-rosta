@@ -148,6 +148,7 @@ test("obligation payment reversal reopens only its occurrence and preserves late
   assert.equal(db.prepare("SELECT status FROM obligation_payment_occurrences WHERE obligation_id='o' AND scheduled_due_date='2026-11-01'").get().status,"paid");
   const reversalTrigger=db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='trg_obligation_payment_reversal_after_insert'").get().sql;
   assert.doesNotMatch(reversalTrigger,/UPDATE\\s+payment_obligations|due_date/i);
+  console.log("OBLIGATION TRIGGERS",db.prepare("SELECT name,tbl_name,sql FROM sqlite_master WHERE type='trigger'").all());
   assert.equal(db.prepare("SELECT due_date FROM payment_obligations WHERE id='o'").get().due_date,"2026-12-01");
   assert.equal(db.prepare("SELECT amount FROM obligation_payment_bucket_net WHERE user_id='u' AND bucket_id='b'").get().amount,15);
   assert.throws(()=>db.prepare("INSERT INTO obligation_payments(id,user_id,obligation_id,amount,paid_on,bucket_id,scheduled_due_date) VALUES(?,?,?,?,?,?,?)").run("op3","u","o",15,"2026-11-16","b","2026-11-01"));
