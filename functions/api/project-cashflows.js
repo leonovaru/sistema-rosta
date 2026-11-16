@@ -49,7 +49,7 @@ export async function onRequestPatch({request,env}){
   ? await env.DB.prepare("SELECT id,amount FROM income_entries WHERE id=? AND user_id=? AND (project_id=? OR project_id_snapshot=?)").bind(actualId,user.id,plan.project_id,plan.project_id).first()
   : await env.DB.prepare("SELECT id,amount FROM expenses WHERE id=? AND user_id=? AND (project_id=? OR project_id_snapshot=?)").bind(actualId,user.id,plan.project_id,plan.project_id).first();
  if(!actual)return json({error:"Фактическая операция не найдена в этом проекте или не соответствует типу платежа"},404);
- const linked=await env.DB.prepare("SELECT id FROM planned_cashflow_realizations WHERE user_id=? AND "+(isIncome?"income_entry_id=?":"expense_id")+" LIMIT 1").bind(user.id,actualId).first();
+ const linked=await env.DB.prepare("SELECT id FROM planned_cashflow_realizations WHERE user_id=? AND "+(isIncome?"income_entry_id=?":"expense_id=?")+" LIMIT 1").bind(user.id,actualId).first();
  if(linked)return json({error:"Эта операция уже связана с другим плановым платежом"},409);
  const total=await env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM planned_cashflow_realizations WHERE user_id=? AND planned_cashflow_id=?").bind(user.id,id).first();
  const next=Number(total?.total||0)+Number(actual.amount);
