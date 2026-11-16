@@ -32,13 +32,19 @@ test("reserve balance changes are journaled and a reserve with history cannot be
   assert.equal(operations.find(x=>x.transaction_type==="contribution").balance_after,12500);
   assert.equal(operations.find(x=>x.transaction_type==="withdrawal").amount,1000);
   assert.equal(operations.find(x=>x.transaction_type==="withdrawal").balance_after,11500);
+  db.prepare("UPDATE cash_reserves SET current_amount=12000 WHERE id='r' AND current_amount=11500").run();
+  db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) SELECT 'race','u','r','contribution',500,12000,'Пополнение' WHERE changes()=1").run();
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_reserve_transactions WHERE id='race'").get().count,1);
+  db.prepare("UPDATE cash_reserves SET current_amount=13000 WHERE id='r' AND current_amount=11500").run();
+  db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after,note) SELECT 'stale','u','r','contribution',1000,13000,'Устаревшая операция' WHERE changes()=1").run();
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_reserve_transactions WHERE id='stale'").get().count,0);
   assert.throws(()=>db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after) VALUES('bad','u','r','withdrawal',20000,-8500)").run(),/CHECK constraint failed/);
   assert.throws(()=>db.prepare("INSERT INTO cash_reserve_transactions(id,user_id,reserve_id,transaction_type,amount,balance_after) VALUES('wrong','other','r','contribution',1,11501)").run(),/Операция должна относиться/);
   assert.throws(()=>db.prepare("DELETE FROM cash_reserves WHERE id='r'").run(),/FOREIGN KEY constraint failed/);
   assert.throws(()=>db.prepare("UPDATE cash_reserve_transactions SET amount=1 WHERE reserve_id='r'").run(),/Операцию по резерву нельзя изменить/);
   assert.throws(()=>db.prepare("DELETE FROM cash_reserve_transactions WHERE reserve_id='r'").run(),/Операцию по резерву нельзя удалить/);
   db.prepare("UPDATE cash_reserves SET active=0 WHERE id='r'").run();
-  assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_reserve_transactions WHERE reserve_id='r'").get().count,3);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM cash_reserve_transactions WHERE reserve_id='r'").get().count,4);
  }finally{db.close();}
 });
 
