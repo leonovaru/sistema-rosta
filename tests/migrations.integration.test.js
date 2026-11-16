@@ -47,6 +47,7 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
   db.prepare("INSERT INTO planned_cashflows(id,user_id,flow_type,title,amount,expected_date,project_id) VALUES(?,?,?,?,?,?,?)").run("plan3","u1","income","Третий этап",1500,"2026-12-03","project1");
   db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real2","u1","plan2","income2",1200);
   assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real_duplicate","u1","plan3","income2",1200),/UNIQUE constraint failed/);
+  assert.throws(()=>db.prepare("UPDATE planned_cashflow_realizations SET amount=1199 WHERE id='real2'").run(),/Связь не соответствует фактической операции/);
   // A realization must match the actual operation's amount, project, owner and flow type.
   db.prepare("INSERT INTO income_entries(id,user_id,amount,received_on,project_id) VALUES(?,?,?,?,?)").run("income3","u1",1000,"2026-11-18","project1");
   assert.throws(()=>db.prepare("INSERT INTO planned_cashflow_realizations(id,user_id,planned_cashflow_id,income_entry_id,amount) VALUES(?,?,?,?,?)").run("real_wrong_amount","u1","plan3","income3",900),/Связь не соответствует фактической операции/);
