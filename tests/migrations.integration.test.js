@@ -91,6 +91,13 @@ test("base schema and every ordered D1 migration apply to a clean SQLite databas
    assert.equal(db.prepare("SELECT COALESCE(SUM(amount),0) AS total FROM debt_payments WHERE user_id='u1' AND bucket_id='bucket_test'").get().total,30);
    assert.equal(db.prepare("SELECT balance FROM debts WHERE id='debt_test'").get().balance,70);
    assert.throws(()=>db.prepare("INSERT INTO debt_payments(id,user_id,debt_id,amount,paid_on) VALUES(?,?,?,?,?)").run("debt_overpay","u1","debt_test",71,"2026-11-21"),/Платёж превышает текущий остаток долга или долг уже закрыт/);
+   // Reversing a debt payment restores principal and the original bucket exactly once.
+   db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason,request_id) VALUES(?,?,?,?,?,?,?)").run("debt_reverse_test","u1","bucket_debt_payment",30,"2026-11-22","Проверка отмены платежа","debt-reversal-request-001");
+   assert.equal(db.prepare("SELECT balance FROM debts WHERE id='debt_test'").get().balance,100);
+   assert.equal(db.prepare("SELECT amount FROM debt_payment_bucket_net WHERE user_id='u1' AND bucket_id='bucket_test'").get().amount,0);
+   assert.throws(()=>db.prepare("INSERT INTO debt_payment_reversals(id,user_id,debt_payment_id,amount,reversed_on,reason) VALUES(?,?,?,?,?,?)").run("debt_reverse_duplicate","u1","bucket_debt_payment",30,"2026-11-23","Повторная отмена"),/UNIQUE constraint failed/);
+   assert.equal(db.prepare("SELECT balance FROM debts WHERE id='debt_test'").get().balance,100);
+   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM debt_payment_reversals WHERE debt_payment_id='bucket_debt_payment'").get().count,1);
 
    // A recorded spend cannot be invalidated by shrinking/deleting its source allocation.
    assert.throws(()=>db.prepare("UPDATE income_bucket_allocations SET amount=89 WHERE id='bucket_alloc'").run(),/Нельзя изменить распределение|Распределение не соответствует/);
